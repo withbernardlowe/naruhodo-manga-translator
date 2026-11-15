@@ -167,9 +167,11 @@ export interface LineBox {
   order: number;
   /** 擦除底色的亮度（0～255）：底色掃光的顏色，跟之後蓋上去的擦除同色。只有翻譯中的句子有。 */
   eraseLuminance?: number;
+  /** 被可見範圍切掉的是哪一緣：等待中的標記放在另一緣（看得到的那一端）。只有等待中的句子有；省略當成 bottom。 */
+  cut?: 'top' | 'bottom';
 }
 
-/** 一個 Page 上要畫的外圈：translating＝底色掃光（#285）；waiting＝虛線流動（#283）。 */
+/** 一個 Page 上要畫的外圈：translating＝底色掃光（#285）；waiting＝看得到的那一端的小標記（#283）。 */
 export interface PageOutlines extends PageOnAnchor {
   subRect?: RatioRect;
   translating: LineBox[];

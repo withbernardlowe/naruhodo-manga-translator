@@ -25,7 +25,7 @@ import type {
   ProposeNotesResponse,
   GuessSeriesResponse,
 } from '../shared/messages.ts';
-import { collectedBoxes, cutEdges, rejectInSlice, sliceOf, stripeFingerprint, toPageText, waitingBoxes, type CutBox, type Slice, type SliceEdges } from '../shared/long-page.ts';
+import { collectedBoxes, cutEdges, rejectInSlice, sliceCut, sliceOf, stripeFingerprint, toPageText, waitingBoxes, type CutBox, type Slice, type SliceEdges } from '../shared/long-page.ts';
 import { pageHash, type GrayImage } from '../shared/page-hash.ts';
 import type { BalloonText, EraseData, LooseText, PageText, RatioRect } from '../shared/page-text.ts';
 import { grayOfRgba, type RgbaImage } from '../shared/pixels.ts';
@@ -212,10 +212,13 @@ async function analyze({ screenshot, frameMark, viewport, candidate, subRect, co
       ? (box: RatioRect, kind: CutBox['kind']) => {
           const reason = rejectInSlice(box, slice, rect.height, collected, edges);
           if (reason) rejected.push({ box, reason });
-          if (reason === 'cut') cut.push({ box, kind });
-          if (reason === 'cut' && edges) {
-            const rows = { top: rect.y + box.y * rect.height, bottom: rect.y + (box.y + box.h) * rect.height };
-            (cutEdges(box, rect.height, edges).top ? cutTop : cutBottom).push(rows);
+          if (reason === 'cut') {
+            const side = sliceCut(box, slice, rect.height, edges).top ? 'top' : 'bottom';
+            cut.push({ box, kind, cut: side });
+            if (edges) {
+              const rows = { top: rect.y + box.y * rect.height, bottom: rect.y + (box.y + box.h) * rect.height };
+              (side === 'top' ? cutTop : cutBottom).push(rows);
+            }
           }
           return reason === undefined;
         }
