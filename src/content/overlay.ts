@@ -18,7 +18,7 @@
  * 一道擦除底色的光帶掃過；被可見範圍邊緣切到、還在等的框是流動的虛線。譯文到了就整頁一次蓋上、同時收起外圈。
  */
 import type { LineBox, LineRef, Rect } from '../shared/messages.ts';
-import { ERASE_WHITE, LOOSE_OUTLINE_PAD_PX, onAnchor, staggerRanks, WASH_STAGGER_MS, washArea } from '../shared/page-outlines.ts';
+import { ERASE_WHITE, LOOSE_OUTLINE_PAD_PX, onAnchor, staggerRanks, WASH_STAGGER_MS } from '../shared/page-outlines.ts';
 import type { AnchorStatus, StatusAction } from '../shared/page-status.ts';
 import { findSamePage } from '../shared/page-hash.ts';
 import type { PageMode } from '../shared/page-mode.ts';
@@ -60,13 +60,19 @@ const WASH_MS = 2400;
 const WASH_ALPHA = 0.85;
 /** 不要動畫（prefers-reduced-motion）時，日文上蓋一層不動的底色，這麼濃。 */
 const WASH_STILL_ALPHA = 0.35;
-/** 光帶比文字框往外多這麼多畫面 px，邊緣再用這麼寬羽化：日文整個蓋到，又不會跑出泡泡（固定 px，不照框的比例）。 */
-const WASH_PAD_PX = 8;
+/**
+ * Balloon 的光帶是泡泡外框的內切橢圓，離外框這麼多畫面 px：字一定在泡泡裡，所以都蓋得到；
+ * 不從文字框往外擴，泡泡貼著字時，長方形的四個角會壓到泡泡的框線。
+ */
+const WASH_BALLOON_INSET_PX = 3;
+/** Loose Text 沒有泡泡：光帶是文字框往外這麼多畫面 px 的長方形。 */
+const WASH_LOOSE_PAD_PX = 8;
+/** 光帶邊緣往內羽化這麼寬（畫面 px）。 */
 const WASH_FEATHER_PX = 10;
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
 /**
- * 翻譯中的一句：放在外框上的透明框，裡面一塊蓋住文字框外面一小圈（washArea 加 WASH_PAD_PX）的光帶，顏色是擦除底色。
+ * 翻譯中的一句：放在外框上的透明框，裡面一塊擦除底色的光帶（Balloon 是內切橢圓，Loose Text 是長方形）。
  * 照閱讀順序錯開（rank）；輪到之前光帶還在框外，看不到。
  */
 function washElement(line: LineBox, rank: number): HTMLElement {
@@ -74,15 +80,9 @@ function washElement(line: LineBox, rank: number): HTMLElement {
   element.className = 'rg t';
   element.style.setProperty('--delay', `${rank * WASH_STAGGER_MS}ms`);
   element.style.setProperty('--erase', String(line.eraseLuminance ?? ERASE_WHITE));
-  const { x, y, w, h } = washArea(line.box, line.textBox ?? line.box);
   const wash = document.createElement('div');
-  wash.className = 'wash';
-  Object.assign(wash.style, {
-    left: `calc(${x * 100}% - ${WASH_PAD_PX}px)`,
-    top: `calc(${y * 100}% - ${WASH_PAD_PX}px)`,
-    width: `calc(${w * 100}% + ${2 * WASH_PAD_PX}px)`,
-    height: `calc(${h * 100}% + ${2 * WASH_PAD_PX}px)`,
-  });
+  wash.className = line.kind === 'balloon' ? 'wash oval' : 'wash';
+  wash.style.inset = line.kind === 'balloon' ? `${WASH_BALLOON_INSET_PX}px` : `-${WASH_LOOSE_PAD_PX}px`;
   element.append(wash);
   return element;
 }
@@ -159,12 +159,13 @@ const STYLE = `${TOKENS}
 .rg.w rect { stroke-dasharray: 6 4; animation: naru-flow 1s linear infinite; }
 .rg.out { animation: naru-out ${REVEAL_FADE_MS}ms ease-out forwards; }
 /*
- * 翻譯中：日文上一道擦除底色（--erase）的直立光帶由右往左掃過（跟直書的行一樣方向），只蓋文字框外面一小圈、邊緣羽化；不畫框，大部分泡泡不是方的。
+ * 翻譯中：日文上一道擦除底色（--erase）的直立光帶由右往左掃過（跟直書的行一樣方向），Balloon 蓋泡泡的內切橢圓、Loose Text 蓋文字框外面一小圈，邊緣羽化；不畫框，大部分泡泡不是方的。
  * 光帶不斜：斜的光帶在直長的框上，停下來時兩端還留在框裡，下一輪又從另一角跳出來
  */
 .wash { position: absolute; mask-composite: intersect;
   mask-image: linear-gradient(90deg, transparent, #000 ${WASH_FEATHER_PX}px, #000 calc(100% - ${WASH_FEATHER_PX}px), transparent),
     linear-gradient(180deg, transparent, #000 ${WASH_FEATHER_PX}px, #000 calc(100% - ${WASH_FEATHER_PX}px), transparent); }
+.wash.oval { mask-image: radial-gradient(ellipse closest-side, #000 calc(100% - ${WASH_FEATHER_PX}px), transparent); }
 .wash::before { content: ''; position: absolute; inset: 0; background: no-repeat 0 0 / 300% 100%
   linear-gradient(90deg, rgb(var(--erase) var(--erase) var(--erase) / 0) 35%, rgb(var(--erase) var(--erase) var(--erase) / ${WASH_ALPHA}) 50%, rgb(var(--erase) var(--erase) var(--erase) / 0) 65%);
   animation: naru-wash ${WASH_MS}ms ease-in-out var(--delay, 0ms) infinite; }
@@ -496,7 +497,7 @@ export function createOverlay({ onHover, onStatusAction }: { onHover?: OnHover; 
     clearTimeout(outline.retire);
     outline.retire = undefined;
     const { x, y, w, h } = onAnchor(line.box, sub);
-    // 光帶的範圍是相對外框的比例（washArea），外框不往外擴
+    // 翻譯中的外框不往外擴：光帶的範圍在 washElement 裡相對外框算
     const pad = state === 'waiting' && line.kind === 'loose' ? LOOSE_OUTLINE_PAD_PX : 0;
     Object.assign(outline.element.style, {
       left: `calc(${x * 100}% - ${pad}px)`,
