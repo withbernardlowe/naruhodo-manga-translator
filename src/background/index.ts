@@ -493,7 +493,7 @@ const backupRepo = indexedDbBackupRepo();
 const backup = createBackup({ repo: backupRepo, updateNotes: (seriesId, change) => transcriber.updateNotes(seriesId, change), now: () => Date.now() });
 
 /**
- * Problem Report（GLOSSARY）裡 side panel 拿不到的：網址（只留 origin＋path）、縮放、畫面大小、Series 名稱、快取裡這幾頁的紀錄。
+ * Problem Report（GLOSSARY）裡 side panel 拿不到的：網址（只留 origin＋path）、縮放、畫面大小與捲動位置、快取裡這幾頁的紀錄。
  * 每一項都是盡量拿：拿不到（content script 已經不在、分頁關了）就省略，報告照樣產生。
  */
 async function problemReportContext(tabId: number): Promise<ProblemReportContext> {
@@ -508,19 +508,16 @@ async function problemReportContext(tabId: number): Promise<ProblemReportContext
     optional(chrome.tabs.sendMessage<Message, ProblemReportView>(tabId, { type: 'content:problemReportView' })),
     optional(activation.getSeriesId(tabId)),
   ]);
-  const series = seriesId === undefined ? undefined : await optional(seriesRepo.getSeries(seriesId));
   const cached = seriesId === undefined ? [] : await Promise.all(
     transcriber.get(tabId).map(async (page): Promise<CachedPageInfo | undefined> => {
       const entry = await optional(page.stripes ? pageCache.findLong(seriesId, page.stripes) : pageCache.find(seriesId, page.pageHash));
-      return entry && { pageHash: page.pageHash, promptVersion: entry.promptVersion, translatedAt: entry.translatedAt, usedNotes: entry.usedNotes };
+      return entry && { pageHash: page.pageHash, promptVersion: entry.promptVersion, translatedAt: entry.translatedAt, usedNoteCount: entry.usedNotes.length };
     }),
   );
   return {
     pageUrl: tab?.url === undefined ? undefined : urlPattern(tab.url),
     zoom,
-    viewport: view?.viewport,
-    devicePixelRatio: view?.devicePixelRatio,
-    seriesName: series?.name,
+    view,
     pages: cached.filter((c) => c !== undefined),
   };
 }

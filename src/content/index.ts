@@ -272,6 +272,7 @@ if (!globalThis.__naruhodo) {
         sendResponse({
           viewport: { width: window.innerWidth, height: window.innerHeight },
           devicePixelRatio,
+          scroll: { y: Math.round(window.scrollY), height: document.documentElement.scrollHeight },
         } satisfies ProblemReportView);
         return false;
       case 'content:stop':

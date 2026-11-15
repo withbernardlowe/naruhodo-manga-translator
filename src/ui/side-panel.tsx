@@ -443,7 +443,7 @@ function ReportProblem({ copy, open }: NonNullable<SidePanelProps['reportProblem
       )}
       {copied === 'copied' && (
         <Callout role="status" class="naru-callout--stack">
-          <p>報告已複製。請貼到 GitHub 表單最下面的「報告」欄位，送出後會公開。</p>
+          <p>報告已複製。請貼到 GitHub 表單最下面的「報告」欄位，再用自己的話寫哪一頁、哪裡有問題。</p>
           <div class="naru-row">
             <Button variant="ghost" onClick={() => void copyReport()}>
               再複製一次

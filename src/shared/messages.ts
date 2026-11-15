@@ -266,6 +266,8 @@ export interface Size {
 export interface ProblemReportView {
   viewport: Size;
   devicePixelRatio: number;
+  /** 文件的捲動位置與總高度（CSS px）：長條漫畫一話幾十張圖，靠它捲到讀者看的那一帶。 */
+  scroll: { y: number; height: number };
 }
 
 /** 哪個 anchor 上的哪一個 Page（Spread 的兩頁在同一個 anchor 上，要靠 pageHash 分）。 */

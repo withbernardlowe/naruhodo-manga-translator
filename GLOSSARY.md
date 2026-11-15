@@ -101,7 +101,7 @@ Our own original Spread that a newly installed reader translates for the first t
 _Avoid_: demo (that is the simulated showcase on the homepage), sample page
 
 **Problem Report** (問題回報)
-A text report the reader makes from the side panel about the Pages on screen: how each Line was recognized and translated, and the setup that produced it. It holds no images. The reader pastes it into Discussions themselves, where it becomes public; the extension sends it nowhere.
+A report the reader makes from the side panel about the Pages on screen, for debugging: where each Page and Line is and how sure the recognition was, and the setup that produced it. It holds no images and none of the Page's text; the reader says in their own words which Page and Line went wrong. The reader pastes it into Discussions themselves, where it becomes public; the extension sends it nowhere.
 _Avoid_: bug report, feedback, issue (issues are GitHub Issues, open only to collaborators)
 
 ## Reading sites

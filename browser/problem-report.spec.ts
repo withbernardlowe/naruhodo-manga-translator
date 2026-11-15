@@ -1,13 +1,13 @@
 /**
  * Problem Report（GLOSSARY）：side panel 的「回報翻譯問題」→ 報告進剪貼簿、打開 Discussions 的回報表單。
- * 報告長什麼樣（每句一行、JSON 欄位、不含圖片）是 shared/problem-report.test.ts 的 unit；這裡看 unit 看不到的接線：
- * side panel → SW → content script 補上網址、畫面大小與快取紀錄，真的寫進剪貼簿，並開了新分頁。
+ * 報告長什麼樣（JSON 欄位、沒有對白和圖片）是 shared/problem-report.test.ts 的 unit；這裡看 unit 看不到的接線：
+ * side panel → SW → content script 補上網址、畫面大小、捲動位置與快取紀錄，真的寫進剪貼簿，並開了新分頁。
  */
 import { activateOnMockSite, expect, test } from './fixtures.ts';
 
 test.use({ viewport: null, fakeTranslator: true });
 
-test('按「回報翻譯問題」：報告複製到剪貼簿（含網址、畫面、快取紀錄），打開回報表單', async ({ context, sw, extensionId, mockSite }) => {
+test('按「回報翻譯問題」：報告複製到剪貼簿（含網址、畫面、捲動位置、快取紀錄），打開回報表單', async ({ context, sw, extensionId, mockSite }) => {
   const { panel } = await activateOnMockSite({ context, sw, extensionId, mockSite });
   type Recorded = { __copied?: string; __opened?: string[] };
   await panel.evaluate(() => {
@@ -36,11 +36,12 @@ test('按「回報翻譯問題」：報告複製到剪貼簿（含網址、畫�
   });
   expect(opened!.map(decodeURIComponent)).toEqual(['https://github.com/yurenju/naruhodo-manga-translator/discussions/new?category=翻譯問題回報']);
   if (text === undefined) throw new Error('沒有寫進剪貼簿');
-  expect(text).toMatch(/^- P1-L1 /m);
   const json = JSON.parse(/```json\n([\s\S]*?)\n```/.exec(text)![1]!);
   expect(json.pageUrl).toBe(new URL(mockSite.canvasSiteUrl).origin + new URL(mockSite.canvasSiteUrl).pathname);
   expect(json.viewport.width).toBeGreaterThan(0);
   expect(json.devicePixelRatio).toBeGreaterThan(0);
+  expect(json.scroll.height).toBeGreaterThan(0);
+  expect(json.pages[0].lines[0]).toMatchObject({ id: 'P1-L1', chars: expect.any(Number) });
   expect(json.pages[0].promptVersion).toEqual(expect.any(String));
   expect(text).not.toContain('data:image');
 });

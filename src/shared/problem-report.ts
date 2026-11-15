@@ -1,15 +1,18 @@
-import type { ModelStatus, PageView, Size } from './messages.ts';
+import type { ModelStatus, PageView, ProblemReportView } from './messages.ts';
 import type { PageMode } from './page-mode.ts';
 import type { BalloonText, LooseText, RatioRect } from './page-text.ts';
-import type { UsedNote } from './translator.ts';
 import type { TranslationMode } from './translation-mode.ts';
 
 /**
- * Problem Report（問題回報，GLOSSARY）：side panel 的「回報翻譯問題」把畫面上的 Page 寫成一份文字報告，讀者自己貼到
- * Discussions。上半部給人看（每句一行），下半部 <details> 裡的 JSON 給之後修問題的 agent 讀。
+ * Problem Report（問題回報，GLOSSARY）：side panel 的「回報翻譯問題」把畫面上的 Page 寫成一份給開發者除錯的 JSON，
+ * 讀者自己貼到公開的 Discussions，哪一頁、哪裡有問題由讀者在表單上用自己的話寫。
  *
- * 報告裡沒有任何圖片（PRIVACY.md「Reporting a problem」）：縮圖、擦除小圖都是截圖切出來的，一律不放。所以每句的欄位
- * 是一個一個挑出來的，不展開整個物件；之後 PageText 多了欄位也不會自己跑進報告。
+ * 報告裡只有數字，沒有作品內容（PRIVACY.md「Reporting a problem」）：沒有圖片（縮圖、擦除小圖都是截圖切出來的），
+ * 也沒有對白、讀音、譯文、Series Notes 的內容和作品名稱，只記字數。貼到公開的地方，對白加上翻譯就是在散布別人的作品。
+ * 所以每句的欄位是一個一個挑出來的，不展開整個物件；之後 PageText 多了欄位也不會自己跑進報告。
+ *
+ * 找回讀者看的那一頁：在 debug Chrome 打開 pageUrl、捲到 scroll.y，再用 findSamePage 比 pageHash。
+ * pageHash 是 perceptual hash，視窗大小不同算出來會差幾個 bit，不能用 === 比。
  */
 export interface ProblemReportInput {
   extensionVersion: string;
@@ -29,9 +32,7 @@ export interface ProblemReportContext {
   pageUrl?: string;
   /** 瀏覽器縮放比例（1＝100%）。 */
   zoom?: number;
-  viewport?: Size;
-  devicePixelRatio?: number;
-  seriesName?: string;
+  view?: ProblemReportView;
   /** 翻譯快取裡這幾頁的紀錄；沒有快取的頁不列。 */
   pages: CachedPageInfo[];
 }
@@ -40,12 +41,11 @@ export interface CachedPageInfo {
   pageHash: string;
   promptVersion: string;
   translatedAt: number;
-  usedNotes: UsedNote[];
+  /** 翻譯這頁時用了幾筆 Series Notes（內容是角色名之類的專有名詞，不放）。 */
+  usedNoteCount: number;
 }
 
 type ReportLine = { kind: 'balloon'; text: BalloonText } | { kind: 'loose'; text: LooseText };
-
-const KIND_LABEL = { balloon: '對話框', loose: '框外文字' } as const;
 
 /** 一頁的句子照閱讀順序（Balloon 與 Loose Text 共用一串 order）。 */
 function linesOf(page: PageView): ReportLine[] {
@@ -57,15 +57,9 @@ function linesOf(page: PageView): ReportLine[] {
   ].sort((a, b) => a.text.order - b.text.order);
 }
 
-/** 報告裡 Page 與句子的編號：P1 是畫面上第 1 頁，P1-L3 是它閱讀順序第 3 句；表單的「哪一句」填這個。 */
+/** P1 是畫面上第 1 頁，P1-L3 是它閱讀順序第 3 句。 */
 const pageId = (pageIndex: number) => `P${pageIndex + 1}`;
 const lineId = (pageIndex: number, order: number) => `${pageId(pageIndex)}-L${order}`;
-
-function humanLine(pageIndex: number, line: ReportLine): string {
-  const { order, 原文, 譯文, unreadable } = line.text;
-  const result = unreadable ? '（無法辨識）' : 譯文 === '' ? '（未翻譯）' : ` → ${譯文}`;
-  return `- ${lineId(pageIndex, order)} ${KIND_LABEL[line.kind]}：${原文}${result}`;
-}
 
 /** 比例座標留三位小數就夠看出框歪在哪，報告短一點（Discussion 內文上限約 65 KB）。 */
 const round = (n: number) => Math.round(n * 1000) / 1000;
@@ -79,12 +73,11 @@ function lineJson(pageIndex: number, line: ReportLine) {
     kind: line.kind,
     orientation: t.orientation,
     ...boxes,
-    原文: t.原文,
-    讀音: t.讀音,
-    譯文: t.譯文,
+    chars: [...t.原文].length,
+    translated: t.譯文 !== '',
     unreadable: t.unreadable,
     ocrConfidence: t.ocrConfidence === undefined ? undefined : round(t.ocrConfidence),
-    ocrDropped: t.ocrDropped,
+    ocrDroppedChars: t.ocrDropped === undefined ? undefined : [...t.ocrDropped].length,
     sfx: t.sfx,
     eraseLuminance: t.eraseLuminance,
   };
@@ -106,7 +99,7 @@ function pageJson(page: PageView, pageIndex: number, cached: CachedPageInfo | un
     stale: done?.stale,
     promptVersion: cached?.promptVersion,
     translatedAt: cached && new Date(cached.translatedAt).toISOString(),
-    usedNotes: cached?.usedNotes,
+    usedNotes: cached?.usedNoteCount,
   };
 }
 
@@ -128,7 +121,6 @@ function pageRows(page: PageView, pageIndex: number, cached: CachedPageInfo | un
 
 export function problemReport(input: ProblemReportInput): string {
   const { context } = input;
-  const human = input.pages.map((page, i) => [`**${pageId(i)}**`,...linesOf(page).map((line) => humanLine(i, line))].join('\n')).join('\n\n');
   const data = {
     extensionVersion: input.extensionVersion,
     userAgent: input.userAgent,
@@ -137,16 +129,10 @@ export function problemReport(input: ProblemReportInput): string {
     ocr: input.modelStatus,
     pageUrl: context.pageUrl,
     zoom: context.zoom,
-    viewport: context.viewport,
-    devicePixelRatio: context.devicePixelRatio,
-    series: context.seriesName,
+    viewport: context.view?.viewport,
+    devicePixelRatio: context.view?.devicePixelRatio,
+    scroll: context.view?.scroll,
   };
   const pages = input.pages.map((page, i) => pageRows(page, i, context.pages.find((c) => c.pageHash === page.pageHash)));
-  return [
-    '### 畫面上的句子',
-    human,
-    '<details>\n<summary>給開發者的資料（JSON）</summary>',
-    '```json\n' + withRows(data, 'pages', pages) + '\n```',
-    '</details>',
-  ].join('\n\n');
+  return ['給開發者除錯用：畫面上每一頁、每一句的位置和辨識數字，沒有對白和圖片。', '```json\n' + withRows(data, 'pages', pages) + '\n```'].join('\n\n');
 }
