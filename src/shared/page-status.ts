@@ -6,7 +6,7 @@
 import type { ModelStatus, PageView, QuotaExhausted } from './messages.ts';
 import type { RequestedStep } from './onboarding-step.ts';
 
-/** 紅色小標籤點了做什麼：plan＝打開帳號頁（#213）；signIn＝登入、ownKey＝設定 API key 打開 onboarding 的那一步；retry＝重試這一頁。 */
+/** 紅色小標籤點了做什麼：plan＝打開帳號頁（#213）；signIn＝登入、consent＝補同意、ownKey＝設定 API key 打開 onboarding 的那一步；retry＝重試這一頁。 */
 export type StatusAction = RequestedStep | 'retry';
 
 /** 一個 anchor 上的狀態；Spread 的兩頁共用一個 anchor，有一頁在翻就顯示翻譯中。 */
@@ -30,7 +30,7 @@ export interface PageStatusInput {
   model: ModelStatus;
   /** 已經送出 LLM 的 Page（pageHash）；其他 analyzing 的還在本機流水線。 */
   translating: ReadonlySet<string>;
-  /** 現在不能翻譯的原因（沒登入或沒同意 → signIn，自備金鑰沒有 key → ownKey）；能翻是 undefined。 */
+  /** 現在不能翻譯的原因（沒登入 → signIn，還登入著但沒同意 → consent，自備金鑰沒有 key 或沒同意 → ownKey）；能翻是 undefined。 */
   access: Exclude<RequestedStep, 'plan'> | undefined;
   /** 內建翻譯的額度快用完（shared/quota-indicator.ts）；額度是全域的，每個 tab 都一樣。 */
   lowQuota: boolean;
@@ -52,6 +52,7 @@ export const untranslatedWithoutReason = ({ transcript }: PageView): boolean =>
 const PROBLEMS: Record<RequestedStep, string> = {
   plan: '查看方案',
   signIn: '還沒登入・登入',
+  consent: '資料使用說明更新了・查看',
   ownKey: '還沒設定 API key・設定',
 };
 

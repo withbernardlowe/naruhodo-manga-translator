@@ -38,8 +38,13 @@ async function loadRaw(): Promise<unknown> {
   return (await chrome.storage.local.get(KEY))[KEY];
 }
 
+/** 這個模式的同意狀態（onboarding 的補同意畫面要分「沒同意過」與「說明更新了」）。 */
+export async function loadConsentState(mode: TranslationMode): Promise<ConsentState> {
+  return readConsent(await loadRaw())[mode];
+}
+
 export async function hasDataConsent(mode: TranslationMode): Promise<boolean> {
-  return readConsent(await loadRaw())[mode] === 'agreed';
+  return (await loadConsentState(mode)) === 'agreed';
 }
 
 /** 記下這個模式的同意；另一個模式的同意不動（舊格式的值直接蓋掉）。 */

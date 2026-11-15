@@ -32,6 +32,7 @@ import { acceptSuggestion, deleteEntry, editEntry, ignoreSuggestion, pendingSugg
 import { createHostedAccountClient } from '../shared/hosted-account-client.ts';
 import { accountUrl, blockedPageUrl } from '../shared/account-page.ts';
 import { onboardingUrl, saveInstallState, saveOnboarding } from '../shared/onboarding.ts';
+import { hostedBlockedStep } from '../shared/onboarding-step.ts';
 import type { ActionBadge, StatusAction } from '../shared/page-status.ts';
 import { quotaIndicator, stripTitle } from '../shared/quota-indicator.ts';
 import { createQuotaIndicatorSync, type QuotaLookup } from './quota-indicator-sync.ts';
@@ -415,7 +416,8 @@ const pageStatus = createPageStatusSync({
   },
   async accessProblem() {
     if (await getTranslator()) return undefined;
-    return (await loadTranslationMode()) === 'hosted' ? 'signIn' : 'ownKey';
+    if ((await loadTranslationMode()) === 'ownKey') return 'ownKey';
+    return hostedBlockedStep({ signedIn: (await hostedSessionToken()) !== undefined, consented: await hasDataConsent('hosted') }) ?? 'signIn';
   },
   // 自備金鑰沒有頁數可計；沒登入時還翻不了
   stripBilled: async () => (await loadTranslationMode()) === 'hosted' && (await hostedSessionToken()) !== undefined,
@@ -626,7 +628,8 @@ watchSidePanelOnActivation((open) => {
 });
 
 /**
- * 點圖示的當下卡在哪（#185）：沒同意或沒登入是「同意並登入」，額度 0 是帳號頁（#213），自備金鑰沒有 key 是「使用自備金鑰」。
+ * 點圖示的當下卡在哪（#185）：沒登入是「同意並登入」，還登入著但沒同意是補同意，額度 0 是帳號頁（#213），
+ * 自備金鑰沒同意或沒有 key 是「使用自備金鑰」。
  * 讀不到額度（離線、Worker 出錯）就當作沒卡住，翻譯時再說。
  */
 async function blockedStep(): Promise<BlockedStep | undefined> {
@@ -635,7 +638,8 @@ async function blockedStep(): Promise<BlockedStep | undefined> {
   const consented = await hasDataConsent(mode);
   if (mode === 'ownKey') return consented && (await apiKeys.has()) ? undefined : 'ownKey';
   const token = await hostedSessionToken();
-  if (!consented || !token) return 'signIn';
+  const step = hostedBlockedStep({ signedIn: token !== undefined, consented });
+  if (step || !token) return step;
   const result = await hostedAccount.account(token);
   return result.ok && result.account.quota.remaining === 0 ? 'plan' : undefined;
 }
