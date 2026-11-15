@@ -107,8 +107,23 @@ function pageJson(page: PageView, pageIndex: number, cached: CachedPageInfo | un
     promptVersion: cached?.promptVersion,
     translatedAt: cached && new Date(cached.translatedAt).toISOString(),
     usedNotes: cached?.usedNotes,
-    lines: done ? linesOf(page).map((line) => lineJson(pageIndex, line)) : undefined,
   };
+}
+
+/**
+ * 把 `obj` 寫成一行 JSON，最後加上陣列 `key`，陣列每個元素各一行（元素已是 JSON 字串）。
+ * 報告的 JSON 一句一行：不縮排會擠成一長行，整份縮排又會把 bbox 拆成一個數字一行、長度翻倍。
+ */
+function withRows(obj: object, key: string, rows: string[]): string {
+  const head = JSON.stringify(obj);
+  const open = head === '{}' ? '{' : `${head.slice(0, -1)},`;
+  return `${open}${JSON.stringify(key)}:[${rows.length ? `\n${rows.join(',\n')}\n` : ''}]}`;
+}
+
+function pageRows(page: PageView, pageIndex: number, cached: CachedPageInfo | undefined): string {
+  const info = pageJson(page, pageIndex, cached);
+  if (page.transcript.state !== 'done') return JSON.stringify(info);
+  return withRows(info, 'lines', linesOf(page).map((line) => JSON.stringify(lineJson(pageIndex, line))));
 }
 
 export function problemReport(input: ProblemReportInput): string {
@@ -125,14 +140,13 @@ export function problemReport(input: ProblemReportInput): string {
     viewport: context.viewport,
     devicePixelRatio: context.devicePixelRatio,
     series: context.seriesName,
-    pages: input.pages.map((page, i) => pageJson(page, i, context.pages.find((c) => c.pageHash === page.pageHash))),
   };
-  // JSON 不縮排：一頁幾十句，縮排後 bbox 陣列一個數字一行，很快就超過 Discussion 的長度上限
+  const pages = input.pages.map((page, i) => pageRows(page, i, context.pages.find((c) => c.pageHash === page.pageHash)));
   return [
     '### 畫面上的句子',
     human,
     '<details>\n<summary>給開發者的資料（JSON）</summary>',
-    '```json\n' + JSON.stringify(data) + '\n```',
+    '```json\n' + withRows(data, 'pages', pages) + '\n```',
     '</details>',
   ].join('\n\n');
 }

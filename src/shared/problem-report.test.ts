@@ -154,6 +154,25 @@ describe('給 agent 的 JSON', () => {
     expect(report).not.toMatch(/data:image|THUMB|ERASE|LOOSE/);
   });
 
+  it('一句一行：在 GitHub 上往下掃就找得到某一句，又不像整份縮排那樣把 bbox 拆成一個數字一行', () => {
+    const report = problemReport(
+      input([
+        page('h1', { balloons: [balloon(1, 'おはよう', '早安'), balloon(2, 'またね', '再見')], looseText: [] }),
+        page('h2', { balloons: [], looseText: [] }, { transcript: { state: 'analyzing' } }),
+      ]),
+    );
+    const rows = /```json\n([\s\S]*?)\n```/.exec(report)![1]!.split('\n');
+
+    expect(rows).toHaveLength(7);
+    expect(rows[0]).toMatch(/^\{"extensionVersion":"0\.2\.5",.*"pages":\[$/);
+    expect(rows[1]).toMatch(/^\{"id":"P1","pageHash":"h1",.*"lines":\[$/);
+    expect(rows[2]).toMatch(/^\{"id":"P1-L1",.*"原文":"おはよう".*\},$/);
+    expect(rows[3]).toMatch(/^\{"id":"P1-L2",.*"原文":"またね".*\}$/);
+    expect(rows[4]).toBe(']},');
+    expect(rows[5]).toMatch(/^\{"id":"P2","pageHash":"h2","rect":.*"state":"analyzing"\}$/);
+    expect(rows[6]).toBe(']}');
+  });
+
   it('還在辨識、出錯的頁也列出來，只有狀態', () => {
     const json = reportJson(
       problemReport(input([page('h1', { balloons: [], looseText: [] }, { transcript: { state: 'error', message: 'OCR 失敗' } }), page('h2', { balloons: [], looseText: [] }, { transcript: { state: 'analyzing' } })])),
