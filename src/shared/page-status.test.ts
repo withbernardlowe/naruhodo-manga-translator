@@ -83,7 +83,13 @@ describe('出問題：可以點的紅色小標籤，圖示是 !', () => {
     expect(status.anchors[0]!.problem?.text).toBe('本月額度用完了・查看方案');
   });
 
-  it('還沒登入（或沒同意）：「還沒登入・登入」', () => {
+  it('還登入著但資料使用說明改版了：「資料使用說明更新了・查看」，點了打開補同意', () => {
+    const status = pageStatus(input([page('a1', 'h1', { state: 'done', text, translated: false })], { access: 'consent' }));
+
+    expect(status.anchors[0]!.problem).toEqual({ text: '資料使用說明更新了・查看', action: 'consent', pageHash: 'h1' });
+  });
+
+  it('還沒登入：「還沒登入・登入」', () => {
     const status = pageStatus(input([page('a1', 'h1', { state: 'done', text, translated: false })], { access: 'signIn' }));
 
     expect(status.anchors).toEqual([{ anchorId: 'a1', problem: { text: '還沒登入・登入', action: 'signIn', pageHash: 'h1' } }]);

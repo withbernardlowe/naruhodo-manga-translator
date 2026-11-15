@@ -130,6 +130,10 @@ _Avoid_: BYOK (fine in code and docs, not in the UI), developer mode
 A reader identified by an email address, needed for Hosted Translation. Holds that reader's Free Pages and Subscription, and nothing about what they read.
 _Avoid_: user (ambiguous with reader), member, profile
 
+**Data Use Consent** (資料使用同意)
+The reader's agreement to how the current translation mode sends text out of the browser, given after reading that mode's data-flow disclosure and before any text is sent. Kept per mode (Hosted Translation, Own API Key), each with its own version; when a mode's data handling changes, its version goes up, that mode's earlier consent no longer counts, and the reader is asked again with a one-line summary of what changed. Separate from signing in: an expired consent never signs the reader out of their Account; until they agree again, Pages show only the original and its Reading.
+_Avoid_: permission (that is Chrome's), opt-in, terms (that is the 服務條款), consentExpired (as a UI state name)
+
 **Translated Page** (已翻譯頁)
 The unit every limit counts: one Page whose translation came back from Hosted Translation, including one the reader asked to translate again. Viewing an already translated Page again, a translation that failed, or the Practice Spread is not a Translated Page; a Spread is two. A Strip has no Pages, so every 8 Lines translated from it count as one Translated Page, rounded up, the first Line counting the first; blank space and how the site cut the Strip do not matter.
 _Avoid_: credit, 點數, token, request

@@ -4,12 +4,14 @@
  * 沒做完就只顯示「完成設定」，按了打開 onboarding、回到停下來的那一步。
  */
 import type { RequestedStep } from './onboarding-step.ts';
+import type { TranslationMode } from './translation-mode.ts';
 import { watchLocal } from './watch-local.ts';
 
 /**
- * onboarding 的步驟（第 1–4 步）；ownKey＝頁尾「使用自備金鑰」換成的畫面，return＝點圖示時卡住、解決後的「回到漫畫」（都不在步驟裡）。
+ * onboarding 的步驟（第 1–4 步）；ownKey＝頁尾「使用自備金鑰」換成的畫面，consent＝還登入著、只補同意資料使用說明，
+ * return＝卡住或重新登入、解決後的「回到漫畫」（沒有漫畫分頁時是「可以關掉這個分頁」）；這三個都不在步驟裡。
  */
-export type OnboardingStep = 'intro' | 'signIn' | 'plan' | 'tutorial' | 'ownKey' | 'return';
+export type OnboardingStep = 'intro' | 'signIn' | 'consent' | 'plan' | 'tutorial' | 'ownKey' | 'return';
 
 /**
  * 進度：停在哪一步，done＝設定完成（選了方案或存了自己的 key；第 4 步只是教學）。
@@ -27,14 +29,32 @@ const parseProgress = (value: unknown): OnboardingProgress => (PROGRESS.includes
 
 export type { RequestedStep };
 
-const REQUESTED: readonly RequestedStep[] = ['signIn', 'plan', 'ownKey'];
+const REQUESTED: readonly RequestedStep[] = ['signIn', 'consent', 'plan', 'ownKey'];
 
-/** onboarding 頁從哪一步開始：要的是「登入」或「選擇方案」就從第 2 步；已登入（而且同意了）的話第 2 步直接跳到第 3 步。 */
-export function startStep(progress: OnboardingProgress, signedIn: boolean, requested?: RequestedStep): OnboardingStep {
+/**
+ * 重新登入：設定早就完成、而且已經在用內建翻譯（只是登出過或同意過期）。登入或補同意就解決了，直接「回到漫畫」，
+ * 不走選擇方案與試翻頁、不顯示進度點。「改用內建翻譯」的人（還在用自備金鑰）不算，第一次用內建翻譯要看方案。
+ */
+export const isReauth = (progress: OnboardingProgress, mode: TranslationMode): boolean => progress === 'done' && mode === 'hosted';
+
+/** 開 onboarding 當下的帳號狀態：signedIn＝有內建翻譯的 token，consented＝同意了目前版本的內建翻譯說明，reauth 見 isReauth。 */
+export interface StartState {
+  signedIn: boolean;
+  consented: boolean;
+  reauth: boolean;
+}
+
+/**
+ * onboarding 頁從哪一步開始：要的是「登入」「補同意」或「選擇方案」就從第 2 步；沒登入先登入，還登入著只差同意就只補同意；
+ * 都好了就到選擇方案，重新登入（reauth）的話直接「回到漫畫」。
+ */
+export function startStep(progress: OnboardingProgress, { signedIn, consented, reauth }: StartState, requested?: RequestedStep): OnboardingStep {
   if (requested === 'ownKey') return 'ownKey';
   const step = requested ?? (progress === 'done' ? 'intro' : progress);
   if (step === 'intro') return 'intro';
-  return signedIn ? 'plan' : 'signIn';
+  if (!signedIn) return 'signIn';
+  if (!consented) return 'consent';
+  return reauth && step !== 'plan' ? 'return' : 'plan';
 }
 
 /** 網址的 query：step＝從哪一步開始，from＝點圖示的那個漫畫分頁（完成後「回到漫畫」切回去）。 */

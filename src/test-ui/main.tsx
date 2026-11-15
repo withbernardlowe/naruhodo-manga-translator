@@ -69,7 +69,7 @@ globalThis.__testUi = {
         pages={pages}
         modelStatus={{ state: 'idle' }}
         access={{ mode: 'ownKey', hasKey: true }}
-        consented
+        consent="agreed"
         pageMode="read"
         hovered={hovered}
         logoSrc=""

@@ -95,7 +95,7 @@ export function Demo({ copy }: { copy: DemoCopy }) {
         pages={view.pages}
         modelStatus={{ state: 'idle' }}
         access={{ mode: 'hosted', signedIn: true }}
-        consented
+        consent="agreed"
         pageMode={pageMode}
         hovered={hovered}
         logoSrc={logoSrc}

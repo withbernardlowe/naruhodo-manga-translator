@@ -123,8 +123,11 @@ function useSubscribedNotice(): BillingPeriod | undefined {
   return billingPeriod;
 }
 
-/** 用新分頁打開 onboarding（#93）；signIn＝從第 2 步開始。 */
-const openOnboarding = (step?: 'signIn') => void chrome.tabs.create({ url: onboardingUrl(step) });
+/**
+ * 用新分頁打開 onboarding（#93）；signIn＝從第 2 步開始，帶著這個 side panel 跟著的漫畫分頁（from）：
+ * 設定早就完成的重新登入，登入完直接「回到漫畫」，不走選擇方案與試翻頁。「完成設定」不帶，照常走到第 4 步。
+ */
+const openOnboarding = (step?: 'signIn') => void chrome.tabs.create({ url: onboardingUrl(step, step ? readTabId() : undefined) });
 
 /**
  * 設定頁的帳號摘要（#213）：已登入時是 email＋方案 Badge、剩餘說明與「管理帳號 →」（打開帳號與訂閱頁；訂閱、管理訂閱、登出、刪除帳號都在那裡）；
@@ -677,7 +680,7 @@ function App({ tabId }: { tabId: number | undefined }) {
       pages={pages}
       modelStatus={modelStatus}
       access={translationMode === 'hosted' ? { mode: 'hosted', signedIn: session !== null } : { mode: 'ownKey', hasKey }}
-      consented={consent?.[translationMode]}
+      consent={consent?.[translationMode]}
       pageMode={pageMode}
       hovered={hovered}
       logoSrc="icons/naruhodo-small.svg"
@@ -688,8 +691,8 @@ function App({ tabId }: { tabId: number | undefined }) {
       onLineHover={(line) => {
         chrome.tabs.sendMessage(tabId!, { type: 'content:highlight', line } satisfies Message).catch(() => {});
       }}
-      // 說明卡只在自備金鑰時出現；同意後已啟動的分頁由 SW 直接開始翻譯
-      onAcceptConsent={() => void grantDataConsent('ownKey')}
+      // 自備金鑰沒同意、或內建翻譯還登入著但說明改版時出現；同意後已啟動的分頁由 SW 直接開始翻譯
+      onAcceptConsent={() => void grantDataConsent(translationMode)}
       onUseOwnKey={() => void saveTranslationMode('ownKey')}
       onSignIn={() => openOnboarding('signIn')}
       setupComplete={onboarding === 'done'}

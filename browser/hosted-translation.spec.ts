@@ -102,8 +102,8 @@ test.describe('全新安裝', () => {
     await expect(onboarding.getByText('你選的是 季繳・每 3 個月扣款 US$15・平均每月 US$5。', { exact: false })).toBeVisible();
   });
 
-  // unit 測不到的（#167）：onboarding 的第 3 步真的向 Worker 讀方案；剛登入與已登入時重開 onboarding 兩個入口都經過它
-  test('已訂閱的帳號：onboarding 登入後與重開時都直接顯示「已訂閱」，不出現方案選擇', async ({ context, extensionId }, testInfo) => {
+  // unit 測不到的（#167）：onboarding 的第 3 步真的向 Worker 讀方案。設定完成後再打開「登入」是重新登入，不再經過選擇方案
+  test('已訂閱的帳號：onboarding 登入後直接顯示「已訂閱」，不出現方案選擇；設定完成後重開登入是「已登入」', async ({ context, extensionId }, testInfo) => {
     const email = freshEmail(testInfo.workerIndex);
     await subscribeWithoutExtension(email);
 
@@ -115,11 +115,12 @@ test.describe('全新安裝', () => {
     await onboarding.getByRole('button', { name: '下一步' }).click();
     await expect(onboarding.getByRole('heading', { name: '設定完成，來試翻一頁吧' })).toBeVisible();
 
-    // side panel 的「登入」打開的第 2 步：已登入就跳到第 3 步
+    // 設定完成、在用內建翻譯時打開第 2 步（沒有漫畫分頁可以回去）：已登入就解決了，不帶去選擇方案、不顯示進度點
     const reopened = await context.newPage();
     await reopened.goto(`chrome-extension://${extensionId}/onboarding.html?step=signIn`);
-    await expect(reopened.getByRole('heading', { name: '已訂閱' })).toBeVisible();
-    await expect(reopened.getByRole('button', { name: '免費開始（100 頁）' })).toHaveCount(0);
+    await expect(reopened.getByRole('heading', { name: `已登入 ${email}` })).toBeVisible();
+    await expect(reopened.getByRole('list', { name: '步驟' })).toHaveCount(0);
+    await expect(reopened.getByRole('heading', { name: '已訂閱' })).toHaveCount(0);
   });
 });
 
@@ -468,4 +469,42 @@ test('刪除帳號：帳號頁的「刪除帳號」換到確認畫面 → 確定
   await expect(account.getByRole('button', { name: '登入' })).toBeVisible();
   await panel.getByRole('button', { name: '返回' }).click();
   await expect(panel.getByRole('group', { name: '尚未登入' })).toBeVisible();
+});
+
+// unit 測不到的：還登入著、同意的是舊版說明時，紅標籤帶著漫畫分頁打開 onboarding 的補同意畫面；side panel 說明卡寫進的同意
+// 讓 SW 直接接著翻已啟動的分頁（Data Use Consent）。哪種狀態顯示哪張卡、從哪一步開始在 src/ui/view.test.ts、src/shared/onboarding.test.ts。
+test('資料使用說明改版、還登入著：紅標籤打開補同意畫面；side panel 的說明卡按同意就接著翻，不用重新登入', async ({
+  context,
+  sw,
+  extensionId,
+  mockSite,
+}, testInfo) => {
+  const email = freshEmail(testInfo.workerIndex);
+  const { page, panel, tabId } = await activateOnMockSite({
+    context,
+    sw,
+    extensionId,
+    mockSite,
+    beforeActivate: async (panel) => {
+      await signInOnPanel(panel, context, email);
+      // 同意的是上一版的說明
+      await sw.evaluate(() => chrome.storage.local.set({ dataConsent: { hosted: 4 } }));
+    },
+  });
+
+  const card = panel.getByRole('region', { name: '資料使用說明' });
+  await expect(card.getByText('資料使用說明更新了，請再確認一次')).toBeVisible();
+  await expect(panel.getByText(/尚未登入/)).toHaveCount(0);
+
+  const opened = context.waitForEvent('page');
+  await page.locator('[data-naruhodo-overlay] .st-chip').getByText('資料使用說明更新了・查看').first().click();
+  const onboarding = await opened;
+  await expect.poll(() => onboarding.url()).toBe(`chrome-extension://${extensionId}/onboarding.html?step=consent&from=${tabId}`);
+  await expect(onboarding.getByRole('region', { name: '資料使用說明' }).getByText('資料使用說明更新了，請再確認一次')).toBeVisible();
+  await expect(onboarding.getByRole('region', { name: '同意並登入' })).toHaveCount(0);
+  await onboarding.close();
+
+  await card.getByRole('button', { name: '同意並啟用翻譯' }).click();
+  await expect(card).toHaveCount(0);
+  await expect(firstTranscript(panel).getByText('早安！今天好早喔')).toBeVisible();
 });

@@ -10,18 +10,18 @@
 import { render } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
 import { indexedDbApiKeyStore } from '../shared/api-key-store.ts';
-import { grantDataConsent, hasDataConsent } from '../shared/data-consent.ts';
+import { grantDataConsent, loadConsentState, type ConsentState } from '../shared/data-consent.ts';
 import { FREE_PAGES, MONTHLY_PAGES, pageCount, type BillingPeriod } from '../shared/hosted-api.ts';
 import { createHostedAccountClient } from '../shared/hosted-account-client.ts';
 import { HOSTED_API_URL, loadHostedSession, saveHostedSession, type HostedSession } from '../shared/hosted-session.ts';
 import type { Message, ModelStatus, ModelStatusResponse } from '../shared/messages.ts';
 import { downloadNotice, downloadPill } from '../shared/model-download.ts';
-import { loadOnboarding, onboardingRequest, saveOnboarding, startStep, type OnboardingProgress, type OnboardingStep, type RequestedStep } from '../shared/onboarding.ts';
+import { isReauth, loadOnboarding, onboardingRequest, saveOnboarding, startStep, type OnboardingProgress, type OnboardingStep, type RequestedStep } from '../shared/onboarding.ts';
 import { savePageMode } from '../shared/page-mode.ts';
 import { openPayment, ownPaymentChange, watchPendingPayment, type PendingPayment } from '../shared/payment-return.ts';
-import { saveTranslationMode } from '../shared/translation-mode.ts';
+import { loadTranslationMode, saveTranslationMode } from '../shared/translation-mode.ts';
 import { Badge, Button, Callout } from '../ui/components.tsx';
-import { OwnKeyDataFlow, PolicyLinks } from '../ui/data-flow.tsx';
+import { ConsentDisclosure, OwnKeyDataFlow, PolicyLinks } from '../ui/data-flow.tsx';
 import { PRACTICE_URL } from '../ui/links.ts';
 import { SignIn } from '../ui/sign-in.tsx';
 import { billingPeriodOffer } from '../ui/pricing.ts';
@@ -326,6 +326,34 @@ function ReturnToManga({ from }: { from: number }) {
   );
 }
 
+/** 重新登入、沒有漫畫分頁可以回去（讀者自己打開 onboarding）：登入就解決了，不帶去選擇方案。 */
+function SignedInDone({ email }: { email: string | undefined }) {
+  return (
+    <>
+      <h2 class="ob-h2">{email ? `已登入 ${email}` : '設定好了'}</h2>
+      <p>可以關掉這個分頁了。</p>
+    </>
+  );
+}
+
+/**
+ * 補同意（Data Use Consent）：還登入著、只是內建翻譯的資料使用說明改版了。內容跟 side panel 的說明卡一樣（data-flow.tsx），
+ * 同意就解決了，不用重收驗證碼。
+ */
+function ConsentUpdate({ updated, onAccept }: { updated: boolean; onAccept: () => void }) {
+  return (
+    <section aria-label="資料使用說明" class="sign-in">
+      <ConsentDisclosure mode="hosted" updated={updated} />
+      <p class="hint">
+        <PolicyLinks />
+      </p>
+      <Button variant="primary" class="ob-big" onClick={onAccept}>
+        同意並啟用翻譯
+      </Button>
+    </section>
+  );
+}
+
 /** 第 4 步：到網站的試翻頁，用真的工具列圖示翻一次 Practice Spread（釘選圖示的教學在試翻頁上）。onboarding 分頁不自動關。 */
 function TryPractice() {
   useReadingDefaults();
@@ -384,7 +412,10 @@ function OwnKey({ onSaved, onBack }: { onSaved: (key: string) => void; onBack: (
   );
 }
 
-/** requested＋from：點圖示時卡住（#185），解決了那一步就到「回到漫畫」，不走後面的步驟。 */
+/**
+ * requested＋from：點圖示時卡住（#185），解決了那一步就到「回到漫畫」，不走後面的步驟。
+ * 重新登入（isReauth：設定早就完成、在用內建翻譯）也一樣，登入或補同意完直接回到漫畫，不顯示進度點與「← 上一步」。
+ */
 function Onboarding({ requested, from }: { requested: RequestedStep | undefined; from: number | undefined }) {
   const [progress, setProgress] = useState<OnboardingProgress | undefined>(undefined);
   const [session, setSession] = useState<HostedSession | null>(null);
@@ -392,13 +423,18 @@ function Onboarding({ requested, from }: { requested: RequestedStep | undefined;
   const [modelStatus, setModelStatus] = useState<ModelStatus>({ state: 'idle' });
   const [downloadBytes, setDownloadBytes] = useState<number | undefined>(undefined);
   const [downloadStarted, setDownloadStarted] = useState(false);
+  const [reauth, setReauth] = useState(false);
+  const [consent, setConsent] = useState<ConsentState>('none');
 
   useEffect(() => {
-    void Promise.all([loadOnboarding(), loadHostedSession(), hasDataConsent('hosted')]).then(([stored, saved, consented]) => {
+    void Promise.all([loadOnboarding(), loadHostedSession(), loadConsentState('hosted'), loadTranslationMode()]).then(([stored, saved, consentState, mode]) => {
+      const again = isReauth(stored, mode);
       setProgress(stored);
       setSession(saved ?? null);
-      // 已登入但沒同意（同意的版本更新了）：第 2 步不能跳過，同意就在那一步
-      setStep(startStep(stored, Boolean(saved) && consented, requested));
+      setReauth(again);
+      setConsent(consentState);
+      // 已登入但沒同意（同意的版本更新了）：只補同意，不重收驗證碼
+      setStep(startStep(stored, { signedIn: Boolean(saved), consented: consentState === 'agreed', reauth: again }, requested));
     });
   }, []);
 
@@ -437,6 +473,9 @@ function Onboarding({ requested, from }: { requested: RequestedStep | undefined;
     await saveOnboarding('done');
   }
 
+  /** 登入或補同意之後：重新登入的回到漫畫（沒有漫畫分頁就是「可以關掉這個分頁」），其他到選擇方案。 */
+  const afterAccess = (): OnboardingStep => (reauth ? 'return' : 'plan');
+
   /** 設定完成之後：從漫畫分頁卡住來的回到漫畫，其他照常到第 4 步。 */
   const afterSetup = (): OnboardingStep => (from === undefined ? 'tutorial' : 'return');
 
@@ -459,7 +498,7 @@ function Onboarding({ requested, from }: { requested: RequestedStep | undefined;
         <img src={LOGO} alt="" width={24} height={24} />
         Naruhodo
       </header>
-      {step !== 'ownKey' && step !== 'return' && <Dots current={step} />}
+      {!(reauth || step === 'consent' || step === 'ownKey' || step === 'return') && <Dots current={step} />}
       <main class="ob-card">
         {step === 'intro' && (
           <Intro
@@ -482,10 +521,20 @@ function Onboarding({ requested, from }: { requested: RequestedStep | undefined;
               // side panel 重新讀 session；SW 接著翻已啟動分頁裡還沒翻的頁
               void chrome.runtime.sendMessage({ type: 'session:changed' } satisfies Message).catch(() => {});
               setSession(signedIn);
-              // 卡住來的、設定早就完成（只是登入失效）：登入就解決了
-              go(from !== undefined && progress === 'done' ? 'return' : 'plan');
+              // 設定早就完成、在用內建翻譯（只是登出過）：登入就解決了
+              go(afterAccess());
             }}
-            emailFooter={back('intro')}
+            emailFooter={reauth ? undefined : back('intro')}
+          />
+        )}
+        {step === 'consent' && (
+          <ConsentUpdate
+            updated={consent === 'outdated'}
+            onAccept={() => {
+              startDownload();
+              // 同意寫進 chrome.storage 時 SW 就接著翻已啟動分頁裡還沒翻的頁
+              void grantDataConsent('hosted').then(() => go(afterAccess()));
+            }}
           />
         )}
         {step === 'plan' && session && (
@@ -502,7 +551,7 @@ function Onboarding({ requested, from }: { requested: RequestedStep | undefined;
           </>
         )}
         {step === 'tutorial' && <TryPractice />}
-        {step === 'return' && from !== undefined && <ReturnToManga from={from} />}
+        {step === 'return' && (from !== undefined ? <ReturnToManga from={from} /> : <SignedInDone email={session?.email} />)}
         {step === 'ownKey' && (
           <OwnKey
             onSaved={(key) => {
@@ -518,7 +567,7 @@ function Onboarding({ requested, from }: { requested: RequestedStep | undefined;
           />
         )}
       </main>
-      {step !== 'ownKey' && step !== 'return' && (
+      {step !== 'ownKey' && step !== 'return' && step !== 'consent' && (
         <p class="ob-foot">
           已經有 Anthropic API key？
           <Button variant="link" onClick={() => setStep('ownKey')}>

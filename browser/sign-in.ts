@@ -13,14 +13,19 @@ export async function lastCode(email: string): Promise<string> {
   return ((await response.json()) as { code: string }).code;
 }
 
-/** onboarding＝停在「同意並登入」的 onboarding 頁；登入後到第 3 步，未訂閱是「選擇方案」，已訂閱（subscribed）是「已訂閱」（#167）。 */
-export async function signInWithEmail(onboarding: Page, email: string, { subscribed = false } = {}): Promise<void> {
+/** 在停在「同意並登入」的 onboarding 頁寄送驗證碼、輸入、按「登入」。 */
+async function enterCode(onboarding: Page, email: string): Promise<void> {
   await onboarding.getByRole('region', { name: '同意並登入' }).getByLabel('Email').fill(email);
   await onboarding.getByRole('button', { name: '同意並寄送驗證碼' }).click();
   const verify = onboarding.getByRole('region', { name: '輸入驗證碼' });
   await expect(verify.getByText(email)).toBeVisible();
   await verify.getByLabel('驗證碼').fill(await lastCode(email));
   await verify.getByRole('button', { name: '登入' }).click();
+}
+
+/** onboarding＝停在「同意並登入」的 onboarding 頁；登入後到第 3 步，未訂閱是「選擇方案」，已訂閱（subscribed）是「已訂閱」（#167）。 */
+export async function signInWithEmail(onboarding: Page, email: string, { subscribed = false } = {}): Promise<void> {
+  await enterCode(onboarding, email);
   if (subscribed) await expect(onboarding.getByRole('heading', { name: '已訂閱' })).toBeVisible();
   else await expect(onboarding.getByText(`已登入 ${email}`)).toBeVisible();
 }
@@ -38,13 +43,13 @@ export async function onboardingPage(context: BrowserContext, open?: () => Promi
 }
 
 /**
- * 按 onboarding 第 4 步的「完成」，等分頁關掉。按鈕在 click handler 裡直接 window.close()，Playwright 的 click 收尾前
+ * 按了會 window.close() 的按鈕，等分頁關掉。按鈕在 click handler 裡直接 window.close()，Playwright 的 click 收尾前
  * 分頁可能已經關了（CI 上遇過），這個錯誤不算失敗；分頁到底有沒有關，由等 close 事件來判斷。
  */
-export async function finishOnboarding(onboarding: Page): Promise<void> {
-  const closed = onboarding.waitForEvent('close');
-  await onboarding
-    .getByRole('button', { name: '完成' })
+async function clickAndClose(page: Page, name: string): Promise<void> {
+  const closed = page.waitForEvent('close');
+  await page
+    .getByRole('button', { name })
     .click()
     .catch((error: Error) => {
       if (!error.message.includes('has been closed')) throw error;
@@ -52,10 +57,16 @@ export async function finishOnboarding(onboarding: Page): Promise<void> {
   await closed;
 }
 
-/** side panel 按「登入」（open）→ onboarding 第 2 步登入 → 先用免費額度 → 第 4 步按「完成」關掉分頁。 */
+/** 按 onboarding 第 4 步的「完成」，等分頁關掉。 */
+export const finishOnboarding = (onboarding: Page): Promise<void> => clickAndClose(onboarding, '完成');
+
+/**
+ * side panel 按「登入」（open）→ onboarding 第 2 步登入。設定早就完成、在用內建翻譯（重新登入）：登入完直接「回到漫畫」，
+ * 不走選擇方案與試翻頁，按了關掉分頁。帳號一開始就有免費額度。
+ */
 export async function signInFromPanel(context: BrowserContext, open: () => Promise<void>, email: string): Promise<void> {
   const onboarding = await onboardingPage(context, open);
-  await signInWithEmail(onboarding, email);
-  await onboarding.getByRole('button', { name: '免費開始（100 頁）' }).click();
-  await finishOnboarding(onboarding);
+  await expect(onboarding.getByRole('list', { name: '步驟' })).toBeHidden();
+  await enterCode(onboarding, email);
+  await clickAndClose(onboarding, '回到漫畫');
 }

@@ -146,52 +146,61 @@ describe('底部的整體狀態列', () => {
 
 describe('翻譯前的設定提示', () => {
   it('內建翻譯、沒登入：顯示「尚未登入」，即使還沒有頁；不顯示資料使用說明卡（同意在登入時取得）', () => {
-    expect(setupNotices({ access: { mode: 'hosted', signedIn: false }, consented: false, untranslated: false })).toEqual({
-      consentCard: false,
+    expect(setupNotices({ access: { mode: 'hosted', signedIn: false }, consent: 'none', untranslated: false })).toEqual({
+      consentCard: undefined,
       notice: 'signedOut',
     });
+    expect(setupNotices({ access: { mode: 'hosted', signedIn: false }, consent: 'outdated', untranslated: false }).notice).toBe('signedOut');
   });
 
   it('內建翻譯、已登入而且同意了：什麼都不顯示', () => {
-    expect(setupNotices({ access: { mode: 'hosted', signedIn: true }, consented: true, untranslated: true })).toEqual({
-      consentCard: false,
+    expect(setupNotices({ access: { mode: 'hosted', signedIn: true }, consent: 'agreed', untranslated: true })).toEqual({
+      consentCard: undefined,
       notice: undefined,
     });
   });
 
-  it('內建翻譯、有 token 但同意被撤回：也是「尚未登入」，重新登入就會再同意', () => {
-    expect(setupNotices({ access: { mode: 'hosted', signedIn: true }, consented: false, untranslated: false }).notice).toBe('signedOut');
+  it('內建翻譯、還登入著但資料使用說明改版了：只補同意（「說明更新了」的卡），不是「尚未登入」', () => {
+    expect(setupNotices({ access: { mode: 'hosted', signedIn: true }, consent: 'outdated', untranslated: false })).toEqual({
+      consentCard: 'updated',
+      notice: undefined,
+    });
+  });
+
+  it('內建翻譯、有 token 但從沒同意過：補同意的卡用第一次的標題', () => {
+    expect(setupNotices({ access: { mode: 'hosted', signedIn: true }, consent: 'none', untranslated: false }).consentCard).toBe('first');
   });
 
   it('自備金鑰：沒同意顯示資料使用說明卡；沒有 key 而且有未翻譯的頁才提示設定 key', () => {
-    expect(setupNotices({ access: { mode: 'ownKey', hasKey: false }, consented: false, untranslated: false })).toEqual({
-      consentCard: true,
+    expect(setupNotices({ access: { mode: 'ownKey', hasKey: false }, consent: 'none', untranslated: false })).toEqual({
+      consentCard: 'first',
       notice: undefined,
     });
-    expect(setupNotices({ access: { mode: 'ownKey', hasKey: false }, consented: true, untranslated: true })).toEqual({
-      consentCard: false,
+    expect(setupNotices({ access: { mode: 'ownKey', hasKey: true }, consent: 'outdated', untranslated: false }).consentCard).toBe('updated');
+    expect(setupNotices({ access: { mode: 'ownKey', hasKey: false }, consent: 'agreed', untranslated: true })).toEqual({
+      consentCard: undefined,
       notice: 'noKey',
     });
-    expect(setupNotices({ access: { mode: 'ownKey', hasKey: true }, consented: true, untranslated: true }).notice).toBeUndefined();
+    expect(setupNotices({ access: { mode: 'ownKey', hasKey: true }, consent: 'agreed', untranslated: true }).notice).toBeUndefined();
   });
 
   it('從舊版更新、仍用自備金鑰：還沒關掉內建翻譯提示時顯示一次；關掉後不再出現', () => {
-    const ownKey = { access: { mode: 'ownKey', hasKey: true }, consented: true, untranslated: false } as const;
+    const ownKey = { access: { mode: 'ownKey', hasKey: true }, consent: 'agreed', untranslated: false } as const;
     expect(setupNotices({ ...ownKey, hostedHint: true }).notice).toBe('hostedHint');
     expect(setupNotices({ ...ownKey, hostedHint: false }).notice).toBeUndefined();
   });
 
   it('內建翻譯提示只在自備金鑰時出現；「尚未設定 API key」優先', () => {
-    expect(setupNotices({ access: { mode: 'hosted', signedIn: true }, consented: true, untranslated: false, hostedHint: true }).notice).toBeUndefined();
-    expect(setupNotices({ access: { mode: 'ownKey', hasKey: false }, consented: true, untranslated: true, hostedHint: true }).notice).toBe('noKey');
+    expect(setupNotices({ access: { mode: 'hosted', signedIn: true }, consent: 'agreed', untranslated: false, hostedHint: true }).notice).toBeUndefined();
+    expect(setupNotices({ access: { mode: 'ownKey', hasKey: false }, consent: 'agreed', untranslated: true, hostedHint: true }).notice).toBe('noKey');
   });
 
   it('同意狀態還在讀：什麼都不顯示，不會閃一下', () => {
-    expect(setupNotices({ access: { mode: 'hosted', signedIn: false }, consented: undefined, untranslated: true })).toEqual({
-      consentCard: false,
+    expect(setupNotices({ access: { mode: 'hosted', signedIn: false }, consent: undefined, untranslated: true })).toEqual({
+      consentCard: undefined,
       notice: undefined,
     });
-    expect(setupNotices({ access: { mode: 'ownKey', hasKey: false }, consented: undefined, untranslated: false }).consentCard).toBe(false);
+    expect(setupNotices({ access: { mode: 'ownKey', hasKey: false }, consent: undefined, untranslated: false }).consentCard).toBeUndefined();
   });
 });
 

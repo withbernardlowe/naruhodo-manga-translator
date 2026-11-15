@@ -1,8 +1,11 @@
 /**
  * 兩種翻譯模式的資料流向說明（#93）：讀者按「同意並寄送驗證碼」「同意並儲存」「同意並啟用翻譯」時同意的就是這些文字。
  * 內建翻譯：onboarding 第 2 步與設定的登入（SignIn）；自備金鑰：onboarding 的「使用自備金鑰」與 side panel 的資料使用說明卡。
- * 內容要跟 PRIVACY.md 一致；資料處理方式改了，兩邊一起改，並把 shared/data-consent.ts 的 DATA_CONSENT_VERSION 加一。
+ * 內容要跟 PRIVACY.md 一致；資料處理方式改了，兩邊一起改，並把 shared/data-consent.ts 裡那個模式的 DATA_CONSENT_VERSION 加一、
+ * CONSENT_CHANGES 改寫成這次改了什麼（跟那個模式無關的升版寫 undefined）。
  */
+import { CONSENT_CHANGES } from '../shared/data-consent-version.ts';
+import type { TranslationMode } from '../shared/translation-mode.ts';
 import { PRIVACY_URL, TERMS_URL } from './links.ts';
 
 const LOCAL = '對話框偵測與文字辨識都在這台電腦上進行，不會上傳圖片，也不會送出網址。';
@@ -24,6 +27,23 @@ export function OwnKeyDataFlow() {
       <li>辨識出的日文文字、前幾頁的原文與譯文、作品的角色與用語、作品名稱，以及用來判斷是哪部作品的網頁標題，會用你的 API key 直接傳到 Anthropic 翻譯，不經過 Naruhodo 的服務。</li>
       <li>API key 只存在這台電腦的外掛裡。</li>
     </ul>
+  );
+}
+
+/**
+ * 補同意的說明（Data Use Consent）：side panel 的說明卡與 onboarding 的補同意畫面共用。
+ * updated＝同意過舊版：標題說明更新了，先列這次改了什麼，再列完整的資料流向（政策要求改了要完整再揭露一次）。
+ */
+export function ConsentDisclosure({ mode, updated }: { mode: TranslationMode; updated: boolean }) {
+  const changes = updated ? CONSENT_CHANGES[mode] : undefined;
+  return (
+    <>
+      <p>
+        <strong>{updated ? '資料使用說明更新了，請再確認一次' : '翻譯前請先確認資料怎麼使用'}</strong>
+      </p>
+      {changes && <p>這次改了：{changes}</p>}
+      {mode === 'hosted' ? <HostedDataFlow /> : <OwnKeyDataFlow />}
+    </>
   );
 }
 
