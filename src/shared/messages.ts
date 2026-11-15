@@ -55,6 +55,10 @@ export type Message =
   | { type: 'panel:translate'; tabId: number; pageHash?: string }
   /** side panel → SW：底部的「重新翻譯」：畫面上的頁從辨識開始整個重來（Retranslation），不拿快取。 */
   | { type: 'panel:retranslate'; tabId: number }
+  /** side panel → SW：Problem Report（GLOSSARY）要的、side panel 拿不到的資料。回應 shared/problem-report.ts 的 ProblemReportContext。 */
+  | { type: 'panel:problemReport'; tabId: number }
+  /** SW → content script：Problem Report 的畫面大小與 DPR。回應 ProblemReportView。 */
+  | { type: 'content:problemReportView' }
   /**
    * SW → offscreen：翻譯一個 Page。回應 TranslateResponse。
    * API key 不在訊息裡：offscreen 自己從 IndexedDB 讀（spec 第 5 節：key 永遠不經過 messaging）。
@@ -256,6 +260,14 @@ export interface Rect {
 export interface Size {
   width: number;
   height: number;
+}
+
+/** content:problemReportView 的回應。 */
+export interface ProblemReportView {
+  viewport: Size;
+  devicePixelRatio: number;
+  /** 文件的捲動位置與總高度（CSS px）：長條漫畫一話幾十張圖，靠它捲到讀者看的那一帶。 */
+  scroll: { y: number; height: number };
 }
 
 /** 哪個 anchor 上的哪一個 Page（Spread 的兩頁在同一個 anchor 上，要靠 pageHash 分）。 */

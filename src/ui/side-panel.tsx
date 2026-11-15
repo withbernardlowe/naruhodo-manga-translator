@@ -361,6 +361,11 @@ export interface SidePanelProps {
   /** 帳號頁發起的付款確認了（#176）：顯示一次「已訂閱」，帶付款的扣款週期。 */
   subscribedNotice?: BillingPeriod;
   onDismissSubscribedNotice?: () => void;
+  /**
+   * 「回報翻譯問題」（Problem Report，GLOSSARY）：copy 把報告寫進剪貼簿，open 打開 Discussions 的回報表單。
+   * 沒給就不顯示按鈕（網站上的展示）。
+   */
+  reportProblem?: { copy: () => Promise<void>; open: () => void };
   /** 以下是只有外掛 container 才有的區塊（會讀寫 store、送 chrome 訊息）；沒給就不顯示（沒有設定頁就沒有 ⚙）。 */
   /** Transcript 上方的作品卡（#186）；open 打開作品頁或換一部作品（#191）。 */
   renderSeriesCard?: (open: (page: SeriesPage) => void) => ComponentChildren;
@@ -408,6 +413,58 @@ function PanelPageView({ title, onBack, children }: { title: string; onBack: () 
         {children}
       </main>
     </div>
+  );
+}
+
+/**
+ * 逐字稿最下面的「回報翻譯問題」：先複製再開分頁（開了分頁 side panel 就失去焦點，剪貼簿寫不進去）。
+ * 複製好之後留著說明與「再複製一次」：讀者到 GitHub 之前可能又複製了別的東西。
+ */
+function ReportProblem({ copy, open }: NonNullable<SidePanelProps['reportProblem']>) {
+  const [copied, setCopied] = useState<'copied' | 'failed' | undefined>(undefined);
+  const copyReport = async () => {
+    try {
+      await copy();
+      setCopied('copied');
+      return true;
+    } catch (e) {
+      console.warn('copy problem report failed', e);
+      setCopied('failed');
+      return false;
+    }
+  };
+  const copyThenOpen = () => void copyReport().then((ok) => ok && open());
+  return (
+    <section class="report-problem" aria-label="回報翻譯問題">
+      {copied === undefined && (
+        <Button variant="ghost" onClick={copyThenOpen}>
+          回報翻譯問題
+        </Button>
+      )}
+      {copied === 'copied' && (
+        <Callout role="status" class="naru-callout--stack">
+          <p>報告已複製。請貼到 GitHub 表單最下面的「報告」欄位，再用自己的話寫哪一頁、哪裡有問題。</p>
+          <div class="naru-row">
+            <Button variant="ghost" onClick={() => void copyReport()}>
+              再複製一次
+            </Button>
+            <Button variant="ghost" onClick={open}>
+              打開回報表單
+            </Button>
+          </div>
+        </Callout>
+      )}
+      {copied === 'failed' && (
+        <Callout role="alert" class="naru-callout--stack">
+          <p>沒辦法複製報告，請再按一次。</p>
+          <div class="naru-row">
+            <Button variant="ghost" onClick={copyThenOpen}>
+              再試一次
+            </Button>
+          </div>
+        </Callout>
+      )}
+    </section>
   );
 }
 
@@ -524,6 +581,10 @@ export function SidePanel(props: SidePanelProps) {
             />
           ))}
         </ul>
+        {props.reportProblem && done.some((p) => p.transcript.state === 'done' && p.transcript.translated) && (
+          // 翻頁、換了畫面上的 Page：「報告已複製」是上一個畫面的，回到按鈕
+          <ReportProblem key={done.map((p) => p.pageHash).join()} {...props.reportProblem} />
+        )}
       </main>
       {/* 底部固定列；放在 main 外面才是 contentinfo landmark。內建翻譯的剩餘頁數一行、整體翻譯狀態＋按鈕一行（#77、#92）；作品在 Transcript 上方的作品卡（#186） */}
       <footer aria-label="狀態列">

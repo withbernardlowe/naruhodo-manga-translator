@@ -51,6 +51,14 @@ To tell which series a page belongs to, the extension also sends the page's titl
 
 The extension connects to nothing else.
 
+## Reporting a problem
+
+The side panel's **回報翻譯問題** (report a translation problem) button writes a text report about the pages on screen and **copies it to your clipboard**; it then opens a new discussion form on our GitHub Discussions, where you can paste it. The extension does not send the report anywhere: it reaches GitHub only if you paste it there and post it yourself.
+
+The report is numbers for debugging: where each sentence was found on the page, how many characters it has, whether it was translated, and how confident the text recognition was; a fingerprint of each page (a short code computed from the page image, from which the image cannot be rebuilt); the page's address without the part after `?` or `#`, and how far down the page you had scrolled; and the extension's version and settings, your browser version and operating system, and the screen and zoom size. It contains **no images and none of the manga's text**: no dialogue, readings, translations or Series Notes. It also holds no API key, email address or account. You describe the problem in your own words in the form.
+
+**A posted discussion is public.** Before posting, you can read the whole report in the form and delete anything you do not want to share, such as the page address. What you post is handled by GitHub under the [GitHub Privacy Statement](https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement).
+
 ## Data the Naruhodo service keeps
 
 Only Hosted Translation uses the Naruhodo service. It keeps:

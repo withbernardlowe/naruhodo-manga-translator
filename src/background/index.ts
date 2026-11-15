@@ -20,6 +20,7 @@ import type {
   PageCandidatesResponse,
   PagesResponse,
   PipelineConfig,
+  ProblemReportView,
   SeriesResponse,
   StatusResponse,
   TestConfig,
@@ -56,6 +57,8 @@ import { createOverlaySync } from './overlay-sync.ts';
 import { createPageStatusSync } from './page-status-sync.ts';
 import { createPaymentReturn } from './payment-return.ts';
 import { createScanner, type ScanOptions } from './scan.ts';
+import type { CachedPageInfo, ProblemReportContext } from '../shared/problem-report.ts';
+import { urlPattern } from './series.ts';
 import { createSeriesCatalog } from './series-catalog.ts';
 import { indexedDbBackupRepo, indexedDbNotesStore, indexedDbSeriesRepo } from './series-store.ts';
 import { indexedDbTabStore } from './tab-store.ts';
@@ -270,6 +273,7 @@ async function translatorVersion(): Promise<TranslatorVersion | undefined> {
 
 const notesStore = indexedDbNotesStore();
 const seriesRepo = indexedDbSeriesRepo();
+const pageCache = indexedDbPageCache();
 
 const transcriber = createTranscriber({
   async analyze(request) {
@@ -293,7 +297,7 @@ const transcriber = createTranscriber({
   getSeriesId: (tabId) => activation.getSeriesId(tabId),
   isSeriesPending: (tabId) => activation.isSeriesPending(tabId),
   getSeries: (seriesId) => seriesRepo.getSeries(seriesId),
-  cache: indexedDbPageCache(),
+  cache: pageCache,
   notes: {
     ...notesStore,
     // 背景整理 Notes（②）套用了 notes_changes 或人改了：side panel 的 Series Notes 區塊重新讀
@@ -487,6 +491,36 @@ function scan(tabId: number, options?: ScanOptions): void {
 
 const backupRepo = indexedDbBackupRepo();
 const backup = createBackup({ repo: backupRepo, updateNotes: (seriesId, change) => transcriber.updateNotes(seriesId, change), now: () => Date.now() });
+
+/**
+ * Problem Report（GLOSSARY）裡 side panel 拿不到的：網址（只留 origin＋path）、縮放、畫面大小與捲動位置、快取裡這幾頁的紀錄。
+ * 每一項都是盡量拿：拿不到（content script 已經不在、分頁關了）就省略，報告照樣產生。
+ */
+async function problemReportContext(tabId: number): Promise<ProblemReportContext> {
+  const optional = <T,>(p: Promise<T>) =>
+    p.catch((e: unknown) => {
+      console.warn('problem report: lookup failed', e);
+      return undefined;
+    });
+  const [tab, zoom, view, seriesId] = await Promise.all([
+    optional(chrome.tabs.get(tabId)),
+    optional(chrome.tabs.getZoom(tabId)),
+    optional(chrome.tabs.sendMessage<Message, ProblemReportView>(tabId, { type: 'content:problemReportView' })),
+    optional(activation.getSeriesId(tabId)),
+  ]);
+  const cached = seriesId === undefined ? [] : await Promise.all(
+    transcriber.get(tabId).map(async (page): Promise<CachedPageInfo | undefined> => {
+      const entry = await optional(page.stripes ? pageCache.findLong(seriesId, page.stripes) : pageCache.find(seriesId, page.pageHash));
+      return entry && { pageHash: page.pageHash, promptVersion: entry.promptVersion, translatedAt: entry.translatedAt, usedNoteCount: entry.usedNotes.length };
+    }),
+  );
+  return {
+    pageUrl: tab?.url === undefined ? undefined : urlPattern(tab.url),
+    zoom,
+    view,
+    pages: cached.filter((c) => c !== undefined),
+  };
+}
 
 async function notesResponse(tabId: number): Promise<NotesResponse> {
   const seriesId = await activation.getSeriesId(tabId);
@@ -867,6 +901,9 @@ chrome.runtime.onMessage.addListener((message: Message, sender, sendResponse) =>
     case 'panel:getPages':
       sendResponse({ pages: transcriber.get(message.tabId), strip: transcriber.getStrip(message.tabId) } satisfies PagesResponse);
       return false;
+    case 'panel:problemReport':
+      void problemReportContext(message.tabId).then(sendResponse);
+      return true;
     case 'panel:translate':
       void transcriber.translate(message.tabId, message.pageHash).finally(() => sendResponse());
       return true;

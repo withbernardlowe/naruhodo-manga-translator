@@ -28,7 +28,9 @@ GitHub shares one number space across issues and PRs, so a bare `#42` may be eit
 
 ## Discussions as a request surface
 
-**Discussions as a request surface: yes.** Issues and PRs are open to collaborators only, so users report problems, ask questions and suggest features in [Discussions](https://github.com/yurenju/naruhodo-manga-translator/discussions). There is one category, General. `gh` has no `discussion` command; use `gh api graphql`.
+**Discussions as a request surface: yes.** Issues and PRs are open to collaborators only, so users report problems, ask questions and suggest features in [Discussions](https://github.com/yurenju/naruhodo-manga-translator/discussions). There are two categories: General, and 翻譯問題回報, where readers paste the Problem Report the side panel copied for them. `gh` has no `discussion` command; use `gh api graphql`.
+
+A Problem Report holds no dialogue, only numbers; the reader says which Page and where in their own words. To find their Page, open `pageUrl` in the debug Chrome ([real-site-debugging.md](real-site-debugging.md)), scroll to `scroll.y`, activate, and match `pageHash` with `findSamePage` (`src/shared/page-hash.ts`): it is a perceptual hash, so a different window size gives a hash a few bits off, never an exact match.
 
 - **List recent Discussions**: `gh api graphql -f query='{repository(owner:"yurenju",name:"naruhodo-manga-translator"){discussions(first:20,orderBy:{field:UPDATED_AT,direction:DESC}){nodes{number title url updatedAt author{login} comments{totalCount}}}}}'`
 - **Read one**: `gh api graphql -F n=<number> -f query='query($n:Int!){repository(owner:"yurenju",name:"naruhodo-manga-translator"){discussion(number:$n){title body url author{login} comments(first:50){nodes{author{login} body replies(first:20){nodes{author{login} body}}}}}}}'`
