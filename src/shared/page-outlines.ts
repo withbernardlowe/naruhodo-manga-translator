@@ -29,19 +29,11 @@ export function translatingLines({ balloons, looseText }: PageText): LineBox[] {
   return [
     ...balloons
       .filter((b) => !b.unreadable)
-      .map((b): LineBox => ({ id: b.id, kind: 'balloon', box: b.balloonBbox, order: b.order, textBox: b.textBbox, eraseLuminance: b.eraseLuminance ?? ERASE_WHITE })),
+      .map((b): LineBox => ({ id: b.id, kind: 'balloon', box: b.balloonBbox, order: b.order, eraseLuminance: b.eraseLuminance ?? ERASE_WHITE })),
     ...looseText
       .filter((l) => !l.unreadable)
-      .map((l): LineBox => ({ id: l.id, kind: 'loose', box: l.bbox, order: l.order, textBox: l.bbox, eraseLuminance: l.eraseLuminance ?? ERASE_WHITE })),
+      .map((l): LineBox => ({ id: l.id, kind: 'loose', box: l.bbox, order: l.order, eraseLuminance: l.eraseLuminance ?? ERASE_WHITE })),
   ].sort((a, b) => a.order - b.order);
-}
-
-/**
- * 底色掃光的範圍：文字框，換成外圈 box 的比例。不照比例往外擴（直長的文字框上下會擴出泡泡）；
- * 往外留多少、邊緣怎麼羽化是畫面 px，在 content/overlay.ts。
- */
-export function washArea(box: RatioRect, text: RatioRect): RatioRect {
-  return { x: (text.x - box.x) / box.w, y: (text.y - box.y) / box.h, w: text.w / box.w, h: text.h / box.h };
 }
 
 /** 這個 tab 畫面上有外圈要畫的 Page；沒有外圈的 Page 不列（content script 會拿掉它上面的外圈）。 */

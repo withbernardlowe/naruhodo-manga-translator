@@ -165,8 +165,6 @@ export interface LineBox {
   kind: 'balloon' | 'loose';
   box: RatioRect;
   order: number;
-  /** 文字框（Page 座標）：翻譯中的底色掃光蓋在這附近。只有翻譯中的句子有。 */
-  textBox?: RatioRect;
   /** 擦除底色的亮度（0～255）：底色掃光的顏色，跟之後蓋上去的擦除同色。只有翻譯中的句子有。 */
   eraseLuminance?: number;
 }
