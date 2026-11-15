@@ -27,7 +27,8 @@ import { dismissSubscribedNotice, watchSubscribedNotice } from '../shared/paymen
 import { DEFAULT_SIDE_PANEL_ON_ACTIVATION, saveSidePanelOnActivation, watchSidePanelOnActivation } from '../shared/side-panel-setting.ts';
 import { saveTranslationMode, type TranslationMode } from '../shared/translation-mode.ts';
 import { Badge, Button, RadioCard, Switch } from '../ui/components.tsx';
-import { CONTACT_EMAIL, DISCUSSIONS_URL } from '../ui/links.ts';
+import { problemReport, type ProblemReportContext } from '../shared/problem-report.ts';
+import { CONTACT_EMAIL, DISCUSSIONS_URL, PROBLEM_REPORT_URL } from '../ui/links.ts';
 import { SidePanel, type SeriesPage } from '../ui/side-panel.tsx';
 import { accountPlanView, seriesActions } from '../ui/view.ts';
 import { ClearCache, DeleteSeries, SeriesNotesSection } from './series-notes.tsx';
@@ -701,6 +702,27 @@ function App({ tabId }: { tabId: number | undefined }) {
       onViewPlans={() => void chrome.tabs.create({ url: accountUrl(tabId) })}
       subscribedNotice={subscribedNotice}
       onDismissSubscribedNotice={() => void dismissSubscribedNotice()}
+      reportProblem={
+        tabId === undefined
+          ? undefined
+          : {
+              // 每次按都重新讀：讀者可能翻了頁、重新翻譯過
+              async copy() {
+                const context = await send<ProblemReportContext>({ type: 'panel:problemReport', tabId });
+                const report = problemReport({
+                  extensionVersion: chrome.runtime.getManifest().version,
+                  userAgent: navigator.userAgent,
+                  translationMode,
+                  pageMode,
+                  modelStatus,
+                  pages,
+                  context,
+                });
+                await navigator.clipboard.writeText(report);
+              },
+              open: () => void chrome.tabs.create({ url: PROBLEM_REPORT_URL }),
+            }
+      }
       renderSeriesCard={(open) =>
         running && (
           <SeriesCard

@@ -100,6 +100,10 @@ _Avoid_: refresh, redo, rescan
 Our own original Spread that a newly installed reader translates for the first time, on a page of our website. It is translated for real, like any other Spread, but never counts as Translated Pages.
 _Avoid_: demo (that is the simulated showcase on the homepage), sample page
 
+**Problem Report** (問題回報)
+A text report the reader makes from the side panel about the Pages on screen: how each Line was recognized and translated, and the setup that produced it. It holds no images. The reader pastes it into Discussions themselves, where it becomes public; the extension sends it nowhere.
+_Avoid_: bug report, feedback, issue (issues are GitHub Issues, open only to collaborators)
+
 ## Reading sites
 
 How a site lays out its Pages; docs and tests name sites by these kinds, never by their real names.

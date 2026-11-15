@@ -1,0 +1,41 @@
+# 「翻譯問題回報」分類的表單。檔名要跟分類的 slug 一樣（src/ui/links.ts 的 PROBLEM_REPORT_CATEGORY），
+# GitHub 只讀 main 上的這個檔。side panel 的「回報翻譯問題」把 Problem Report 複製到剪貼簿後打開這裡。
+title: '[翻譯問題] '
+body:
+  - type: markdown
+    attributes:
+      value: |
+        謝謝你回報！按下外掛的「回報翻譯問題」後，**報告已經複製到剪貼簿**了，請貼到最下面的「報告」欄位。
+
+        報告裡有畫面上每一句的原文、譯文、辨識結果和外掛的設定，沒有任何圖片。**送出後這篇討論是公開的**：送出前請看一下報告，不想公開的部分（例如網址、作品名稱）可以直接刪掉。
+  - type: dropdown
+    id: kind
+    attributes:
+      label: 問題類型
+      options:
+        - 沒偵測到這句
+        - 框的位置不對
+        - 原文讀錯
+        - 翻譯不對
+        - 排版或顯示問題
+        - 其他
+    validations:
+      required: true
+  - type: input
+    id: line
+    attributes:
+      label: 哪一句
+      description: 報告裡每句前面的編號，例如 P1-L3（第 1 頁第 3 句）。好幾句就用逗號分開。
+      placeholder: P1-L3
+  - type: textarea
+    id: expected
+    attributes:
+      label: 你覺得應該是什麼
+      description: 正確的原文、比較好的翻譯，或是你覺得哪裡怪。
+  - type: textarea
+    id: report
+    attributes:
+      label: 報告
+      description: 在這裡貼上（Ctrl+V／⌘V）。如果剪貼簿裡已經是別的東西，回到外掛的側邊欄按「再複製一次」。
+    validations:
+      required: true

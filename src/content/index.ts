@@ -1,4 +1,13 @@
-import type { CaptureFinishedResponse, CapturePreparedResponse, ColumnView, Message, PageCandidate, PageCandidatesResponse, Rect } from '../shared/messages.ts';
+import type {
+  CaptureFinishedResponse,
+  CapturePreparedResponse,
+  ColumnView,
+  Message,
+  PageCandidate,
+  PageCandidatesResponse,
+  ProblemReportView,
+  Rect,
+} from '../shared/messages.ts';
 import { loadPageMode, onPageModeChange } from '../shared/page-mode.ts';
 import { createTrace } from '../shared/trace.ts';
 import { createCapturePrep } from './capture.ts';
@@ -258,6 +267,12 @@ if (!globalThis.__naruhodo) {
       }
       case 'content:highlight':
         overlay.highlight(message.line);
+        return false;
+      case 'content:problemReportView':
+        sendResponse({
+          viewport: { width: window.innerWidth, height: window.innerHeight },
+          devicePixelRatio,
+        } satisfies ProblemReportView);
         return false;
       case 'content:stop':
         stop();
