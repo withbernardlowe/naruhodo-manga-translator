@@ -15,7 +15,7 @@
  * 只有出問題時的紅色小標籤可以點；截圖時一律藏起來（不能被 OCR 讀到、也不能改變 Page hash）。
  *
  * Page 上的外圈（#285、#283，shared/page-outlines.ts）也在同一個 host 裡、同樣不縮放、截圖時藏起來：翻譯中的句子是日文上
- * 一道擦除底色的光帶掃過；被可見範圍邊緣切到、還在等的框是流動的虛線。譯文到了就整頁一次蓋上、同時收起外圈。
+ * 一道擦除底色的光帶掃過；被可見範圍邊緣切到、還在等的框，看得到的那一端有一個「…」小標記。譯文到了就整頁一次蓋上、同時收起外圈。
  */
 import type { LineBox, LineRef, Rect } from '../shared/messages.ts';
 import { ERASE_WHITE, LOOSE_OUTLINE_PAD_PX, onAnchor, staggerRanks, WASH_STAGGER_MS, washArea } from '../shared/page-outlines.ts';
@@ -52,8 +52,6 @@ const REVEAL_FADE_MS = 200;
  * 由它照閱讀順序收起；等不到（翻譯失敗、額度用完）才直接拿掉。
  */
 const OUTLINE_RETIRE_MS = 1000;
-/** 外圈的線寬（畫面 px），跟高亮框一樣；Balloon 外圈的圓角是它的兩倍。 */
-const OUTLINE_SCREEN_PX = 2;
 /** 翻譯中的光帶掃一輪多久（ms）：前 3/4 在掃，剩下停一下，免得一整頁動個不停。 */
 const WASH_MS = 2400;
 /** 光帶最濃的地方的不透明度：日文像蒙上一層底色，還看得出來。 */
@@ -63,7 +61,6 @@ const WASH_STILL_ALPHA = 0.35;
 /** 光帶比文字框往外多這麼多畫面 px，邊緣再用這麼寬羽化：日文整個蓋到，又不會跑出泡泡（固定 px，不照框的比例）。 */
 const WASH_PAD_PX = 8;
 const WASH_FEATHER_PX = 10;
-const SVG_NS = 'http://www.w3.org/2000/svg';
 
 /**
  * 翻譯中的一句：放在外框上的透明框，裡面一塊蓋住文字框外面一小圈（washArea 加 WASH_PAD_PX）的光帶，顏色是擦除底色。
@@ -87,15 +84,17 @@ function washElement(line: LineBox, rank: number): HTMLElement {
   return element;
 }
 
-/** 等待中的一句：流動的虛線框。 */
-function dashedRing(line: LineBox): SVGSVGElement {
-  const element = document.createElementNS(SVG_NS, 'svg');
-  element.setAttribute('class', 'rg w');
-  const rect = document.createElementNS(SVG_NS, 'rect');
-  rect.setAttribute('width', '100%');
-  rect.setAttribute('height', '100%');
-  rect.setAttribute('rx', String(line.kind === 'loose' ? LOOSE_OUTLINE_PAD_PX : 2 * OUTLINE_SCREEN_PX));
-  element.append(rect);
+/**
+ * 等待中的一句：放在外框上的透明框，看得到的那一端（被切的另一緣）中間一個「…」小標記。
+ * 不畫框：外框是被切到的那一截，捲動之後框的切口會停在泡泡中間（#283 之後的回饋）；標記只需要知道看得到的那一端。
+ */
+function waitingMark(line: LineBox): HTMLElement {
+  const element = document.createElement('div');
+  element.className = line.cut === 'top' ? 'rg w at-bottom' : 'rg w';
+  const mark = document.createElement('div');
+  mark.className = 'wm';
+  mark.append(...Array.from({ length: 3 }, () => document.createElement('span')));
+  element.append(mark);
   return element;
 }
 
@@ -152,11 +151,17 @@ const STYLE = `${TOKENS}
   border-radius: 50%; animation: naru-rot 0.8s linear infinite; }
 @keyframes naru-rot { to { transform: rotate(360deg); } }
 :host([data-capturing]) .st, :host([data-status-hidden]) .st { display: none; }
-/* Page 上的外圈（#285、#283）：跟 anchor 一樣大、不縮放，線寬是畫面 px。t＝翻譯中（底色掃光），w＝等待中（虛線流動） */
+/* Page 上的外圈（#285、#283）：跟 anchor 一樣大、不縮放，大小是畫面 px。t＝翻譯中（底色掃光），w＝等待中（看得到的那一端的小標記） */
 .rings { position: absolute; pointer-events: none; }
 .rg { position: absolute; overflow: visible; }
-.rg rect { fill: none; stroke: var(--naru-highlight); stroke-width: ${OUTLINE_SCREEN_PX}px; }
-.rg.w rect { stroke-dasharray: 6 4; animation: naru-flow 1s linear infinite; }
+/* 標記跨在外框的上緣（被切的是上緣時放下緣）正中間；白邊讓它壓在泡泡的黑線上也看得清楚 */
+.wm { position: absolute; left: 50%; top: 0; transform: translate(-50%, -50%); display: flex; align-items: center; justify-content: center;
+  gap: 4px; width: 36px; height: 16px; border-radius: 999px; background: var(--naru-highlight); box-shadow: 0 0 0 2px #fff; }
+.rg.at-bottom .wm { top: 100%; }
+.wm span { width: 4px; height: 4px; border-radius: 50%; background: #fff; animation: naru-dot 1.2s ease-in-out infinite; }
+.wm span:nth-child(2) { animation-delay: 0.2s; }
+.wm span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes naru-dot { 0%, 60%, 100% { opacity: 0.3; } 30% { opacity: 1; } }
 .rg.out { animation: naru-out ${REVEAL_FADE_MS}ms ease-out forwards; }
 /*
  * 翻譯中：日文上一道擦除底色（--erase）的直立光帶由右往左掃過（跟直書的行一樣方向），只蓋文字框外面一小圈、邊緣羽化；不畫框，大部分泡泡不是方的。
@@ -169,13 +174,12 @@ const STYLE = `${TOKENS}
   linear-gradient(90deg, rgb(var(--erase) var(--erase) var(--erase) / 0) 35%, rgb(var(--erase) var(--erase) var(--erase) / ${WASH_ALPHA}) 50%, rgb(var(--erase) var(--erase) var(--erase) / 0) 65%);
   animation: naru-wash ${WASH_MS}ms ease-in-out var(--delay, 0ms) infinite; }
 @keyframes naru-wash { 75%, 100% { background-position: 100% 0; } }
-@keyframes naru-flow { to { stroke-dashoffset: -10; } }
 @keyframes naru-out { to { opacity: 0; } }
 @keyframes naru-in { from { opacity: 0; } }
 /* 截圖時用 visibility 藏（不能被 OCR 讀到）：display:none 會讓動畫從頭開始，每截一次明暗就跳一下 */
 :host([data-capturing]) .rings, :host([data-status-hidden]) .rings { visibility: hidden; }
 @media (prefers-reduced-motion: reduce) {
-  .rg.w rect { animation: none; }
+  .wm span { animation: none; opacity: 1; }
   .wash::before { animation: none; background: rgb(var(--erase) var(--erase) var(--erase) / ${WASH_STILL_ALPHA}); }
 }
 `;
@@ -232,7 +236,7 @@ interface Entry {
 
 /** 畫在 anchor 上的一個外圈。 */
 interface Outline {
-  element: HTMLElement | SVGSVGElement;
+  element: HTMLElement;
   state: 'translating' | 'waiting';
   /** 所在的 Page（subKey）。 */
   sub: string;
@@ -472,7 +476,7 @@ export function createOverlay({ onHover, onStatusAction }: { onHover?: OnHover; 
 
   /**
    * 畫一個外圈（已經有就只更新位置）：位置用 anchor 的百分比，anchor 縮放時跟著走。翻譯中是外框上的底色光帶；
-   * 等待中是虛線框，Loose Text 往外擴、圓角大一點。
+   * 等待中是看得到的那一端的小標記，Loose Text 的框往外擴一點、標記不壓在字上。
    */
   function drawOutline(entry: Entry, key: string, state: Outline['state'], sub: RatioRect, line: LineBox, rank: number): void {
     // 正在收起的同一句又要畫（重試）：換一個新的
@@ -486,7 +490,7 @@ export function createOverlay({ onHover, onStatusAction }: { onHover?: OnHover; 
     }
     let outline = entry.outlines.items.get(key);
     if (!outline) {
-      const element = state === 'translating' ? washElement(line, rank) : dashedRing(line);
+      const element = state === 'translating' ? washElement(line, rank) : waitingMark(line);
       element.dataset.outline = state;
       element.dataset.lineId = line.id;
       entry.outlines.layer.append(element);

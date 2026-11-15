@@ -121,6 +121,11 @@ export function cutEdges(box: RatioRect, sliceHeight: number, edges: SliceEdges)
   return { top: edges.top && box.y <= edge, bottom: edges.bottom && box.y + box.h >= 1 - edge };
 }
 
+/** 框（相對這一截的比例座標）貼著這一截被切掉的哪一緣；column 省略＝單獨一個長 Page，沒到 Page 的上下緣就是被切的。 */
+export function sliceCut(box: RatioRect, slice: Slice, sliceHeight: number, column?: SliceEdges): SliceEdges {
+  return cutEdges(box, sliceHeight, column ?? { top: slice.top > 0, bottom: slice.bottom < 1 });
+}
+
 /**
  * 這一截裡偵測到的框（相對這一截的比例座標）收不收：
  * - cut：被可見範圍的上緣或下緣切到（Page 本身的上下緣不算），先不收，等它完整出現再收。
@@ -138,7 +143,7 @@ export function rejectInSlice(
   collected: readonly RatioRect[],
   column?: SliceEdges,
 ): 'cut' | 'tooTall' | 'otherPage' | 'overlap' | undefined {
-  const cut = cutEdges(box, sliceHeight, column ?? { top: slice.top > 0, bottom: slice.bottom < 1 });
+  const cut = sliceCut(box, slice, sliceHeight, column);
   if (cut.top && cut.bottom) return 'tooTall';
   if (cut.top || cut.bottom) return 'cut';
   const onPage = toPageBox(box, slice);
@@ -151,6 +156,8 @@ export function rejectInSlice(
 export interface CutBox {
   box: RatioRect;
   kind: LineBox['kind'];
+  /** 被切的是哪一緣。 */
+  cut: 'top' | 'bottom';
 }
 
 /**
@@ -161,7 +168,7 @@ export interface CutBox {
  */
 export function waitingBoxes(cut: readonly CutBox[], slice: Slice, collected: readonly RatioRect[], inColumn: boolean): LineBox[] {
   return cut
-    .map(({ box, kind }) => ({ kind, box: toPageBox(box, slice) }))
+    .map(({ box, kind, cut }) => ({ kind, box: toPageBox(box, slice), cut }))
     .filter(({ box }) => (!inColumn || ownsBox(box)) && !collected.some((c) => overlaps(c, box)))
     .map((line, i) => ({ id: `w${i + 1}`, order: i + 1, ...line }));
 }
