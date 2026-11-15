@@ -11,8 +11,10 @@ import { megabytes } from '../shared/model-download.ts';
 import type { PageMode } from '../shared/page-mode.ts';
 import { loadPunctuationFont } from '../shared/punctuation-face.ts';
 import type { StaleReason } from '../shared/series-notes.ts';
+import type { TranslationMode } from '../shared/translation-mode.ts';
 import { Badge, Button, Callout, PageHeader, Progress, SegmentedControl, type SegmentOption } from './components.tsx';
-import { OwnKeyDataFlow } from './data-flow.tsx';
+import type { ConsentState } from '../shared/data-consent.ts';
+import { ConsentDisclosure } from './data-flow.tsx';
 import { PRIVACY_URL } from './links.ts';
 import { SubscriptionPrice } from './subscribe-button.tsx';
 import { DEFAULT_LEVEL, DisplaySwitch, Transcript, type Display, type Level } from './transcript.tsx';
@@ -31,6 +33,7 @@ import {
   type PanelPage,
   type PageEntry,
   type QuotaView,
+  type ConsentCard,
   type SetupNotice,
   type TranslationAccess,
 } from './view.ts';
@@ -136,17 +139,15 @@ function PageItem({
 }
 
 /**
- * 自備金鑰的資料使用說明（shared/data-consent.ts）：還沒同意就固定顯示在最上面，啟動前、從內建選單打開時都一樣。
- * 文字在 data-flow.tsx（跟 onboarding 的「使用自備金鑰」同一份）。按了「同意並啟用翻譯」，已啟動的分頁直接開始翻譯（SW）。
+ * 資料使用說明卡（shared/data-consent.ts）：目前翻譯模式還沒同意就固定顯示在最上面，啟動前、從內建選單打開時都一樣。
+ * 自備金鑰沒同意過、或兩種模式的說明改版時出現；內建翻譯還登入著的讀者在這裡補同意，不用重新登入。
+ * 內容跟 onboarding 的補同意畫面共用（data-flow.tsx）。按了「同意並啟用翻譯」，已啟動的分頁直接開始翻譯（SW）。
  */
-function DataConsentCard({ onAccept }: { onAccept: () => void }) {
+function DataConsentCard({ mode, card, onAccept }: { mode: TranslationMode; card: Exclude<ConsentCard, undefined>; onAccept: () => void }) {
   return (
     <section aria-label="資料使用說明">
       <Callout tone="warn">
-        <p>
-          <strong>翻譯前請先確認資料怎麼使用</strong>
-        </p>
-        <OwnKeyDataFlow />
+        <ConsentDisclosure mode={mode} updated={card === 'updated'} />
         <p>
           詳見
           <a href={PRIVACY_URL} target="_blank" rel="noreferrer">
@@ -323,8 +324,8 @@ export interface SidePanelProps {
   modelStatus: ModelStatus;
   /** 翻譯模式與能不能翻（內建翻譯有沒有登入、自備金鑰有沒有 key）；不能翻時顯示提示。 */
   access: TranslationAccess;
-  /** 資料使用同意；自備金鑰時 false＝顯示說明卡，undefined＝還在讀（不顯示）。內建翻譯的同意在登入時取得。 */
-  consented: boolean | undefined;
+  /** 目前翻譯模式的資料使用同意；沒同意就顯示說明卡（內建翻譯沒登入時除外，同意在登入時取得），undefined＝還在讀（不顯示）。 */
+  consent: ConsentState | undefined;
   pageMode: PageMode;
   /** 頁面上滑鼠所在的那句（逐字稿那行高亮）。 */
   hovered: LineRef | undefined;
@@ -339,6 +340,7 @@ export interface SidePanelProps {
   onRetranslate: () => void;
   /** 滑過逐字稿的某行；null＝離開。 */
   onLineHover: (line: LineRef | null) => void;
+  /** 說明卡的「同意並啟用翻譯」：記下目前翻譯模式的同意。 */
   onAcceptConsent: () => void;
   /** 「尚未登入」與額度用完的「使用自備金鑰」：切到自備金鑰（設定頁同時打開）。 */
   onUseOwnKey: () => void;
@@ -469,7 +471,7 @@ function ReportProblem({ copy, open }: NonNullable<SidePanelProps['reportProblem
 }
 
 export function SidePanel(props: SidePanelProps) {
-  const { running, pages, modelStatus, access, consented, pageMode, hovered, onScan, onTranslate } = props;
+  const { running, pages, modelStatus, access, consent, pageMode, hovered, onScan, onTranslate } = props;
   const [level, setLevel] = useState<Level>(DEFAULT_LEVEL);
   const [furigana, setFurigana] = useState(true);
   const display: Display = pageMode === 'learn' ? { mode: 'learn', furigana } : { mode: 'read', level };
@@ -511,9 +513,9 @@ export function SidePanel(props: SidePanelProps) {
   const done = pages.filter((p) => p.transcript.state === 'done');
   const untranslated = hasUntranslated(pages);
   // 沒登入、沒 key、還沒同意時按了也送不出去：不放按鈕，由上面的設定提示帶路
-  const action = translateAction(pages, canTranslate(access, consented));
-  const notices = setupNotices({ access, consented, untranslated, hostedHint: props.hostedHint });
-  const consentCard = notices.consentCard && <DataConsentCard onAccept={props.onAcceptConsent} />;
+  const action = translateAction(pages, canTranslate(access, consent === 'agreed'));
+  const notices = setupNotices({ access, consent, untranslated, hostedHint: props.hostedHint });
+  const consentCard = notices.consentCard && <DataConsentCard mode={access.mode} card={notices.consentCard} onAccept={props.onAcceptConsent} />;
   const useOwnKey = () => {
     props.onUseOwnKey();
     setPage('settings');

@@ -1,4 +1,5 @@
 import { FREE_PAGES, MONTHLY_PAGES, REFUND_WINDOW_DAYS, STRIP_LINES_PER_PAGE, lowQuota, pageCount, type BillingPeriod, type Quota, type RefundInfo } from '../shared/hosted-api.ts';
+import type { ConsentState } from '../shared/data-consent.ts';
 import type { PageView } from '../shared/messages.ts';
 import type { SeriesOption } from '../shared/series.ts';
 import type { TranslationMode } from '../shared/translation-mode.ts';
@@ -139,28 +140,33 @@ export function hasUntranslated(pages: PageView[]): boolean {
  */
 export type SetupNotice = 'signedOut' | 'noKey' | 'hostedHint' | undefined;
 
+/** 資料使用說明卡（Data Use Consent）：first＝沒同意過，「翻譯前請先確認資料怎麼使用」；updated＝同意過舊版，「資料使用說明更新了」。 */
+export type ConsentCard = 'first' | 'updated' | undefined;
+
 /**
- * 翻譯前的設定提示（#91）。同意依翻譯模式各自記（shared/data-consent.ts），consented 是目前模式的。
- * 自備金鑰用說明卡問；內建翻譯的同意在登入時取得（按「同意並寄送驗證碼」），所以有 token 但同意失效時也算「尚未登入」。
- * consented 還在讀（undefined）時什麼都不顯示。
+ * 翻譯前的設定提示（#91）。同意依翻譯模式各自記（shared/data-consent.ts），consent 是目前模式的。
+ * 沒同意就顯示說明卡；內建翻譯沒登入時同意在登入時取得（按「同意並寄送驗證碼」），所以只顯示「尚未登入」。
+ * 還登入著、只是說明改版了：只補同意，不用重新登入。consent 還在讀（undefined）時什麼都不顯示。
  */
 export function setupNotices({
   access,
-  consented,
+  consent,
   untranslated,
   hostedHint = false,
 }: {
   access: TranslationAccess;
-  consented: boolean | undefined;
+  consent: ConsentState | undefined;
   /** 有沒翻譯的頁（自備金鑰的提示只在這時出現）。 */
   untranslated: boolean;
   /** 內建翻譯提示還沒關掉。 */
   hostedHint?: boolean;
-}): { consentCard: boolean; notice: SetupNotice } {
-  if (consented === undefined) return { consentCard: false, notice: undefined };
-  if (access.mode === 'hosted') return { consentCard: false, notice: access.signedIn && consented ? undefined : 'signedOut' };
+}): { consentCard: ConsentCard; notice: SetupNotice } {
+  if (consent === undefined) return { consentCard: undefined, notice: undefined };
+  if (access.mode === 'hosted' && !access.signedIn) return { consentCard: undefined, notice: 'signedOut' };
+  const consentCard = consent === 'agreed' ? undefined : consent === 'outdated' ? 'updated' : 'first';
+  if (access.mode === 'hosted') return { consentCard, notice: undefined };
   const notice = untranslated && !access.hasKey ? 'noKey' : hostedHint ? 'hostedHint' : undefined;
-  return { consentCard: !consented, notice };
+  return { consentCard, notice };
 }
 
 /**

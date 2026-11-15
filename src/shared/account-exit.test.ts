@@ -20,7 +20,7 @@ function fakeDeps(worker: { signOut?: AuthFailure; deleteAccount?: AuthFailure }
     },
     broadcast: () => calls.push('session:changed'),
   };
-  const panelNotice = () => setupNotices({ access: { mode: 'hosted', signedIn: session !== null }, consented: true, untranslated: false }).notice;
+  const panelNotice = () => setupNotices({ access: { mode: 'hosted', signedIn: session !== null }, consent: 'agreed', untranslated: false }).notice;
   return { deps, calls, session: () => session, panelNotice };
 }
 
