@@ -65,4 +65,11 @@ FakeEngine is near-instant. A test that relies on OCR being slow (the side panel
 
 Browser tests have no retries: FakeEngine is deterministic, so a test that fails then passes points at a real race in the extension or the test. Fix it, or mark it `test.fixme(...)` with the reason and open an issue; do not add retries. e2e retries once, because real OCR speed depends on machine load.
 
+Load is the other cause, and it is not a race: when every failure is a timeout and a different set of tests fails each run, the machine is overloaded. Two things keep it from happening:
+
+- **Four workers locally** (`playwright.config.ts`). With the Playwright default (8 on a 16-thread machine) each test took twice as long, the whole run was no shorter, and 5 to 7 different tests timed out per run; with 4 the same code passed. Don't pass a higher `--workers`. CI keeps the Playwright default.
+- **One Playwright run at a time on this machine** (`scripts/test-lock.ts`): a second run (another worktree's browser test, e2e, smoke or `record:ocr`) prints who it is waiting for and starts when that run ends. So a run that seems stuck at the start is queued, not hung; don't kill the other run. `smoke:paddle` does not take the lock: start it only when nothing else is running.
+
+A debug Chrome doing real-site work at the same time still adds load; if a full run times out while it is busy, rerun when it is idle before treating the failure as a race.
+
 Fixed delays follow [CODING_STANDARDS.md](../../CODING_STANDARDS.md): wait on a condition, except when asserting that something did *not* happen.

@@ -13,9 +13,12 @@ export default defineConfig<TestOptions>({
   globalSetup: './browser/worker-setup.ts',
   // 每個 test 各自開 Chromium context 與 mock site，同一個檔案的測試也能分到不同 worker
   fullyParallel: true,
+  // 本機固定 4 個：預設（邏輯核心數的一半，16 核是 8 個）時瀏覽器互搶 CPU，每個測試慢一倍、總時間沒有比較短，
+  // 而且每輪都有幾個不同的測試逾時。CI 的機器小，照 Playwright 預設。
+  workers: process.env.CI ? undefined : 4,
   // FakeEngine 幾乎不花時間：測試不設更長的 timeout，失敗時很快就紅；真 OCR 的放寬在 playwright.e2e.config.ts
   timeout: 30_000,
-  // 8 個瀏覽器同時跑時，啟動到第一次覆蓋偶爾超過 expect 預設的 5 秒
+  // 好幾個瀏覽器同時跑時，啟動到第一次覆蓋偶爾超過 expect 預設的 5 秒
   expect: { timeout: 10_000 },
   // FakeEngine 是確定性的：重跑才過代表程式本身有 race condition，直接紅
   retries: 0,
