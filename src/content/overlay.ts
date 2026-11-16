@@ -151,9 +151,9 @@ const STYLE = `${TOKENS}
 .st { position: absolute; overflow: hidden; pointer-events: none; z-index: 3; font-family: var(--naru-font-sans); }
 .st-chip { position: absolute; top: 8px; right: 8px; display: flex; align-items: center; gap: 6px; margin: 0; padding: 3px 9px;
   border: 0; border-radius: 999px; font: 500 12px/1.4 var(--naru-font-sans); white-space: nowrap;
-  background: rgba(20, 20, 20, 0.75); color: #fff; }
-.st-chip.warn { background: #C0392B; pointer-events: auto; cursor: pointer; }
-.st-chip.warn:hover { background: #A93226; }
+  background: var(--naru-tooltip-bg); color: var(--naru-tooltip-ink); box-shadow: var(--naru-shadow-1); }
+.st-chip.warn { background: var(--naru-danger); color: var(--naru-on-accent); pointer-events: auto; cursor: pointer; }
+.st-chip.warn:hover { filter: brightness(0.85); }
 .st-spin { width: 10px; height: 10px; box-sizing: border-box; border: 2px solid currentColor; border-right-color: transparent;
   border-radius: 50%; animation: naru-rot 0.8s linear infinite; }
 @keyframes naru-rot { to { transform: rotate(360deg); } }

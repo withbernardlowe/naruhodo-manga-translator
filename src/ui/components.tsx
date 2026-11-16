@@ -154,11 +154,6 @@ export function Callout({ tone = 'info', class: extra, ...rest }: CalloutProps) 
   return <div class={cx('naru-callout', `naru-callout--${tone}`, extra)} {...rest} />;
 }
 
-/** 還在跑的一行（辨識中…、翻譯中…）。 */
-export function Progress({ children }: { children: ComponentChildren }) {
-  return <span class="naru-progress">{children}</span>;
-}
-
 /**
  * 「譯」區塊（淺色版；頁面 tooltip 的深色版在 content script 用 DOM 畫）：先藏著內容，滑過或聚焦才顯示，
  * 離開又藏起來。group 的名字是「譯」，測試與讀屏都靠它找到區塊。

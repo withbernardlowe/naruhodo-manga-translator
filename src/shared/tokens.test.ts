@@ -11,12 +11,18 @@ function stack(name: string): string[] {
 
 /** 只有某一種語言字形的系統字型：排進另一種語言的清單，那個語言的字就會用錯字形、缺的字再被別的字型補。 */
 const CHINESE_FONTS = ['PingFang TC', 'Microsoft JhengHei UI', 'Microsoft JhengHei'];
-const JAPANESE_FONTS = ['Hiragino Sans', 'Yu Gothic UI', 'Yu Gothic'];
+const JAPANESE_FONTS = ['Hiragino Sans', 'Yu Gothic Medium', 'Yu Gothic'];
 
 describe('字型 token（系統字型，不打包）', () => {
   it('中文與日文的清單各自只有自己語言的字型', () => {
     expect(stack('sans').filter((f) => JAPANESE_FONTS.includes(f))).toEqual([]);
     expect(stack('ja').filter((f) => CHINESE_FONTS.includes(f))).toEqual([]);
+  });
+
+  it('Windows 的日文用游ゴシック一般版的 Medium，不用 UI 版：UI 版的假名排得緊，長句不好讀；Regular 在 Windows 太細', () => {
+    const list = stack('ja');
+    expect(list).not.toContain('Yu Gothic UI');
+    expect(list.indexOf('Yu Gothic Medium')).toBeLessThan(list.indexOf('Yu Gothic'));
   });
 
   it('Windows 與 macOS 的語言字型都排在 system-ui 前面（system-ui 跟著作業系統語系，會把日文接成中文字型）', () => {

@@ -61,8 +61,8 @@ test('閱讀時從逐字稿顯示選單切換三種層級：逐字稿內容正�
   await expect(original(greeting).locator('ruby').first()).toContainText('今日');
   await expect(transcript.getByText('讀音為推測')).toHaveCount(0);
   await expect(translation(greeting)).toHaveText(GREETING_ZH);
-  // 字級：日文約 17px、中文退一階 14px
-  await expect(original(greeting)).toHaveCSS('font-size', '17px');
+  // 字級：日文 18px（游ゴシック字面比正黑體小，放大才等重）、中文退一階 14px
+  await expect(original(greeting)).toHaveCSS('font-size', '18px');
   await expect(translation(greeting)).toHaveCSS('font-size', '14px');
 
   await chooseLevel(panel, '原文＋譯文');

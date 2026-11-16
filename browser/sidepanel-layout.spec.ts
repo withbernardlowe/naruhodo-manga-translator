@@ -75,7 +75,8 @@ test('逐字稿的日文全部用日文系統字型、中文全部用中文系�
     for (const nodeId of nodeIds) for (const f of (await cdp.send('CSS.getPlatformFontsForNode', { nodeId })).fonts) used.add(f.familyName);
     return [...used];
   };
-  const japanese = ['Hiragino Sans', 'Yu Gothic UI', 'Yu Gothic'];
+  // 游ゴシック Medium 跟 Yu Gothic UI Regular 在同一個字型檔裡，CDP 可能報其中任何一個名字
+  const japanese = ['Hiragino Sans', 'Yu Gothic Medium', 'Yu Gothic UI', 'Yu Gothic'];
   const chinese = ['PingFang TC', 'Microsoft JhengHei UI', 'Microsoft JhengHei'];
   // 譯文的標點用打包的 Noto Sans TC（src/shared/punctuation-face.ts）；CDP 報的是字型檔裡的名稱
   const punctuation = 'Noto Sans TC';
@@ -91,7 +92,7 @@ test.describe('逐字稿出來之前', () => {
   test.use({ fakeOcrDelayMs: 60_000 });
 
   // 哪則提示排前面是 view.test.ts 的 panelNotices；這裡確認真的畫面上只出現一張、其他收起來，處理完下一張補上
-  test('頂部只有作品名稱、停止、⚙ 與 Page Mode 切換；提示一次只顯示一張', async ({ context, sw, extensionId, mockSite }) => {
+  test('頂部只有作品名稱、停止、⚙、提示（作品確認）與 Page Mode 切換；提示一次只顯示一張', async ({ context, sw, extensionId, mockSite }) => {
     const { panel } = await activateOnMockSite({ context, sw, extensionId, mockSite });
     const main = panel.getByRole('main');
 
@@ -112,9 +113,9 @@ test.describe('逐字稿出來之前', () => {
     await expect(consent).toHaveCount(0);
     await expect(ask).toBeVisible();
     await expect(main.getByRole('button', { name: /^還有/ })).toHaveCount(0);
-    // Page 列表與逐字稿之前的控制項：作品名稱（打開作品頁，#191）、停止（ADR 0003）、⚙（只有圖示）、Page Mode 兩格、作品確認（#186）。
-    // 逐字稿標題列的顯示選單要等逐字稿出來，不在這裡
-    await expect(main.getByRole('button').filter({ visible: true })).toHaveText([/›$/, '停止', '', '閱讀', '學習', '是', '換一部']);
+    // Page 列表與逐字稿之前的控制項：作品名稱（打開作品頁，#191）、停止（ADR 0003）、⚙（只有圖示）、
+    // 作品確認（#186，緊接在標題列下面，問的就是上面那個名稱）、Page Mode 兩格。逐字稿標題列的顯示選單要等逐字稿出來，不在這裡
+    await expect(main.getByRole('button').filter({ visible: true })).toHaveText([/›/, '停止', '', '是', '換一部', '閱讀', '學習']);
     await expect(main.getByRole('switch')).toHaveCount(0);
     // Page Mode 那一行寫明管的是漫畫頁面（U15）；兩種模式的說明在 hover 提示，學習的說明也講到逐字稿
     await expect(main.getByText('漫畫頁面', { exact: true })).toBeVisible();
