@@ -10,10 +10,12 @@
   color: var(--naru-ink); background: var(--naru-surface);
 }
 :where(.naru-side-panel) [lang='ja'] { font-family: var(--naru-font-ja); }
-/* 頂部（#77）：logo＋名稱、狀態、（空白）、⚙。窄的時候名稱與狀態可以縮，按鈕不縮 */
+/* 頂部（#77）：logo＋名稱、狀態、（空白）、停止、⚙。窄的時候名稱與狀態可以縮，按鈕不縮 */
 :where(.naru-side-panel) .panel-header { display: flex; align-items: center; gap: var(--naru-space-2); min-width: 0; margin: var(--naru-space-3) 0; }
 :where(.naru-side-panel) .panel-header__spacer { flex: 1 1 0; }
 :where(.naru-side-panel) .panel-header > .naru-btn, :where(.naru-side-panel) .panel-header > .naru-badge { flex: none; }
+/* 停止（ADR 0003）：方塊是紅的，字跟其他按鈕一樣 */
+:where(.naru-side-panel) .panel-header__stop svg { color: var(--naru-danger); }
 /* 標題：logo＋名稱（#72） */
 :where(.naru-side-panel) .title {
   display: flex; align-items: center; gap: var(--naru-space-2); min-width: 0; margin: 0;

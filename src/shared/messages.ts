@@ -14,6 +14,8 @@ export type ExecutionProvider = 'webgpu' | 'wasm';
 export type Message =
   /** side panel → SW：這個 tab 啟動了沒？回應 StatusResponse。 */
   | { type: 'panel:getStatus'; tabId: number }
+  /** side panel → SW：按了標題列的「停止」（ADR 0003）：停止這個 tab 並關掉 side panel，同已啟動時點圖示停止。 */
+  | { type: 'panel:stop'; tabId: number }
   /** SW → side panel：某個 tab 的啟動狀態改變了。 */
   | { type: 'status:changed'; tabId: number; active: boolean }
   /** SW → content script：清理並結束。 */
