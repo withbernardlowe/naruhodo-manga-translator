@@ -7,10 +7,11 @@ import type { PageMode } from '../shared/page-mode.ts';
 
 export interface HoverAid {
   tooltip: boolean;
-  number: boolean;
+  /** 高亮框標上跟側邊欄同號的編號。 */
+  orderBadge: boolean;
 }
 
 export const hoverAid = ({ pageMode, panelOpen }: { pageMode: PageMode; panelOpen: boolean }): HoverAid => ({
   tooltip: pageMode === 'learn' || !panelOpen,
-  number: panelOpen,
+  orderBadge: panelOpen,
 });

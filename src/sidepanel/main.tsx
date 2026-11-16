@@ -632,6 +632,9 @@ function SeriesPickView({ tabId, navigate }: { tabId: number; navigate: (page: S
   );
 }
 
+/** 到 content script 的 port 被對方斷了之後，等這麼久（ms）再接（U10）。 */
+const PANEL_PORT_RETRY_MS = 1000;
+
 /**
  * 外掛的 container（#108）：接 chrome 訊息、API key、同意狀態與 Page Mode 的 store，把資料交給純畫面的 SidePanel。
  * 會讀寫 store 的區塊（設定頁、作品卡、作品頁與換一部作品）也在這裡，以 slot／render prop 交給 SidePanel。
@@ -692,13 +695,23 @@ function App({ tabId }: { tabId: number | undefined }) {
   // 讓頁面知道側邊欄開著（U10）：接一條 port 到這個分頁的 content script，關掉側邊欄時自動斷。
   // 有 Page 才接：那時 content script 一定在跑；重新整理後 pages 先清空再回來，會重接
   const hasPages = pages.length > 0;
+  const [portRetry, setPortRetry] = useState(0);
   useEffect(() => {
     if (tabId === undefined || !active || !hasPages) return;
     const port = chrome.tabs.connect(tabId, { name: PANEL_PORT });
-    // 讀掉 lastError：content script 不在時（剛停止）port 立刻斷，不要在 console 留 Unchecked runtime.lastError
-    port.onDisconnect.addListener(() => void chrome.runtime.lastError);
-    return () => port.disconnect();
-  }, [tabId, active, hasPages]);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    // 對方斷的（content script 被重新注入、頁面重新整理）：過一下再接。停止翻譯時 active 變 false，不會再接
+    port.onDisconnect.addListener(() => {
+      // 讀掉 lastError：content script 不在時 port 立刻斷，不要在 console 留 Unchecked runtime.lastError
+      void chrome.runtime.lastError;
+      timer = setTimeout(() => setPortRetry((n) => n + 1), PANEL_PORT_RETRY_MS);
+    });
+    // 自己斷的不會觸發自己的 onDisconnect
+    return () => {
+      clearTimeout(timer);
+      port.disconnect();
+    };
+  }, [tabId, active, hasPages, portRetry]);
 
   if (active === undefined || translationMode === undefined || session === undefined || onboarding === undefined) return null;
   const running = active && tabId !== undefined;

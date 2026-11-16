@@ -163,6 +163,8 @@ function PageItem({
       )}
       {transcript.state === 'done' && (
         <Transcript
+          // 重新翻譯時換 key：收合列回到收起（U17：每頁從收起開始，重新翻譯也算）
+          key={transcript.translating ? 'translating' : 'shown'}
           text={transcript.text}
           translated={transcript.translated}
           display={display}

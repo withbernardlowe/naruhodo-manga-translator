@@ -114,7 +114,7 @@ test('設定 API key、同意資料使用後，已啟動的分頁直接翻譯：
   await expect(transcript.getByText('早安！今天好早喔')).toBeVisible();
   await expect(screenEnd.getByRole('button', { name: '重新翻譯' })).toBeVisible();
 
-  // 泡泡讀不出來（U17）：留在原位，原文不劃掉，警告色標籤（框外文字收到頁尾，見 ebook-reader.spec.ts）
+  // Balloon 讀不出來（U17）：留在原位，原文不劃掉，警告色標籤（框外文字收到頁尾，見 ebook-reader.spec.ts）
   const unreadable = transcript.getByRole('listitem').filter({ hasText: '這句讀不出來' });
   await expect(unreadable).toHaveCount(1);
   await expect(unreadable).toContainText('もちろん');

@@ -65,7 +65,7 @@ A reading-page URL reduced to origin + path (query and hash ignored), remembered
 _Avoid_: site rule, domain mapping
 
 **Page Mode** (頁面模式)
-A global setting, remembered across tabs and browser restarts, that decides what the manga page itself shows: 閱讀 (the default) covers each Balloon with its translation; 學習 leaves the Japanese original untouched and reveals readings, then the translation, step by step through the hover tooltip. Hover sync works in both. Under 閱讀 the tooltip only shows while the side panel is closed: with it open, the hovered Line is already highlighted there, so the page marks the Line with its number instead. 學習 also hides the side panel transcript's translations (see Display Level). In the side panel it sits on a row labelled 漫畫頁面, apart from the transcript's own Display Level menu, so each control names what it changes.
+A global setting, remembered across tabs and browser restarts, that decides what the manga page itself shows: 閱讀 (the default) covers each Balloon with its translation; 學習 leaves the Japanese original untouched and reveals readings, then the translation, step by step through the hover tooltip. Hover sync works in both. Under 閱讀 the tooltip only shows while the side panel is closed: with it open, the hovered Line is already highlighted there, so the page marks the Line with its number instead. Under 學習 the tooltip always shows, and carries the same number while the side panel is open. 學習 also hides the side panel transcript's translations (see Display Level). In the side panel it sits on a row labelled 漫畫頁面, apart from the transcript's own Display Level menu, so each control names what it changes.
 _Avoid_: learning mode (that is the whole feature), overlay toggle
 
 **Display Level** (顯示層級)

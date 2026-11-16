@@ -4,7 +4,7 @@
  * 原文標 lang="ja"、譯文標 lang="zh-Hant"：字型跟著語言走，測試也靠它找元素。
  */
 import { useEffect, useId, useRef, useState } from 'preact/hooks';
-import type { PageText } from '../shared/page-text.ts';
+import { unreadableLabel, type PageText } from '../shared/page-text.ts';
 import { rubyDisplay, type RubyDisplay } from '../shared/ruby.ts';
 import { displaySummary, LEVEL_LABELS, LEVELS, type Display, type DisplayLevel } from '../shared/transcript-display.ts';
 import { Badge, RevealChip, SegmentedControl, Switch } from './components.tsx';
@@ -167,7 +167,7 @@ export function Transcript({ text, translated, display, hoveredId, onHover }: Tr
     const showOriginal = unreadable || !translationOnly || !hasTranslation;
     // 要畫ルビ的句子才對齊讀音（讀音全是 LLM 推測，不另外標示）
     const ruby = showRuby && !unreadable ? rubyDisplay(line.原文, line.讀音) : undefined;
-    // 框外的雜訊：灰、刪除線；泡泡讀不出來：原文不劃掉，警告色標籤，看起來跟雜訊不一樣（U17）
+    // 框外的雜訊：灰、刪除線；Balloon 讀不出來：原文不劃掉，警告色標籤，看起來跟雜訊不一樣（U17）
     const originalClass = unreadable ? (line.loose ? 'original unreadable' : 'original unreadable-balloon') : ruby ? 'original with-ruby' : 'original';
     const shownTranslation = (
       <span lang="zh-Hant" class="translation">
@@ -192,12 +192,7 @@ export function Transcript({ text, translated, display, hoveredId, onHover }: Tr
             <Badge tone="loose">框外文字</Badge>
           </span>
         )}
-        {unreadable &&
-          (line.loose ? (
-            <span class="unreadable-label">讀不出來・頁面保留原文</span>
-          ) : (
-            <span class="unreadable-label unreadable-label--balloon">這句讀不出來・頁面保留日文</span>
-          ))}
+        {unreadable && <span class={line.loose ? 'unreadable-label' : 'unreadable-label unreadable-label--balloon'}>{unreadableLabel(line.loose)}</span>}
         {!unreadable &&
           (hasTranslation ? (
             learn ? <RevealChip>{shownTranslation}</RevealChip> : shownTranslation

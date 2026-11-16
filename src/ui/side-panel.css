@@ -97,7 +97,7 @@
 :where(.naru-side-panel) .unreadable-label { color: var(--naru-ink-3); font-size: var(--naru-text-caption); }
 /* 選取列的底（--naru-accent-weak）上 ink-3 只有 3.9:1，不到 AA；改用 ink-2（5.8:1） */
 :where(.naru-side-panel) .transcript li.hl :is(.untranslated, .unreadable, .unreadable-label) { color: var(--naru-ink-2); }
-/* 泡泡讀不出來（U17）：多半是真的對白被擋下，原文不劃掉，標籤用警告色，跟框外的雜訊分得開 */
+/* Balloon 讀不出來（U17）：多半是真的對白被擋下，原文不劃掉，標籤用警告色，跟框外的雜訊分得開 */
 :where(.naru-side-panel) .unreadable-balloon { color: var(--naru-ink-2); }
 /* 跟上一條「選取列改 ink-2」一樣具體、寫在後面：高亮時也維持警告色（warn 在 warn-bg 上本來就過 AA） */
 :where(.naru-side-panel) .transcript li .unreadable-label.unreadable-label--balloon {

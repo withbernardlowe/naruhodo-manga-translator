@@ -87,6 +87,12 @@ export interface PageText {
 }
 
 /**
+ * Unreadable 的段在側邊欄與頁面 tooltip 上的說明（U17），兩邊用同一句。Balloon 幾乎都是對白，說「這句」；
+ * Loose Text 多半是招牌、廣告、設計字。兩種都不覆蓋，所以頁面上看到的是原稿。
+ */
+export const unreadableLabel = (loose: boolean): string => (loose ? '讀不出來・頁面保留原文' : '這句讀不出來・頁面保留日文');
+
+/**
  * 要原地覆蓋的段：有譯文、不是 unreadable（LLM 判斷亂碼或 OCR 信心低於門檻，ADR 0009）。Loose Text 還要 LLM
  * 明確說不是 Sound Effect（spec #142「Loose Text 原地覆蓋」）：舊快取沒有 sfx 就不蓋。Balloon 不管 sfx。
  */
