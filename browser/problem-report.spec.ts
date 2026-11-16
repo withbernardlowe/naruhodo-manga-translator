@@ -34,7 +34,7 @@ test('按「回報翻譯問題」：報告複製到剪貼簿（含網址、畫�
     const { __copied, __opened } = window as unknown as Recorded;
     return { __copied, __opened };
   });
-  expect(opened!.map(decodeURIComponent)).toEqual(['https://github.com/yurenju/naruhodo-manga-translator/discussions/new?category=翻譯問題回報']);
+  expect(opened!.map(decodeURIComponent)).toEqual(['https://github.com/yurenju/naruhodo-manga-translator/discussions/new?category=translation-report']);
   if (text === undefined) throw new Error('沒有寫進剪貼簿');
   const json = JSON.parse(/```json\n([\s\S]*?)\n```/.exec(text)![1]!);
   expect(json.pageUrl).toBe(new URL(mockSite.canvasSiteUrl).origin + new URL(mockSite.canvasSiteUrl).pathname);

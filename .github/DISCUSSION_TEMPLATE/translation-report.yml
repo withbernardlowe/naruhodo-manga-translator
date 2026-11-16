@@ -1,4 +1,4 @@
-# 「翻譯問題回報」分類的表單。檔名要跟分類的 slug 一樣（src/ui/links.ts 的 PROBLEM_REPORT_CATEGORY），
+# 「Translation Report」分類的表單。檔名要跟分類的 slug 一樣（src/ui/links.ts 的 PROBLEM_REPORT_CATEGORY），
 # GitHub 只讀 main 上的這個檔。side panel 的「回報翻譯問題」把 Problem Report 複製到剪貼簿後打開這裡。
 # 報告只有除錯用的數字，沒有對白：哪一頁、哪裡有問題由讀者自己寫。
 title: '[翻譯問題] '
