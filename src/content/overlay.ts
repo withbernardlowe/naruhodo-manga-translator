@@ -26,6 +26,7 @@ import { overlaidTexts, type PageText, type RatioRect } from '../shared/page-tex
 import { rubyDisplay } from '../shared/ruby.ts';
 import TOKENS from '../shared/tokens.css';
 import { createTrace } from '../shared/trace.ts';
+import { hoverAid } from './hover-aid.ts';
 import { headingToward, HOVER_DWELL_MS, type Point } from './hover-intent.ts';
 import { loadPunctuationFont, PUNCTUATION_FAMILY } from '../shared/punctuation-face.ts';
 import { eraseFill, estimateFontPx, estimateOriginalLines, fitText, isVertical, layerTransform, layoutText, looseTextRegions, minLayerFontPx, pageSize, ratioToBox, separateRegions, textRegions, verticalize, type Box } from './overlay-layout.ts';
@@ -136,8 +137,13 @@ const STYLE = `${TOKENS}
 .hl { position: absolute; display: none; box-sizing: border-box; border-style: solid; border-color: var(--naru-highlight);
   background: var(--naru-highlight-fill); }
 .hl.on { display: block; }
-/* 長 Page 截圖時擦除與譯文不藏，tooltip 與高亮框藏（hideForCapture） */
-:host([data-capturing]) .tip, :host([data-capturing]) .hl { visibility: hidden; }
+/* 側邊欄開著時高亮框左上角的編號（U10）：跟側邊欄高亮那行同號同色（--naru-brand），貼在框角外側不擋字 */
+.num { position: absolute; display: none; place-items: center; box-sizing: border-box; min-width: 1.6em; height: 1.6em; padding: 0 0.35em;
+  transform: translate(-50%, -50%); border-radius: 999px; background: var(--naru-brand); color: var(--naru-ink);
+  font: 700 1em/1 var(--naru-font-sans); font-variant-numeric: tabular-nums; box-shadow: var(--naru-shadow-1); z-index: 1; }
+.num.on { display: grid; }
+/* 長 Page 截圖時擦除與譯文不藏，tooltip、高亮框與編號藏（hideForCapture） */
+:host([data-capturing]) .tip, :host([data-capturing]) .hl, :host([data-capturing]) .num { visibility: hidden; }
 /* anchor 重新出現、截圖還沒確認上面是同一頁（#276）：譯文先藏著，Page 上的狀態照常顯示 */
 :host([data-unverified]) .pl { visibility: hidden; }
 /* Page 上的狀態（#185）：跟 anchor 一樣大、不縮放，不擋點擊；只有紅色小標籤可以點 */
@@ -192,6 +198,8 @@ const FRAME_TIMEOUT_MS = 200;
 const TOOLTIP_SCREEN_PX = 15;
 /** 高亮框的畫面邊框粗細。 */
 const HIGHLIGHT_SCREEN_PX = 2;
+/** 高亮框編號的畫面字級。 */
+const NUMBER_SCREEN_PX = 11;
 /**
  * 學習時 tooltip 四周的緩衝（畫面 px）：tooltip 緊貼在句子的框旁邊，滑鼠從句子斜著移進 tooltip 時可能擦過框外一點點。
  * 只在 tooltip 已經顯示時才算，而且只有這麼窄，不會吃掉閱讀網站翻頁感應區的正常使用（spec #70 Further Notes）。
@@ -205,6 +213,8 @@ const within = (r: DOMRect, x: number, y: number, margin = 0) =>
 /** 頁面上可以 hover 的一句（Balloon 或 Loose Text），座標是 Page 原始像素。 */
 interface HoverLine {
   id: string;
+  /** 閱讀順序：側邊欄開著時標在高亮框上的編號，跟側邊欄那行一樣（U10）。 */
+  order: number;
   box: Box;
   原文: string;
   讀音: string;
@@ -221,6 +231,8 @@ interface PageLayer {
   tip: HTMLElement;
   /** 高亮框（滑過頁面或 side panel 那行時）。 */
   highlight: HTMLElement;
+  /** 高亮框的編號（側邊欄開著時）。 */
+  number: HTMLElement;
   lines: HoverLine[];
 }
 
@@ -367,6 +379,8 @@ export function createOverlay({ onHover, onStatusAction }: { onHover?: OnHover; 
   let hovered: { layer: PageLayer; line: HoverLine } | undefined;
   /** side panel 那邊滑過的那句。 */
   let panelHighlight: LineRef | undefined;
+  /** 這個分頁的側邊欄開著沒（side panel 接上的 port，U10）：開著時閱讀模式不出 tooltip，高亮框標編號。 */
+  let panelOpen = false;
   /** 學習時 tooltip 的「譯」區塊是否揭露中（滑鼠在區塊上）。 */
   let revealed = false;
   /** 顯示中的 tooltip 放在句子上方（揭露時長大要留在同一側）。 */
@@ -669,8 +683,11 @@ export function createOverlay({ onHover, onStatusAction }: { onHover?: OnHover; 
     tip.className = 'tip';
     const highlight = document.createElement('div');
     highlight.className = 'hl';
+    const number = document.createElement('div');
+    number.className = 'num';
     const toHoverLine = (t: PageText['balloons'][number] | PageText['looseText'][number], bbox: RatioRect): HoverLine => ({
       id: t.id,
+      order: t.order,
       box: ratioToBox(bbox, size),
       原文: t.原文,
       讀音: t.讀音,
@@ -682,7 +699,7 @@ export function createOverlay({ onHover, onStatusAction }: { onHover?: OnHover; 
       ...text.balloons.map((b) => toHoverLine(b, b.balloonBbox)),
       ...text.looseText.map((l) => toHoverLine(l, l.bbox)),
     ];
-    const layer: PageLayer = { pageHash, sub, size, element, tip, highlight, lines };
+    const layer: PageLayer = { pageHash, sub, size, element, tip, highlight, number, lines };
 
     // Balloon 與 Loose Text 一起排、一起 separateRegions；frame 是判斷直書橫書的框，Loose Text 的排版區是文字框本身（#151）
     const overlaid = [
@@ -723,7 +740,7 @@ export function createOverlay({ onHover, onStatusAction }: { onHover?: OnHover; 
     await Promise.all(items.map(({ erase }) => (erase instanceof HTMLImageElement ? erase.decode().catch(() => {}) : undefined)));
     if (stopped) return;
     // 擦除底色全部在譯文之前：偵測框重疊時，後一段的底色才不會蓋掉前一段的譯文
-    element.append(...items.map((item) => item.erase), ...items.map((item) => item.box), highlight, tip);
+    element.append(...items.map((item) => item.erase), ...items.map((item) => item.box), highlight, number, tip);
 
     // 換掉同一個範圍上的舊層，以及同一個 Page 在別的範圍上的舊層：視窗大小變了、合成圖重畫後，同一頁量到的
     // subRect 會變，舊的那層不拿掉就會留在舊位置、跟新的疊在一起
@@ -824,6 +841,7 @@ export function createOverlay({ onHover, onStatusAction }: { onHover?: OnHover; 
     tip.style.fontSize = `${TOOLTIP_SCREEN_PX / screenScale}px`;
     tip.style.maxWidth = `${size.width * 0.8}px`;
     highlight.style.borderWidth = `${HIGHLIGHT_SCREEN_PX / screenScale}px`;
+    number.style.fontSize = `${NUMBER_SCREEN_PX / screenScale}px`;
     highlight.style.borderRadius = `${(2 * HIGHLIGHT_SCREEN_PX) / screenScale}px`;
     renderHighlights();
     // 等畫到畫面上才 resolve：呼叫端接著會截「帶覆蓋層的樣子」，太早截會截到還沒畫出來的畫面；淡入的也要等淡完
@@ -894,6 +912,10 @@ export function createOverlay({ onHover, onStatusAction }: { onHover?: OnHover; 
   function showTooltip(layer: PageLayer, line: HoverLine): void {
     const { tip } = layer;
     revealed = false;
+    if (!hoverAid({ pageMode, panelOpen }).tooltip) {
+      tip.classList.remove('on');
+      return;
+    }
     const ja = document.createElement('div');
     ja.className = 'tip-ja';
     ja.lang = 'ja';
@@ -901,7 +923,7 @@ export function createOverlay({ onHover, onStatusAction }: { onHover?: OnHover; 
     if (line.unreadable) {
       ja.classList.add('tip-unreadable');
       ja.textContent = line.原文;
-      parts.push(textDiv('tip-zh', '無法辨識'));
+      parts.push(textDiv('tip-zh', '讀不出來・頁面保留原文'));
     } else {
       const display = rubyDisplay(line.原文, line.讀音);
       if ('segments' in display) {
@@ -972,6 +994,12 @@ export function createOverlay({ onHover, onStatusAction }: { onHover?: OnHover; 
               : undefined;
         layer.highlight.classList.toggle('on', line !== undefined);
         if (line) setBox(layer.highlight, line.box);
+        const numbered = line !== undefined && hoverAid({ pageMode, panelOpen }).number;
+        layer.number.classList.toggle('on', numbered);
+        if (numbered) {
+          layer.number.textContent = String(line.order);
+          Object.assign(layer.number.style, { left: `${line.box.x}px`, top: `${line.box.y}px` });
+        }
       }
     }
   }
@@ -981,6 +1009,15 @@ export function createOverlay({ onHover, onStatusAction }: { onHover?: OnHover; 
     panelHighlight = line ?? undefined;
     renderHighlights();
   }
+  /** 這個分頁的側邊欄開了或關了（U10）：顯示中的 tooltip 與編號跟著換。 */
+  function setPanelOpen(open: boolean): void {
+    if (open === panelOpen) return;
+    trace('overlay:panelOpen', { panelOpen: open });
+    panelOpen = open;
+    if (hovered) showTooltip(hovered.layer, hovered.line);
+    renderHighlights();
+  }
+
   /** Page Mode：學習時藏起擦字＋譯文（用 visibility，藏著時仍能量測排版）；顯示中的 tooltip 換成新模式的內容。 */
   function setPageMode(mode: PageMode): void {
     if (mode === pageMode) return;
@@ -1075,7 +1112,7 @@ export function createOverlay({ onHover, onStatusAction }: { onHover?: OnHover; 
     return changedParents.has(element as HTMLElement);
   }
 
-  return { show, remove, confirm, highlight, setPageMode, setStatuses, setOutlines, hideForCapture, hideStatusForCapture, restoreAfterCapture, shownPages, coveredRects, clear, ownsStyleOf };
+  return { show, remove, confirm, highlight, setPageMode, setPanelOpen, setStatuses, setOutlines, hideForCapture, hideStatusForCapture, restoreAfterCapture, shownPages, coveredRects, clear, ownsStyleOf };
 }
 
 export type Overlay = ReturnType<typeof createOverlay>;

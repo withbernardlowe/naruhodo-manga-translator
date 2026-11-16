@@ -16,6 +16,7 @@ import type {
   StripStatus,
   TestConnectionResponse,
 } from '../shared/messages.ts';
+import { PANEL_PORT } from '../shared/messages.ts';
 import { accountUrl } from '../shared/account-page.ts';
 import type { SeriesOption } from '../shared/series.ts';
 import { useHostedQuota, useHostedSession, useTranslationMode } from '../shared/hosted-account-hooks.ts';
@@ -687,6 +688,17 @@ function App({ tabId }: { tabId: number | undefined }) {
     void send<ModelStatusResponse>({ type: 'panel:getModelStatus' }).then((r) => setModelStatus(r.status));
     return () => chrome.runtime.onMessage.removeListener(onMessage);
   }, [tabId]);
+
+  // 讓頁面知道側邊欄開著（U10）：接一條 port 到這個分頁的 content script，關掉側邊欄時自動斷。
+  // 有 Page 才接：那時 content script 一定在跑；重新整理後 pages 先清空再回來，會重接
+  const hasPages = pages.length > 0;
+  useEffect(() => {
+    if (tabId === undefined || !active || !hasPages) return;
+    const port = chrome.tabs.connect(tabId, { name: PANEL_PORT });
+    // 讀掉 lastError：content script 不在時（剛停止）port 立刻斷，不要在 console 留 Unchecked runtime.lastError
+    port.onDisconnect.addListener(() => void chrome.runtime.lastError);
+    return () => port.disconnect();
+  }, [tabId, active, hasPages]);
 
   if (active === undefined || translationMode === undefined || session === undefined || onboarding === undefined) return null;
   const running = active && tabId !== undefined;
