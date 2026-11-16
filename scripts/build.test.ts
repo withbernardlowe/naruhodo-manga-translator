@@ -2,7 +2,7 @@ import { access, mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { build } from './build.ts';
+import { build, E2E_WORKER_PORTS, pickE2eWorkerPort } from './build.ts';
 
 let prodDir: string;
 let e2eDir: string;
@@ -191,5 +191,33 @@ describe('debug build', () => {
 
   it('Hosted Translation 連開發者自己跑的 `npm run worker:dev`（port 8787）', async () => {
     expect(await readText(debugDir, 'background.js')).toContain('"http://localhost:8787"');
+  });
+});
+
+describe('pickE2eWorkerPort：browser test 本機 Worker 的 port', () => {
+  const { first, count } = E2E_WORKER_PORTS;
+  const inRange = (port: number) => port >= first && port < first + count;
+
+  it('起點由 repo 路徑決定：同一個 worktree 每次一樣，不同 worktree 通常不一樣', async () => {
+    const free = async () => true;
+    const a = await pickE2eWorkerPort('/repo/a', free);
+
+    expect(await pickE2eWorkerPort('/repo/a', free)).toBe(a);
+    expect(await pickE2eWorkerPort('/repo/b', free)).not.toBe(a);
+    expect(inRange(a)).toBe(true);
+  });
+
+  it('起點被占用就往後找，超過範圍從頭繞回來', async () => {
+    const start = await pickE2eWorkerPort('/repo/a', async () => true);
+    const taken = new Set([start, start + 1 >= first + count ? first : start + 1]);
+
+    const port = await pickE2eWorkerPort('/repo/a', async (p) => !taken.has(p));
+
+    expect(taken.has(port)).toBe(false);
+    expect(inRange(port)).toBe(true);
+  });
+
+  it('範圍內全部被占用就報錯', async () => {
+    await expect(pickE2eWorkerPort('/repo/a', async () => false)).rejects.toThrow('都有人在用');
   });
 });

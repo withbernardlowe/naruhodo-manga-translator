@@ -21,7 +21,7 @@ import type { BrowserContext, FrameLocator, Page } from '@playwright/test';
 import { parseEnvFile } from '../../scripts/env-file.ts';
 import { activateOnMockSite, expect, openSettings, selectTranslationMode, test } from '../fixtures.ts';
 import { signInFromPanel } from '../sign-in.ts';
-import { startWorker } from '../worker.ts';
+import { startWorker, WORKER_PORT } from '../worker.ts';
 
 const ENV_FILE = join(homedir(), '.config', 'naruhodo', 'paddle-sandbox.env');
 const root = fileURLToPath(new URL('../..', import.meta.url));
@@ -83,9 +83,9 @@ test.beforeAll(async () => {
   await writeFile(envFile, keys.map((k) => `${k}=${sandbox[k] ?? ''}`).join('\n') + '\n', { mode: 0o600 });
   stopWorker = await startWorker({ env: 'dev', envFile });
 
-  // tunnel 轉到 e2e build 連的 Worker（8788），並把 sandbox 的 webhook destination 改成這次的網址
+  // tunnel 轉到 e2e build 連的 Worker，並把 sandbox 的 webhook destination 改成這次的網址
   children.push(
-    await startProcess(process.execPath, ['scripts/paddle-tunnel.ts', '--port', '8788'], {}, (out) => out.includes('webhook destination →'), 90_000),
+    await startProcess(process.execPath, ['scripts/paddle-tunnel.ts', '--port', String(WORKER_PORT)], {}, (out) => out.includes('webhook destination →'), 90_000),
   );
   children.push(
     await startProcess(
