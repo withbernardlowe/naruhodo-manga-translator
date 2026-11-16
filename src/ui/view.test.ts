@@ -4,7 +4,7 @@ import type { ModelStatus, PageView } from '../shared/messages.ts';
 import type { RatioRect } from '../shared/page-text.ts';
 import type { TranslationMode } from '../shared/translation-mode.ts';
 import type { SeriesOption } from '../shared/series.ts';
-import { accountPageView, accountPlanView, canTranslate, panelLayout, panelNotices, parentPage, quotaView, refundDialogView, seriesActions, setupNotices, sidePanelScreen, sidePanelView, stripView, subscribedNoticeText, translateAction, type SubscribedQuota } from './view.ts';
+import { accountPageView, accountPlanView, canTranslate, pageTurn, panelLayout, panelNotices, parentPage, quotaView, refundDialogView, seriesActions, setupNotices, sidePanelScreen, sidePanelView, stripView, subscribedNoticeText, translateAction, type PageTurn, type SubscribedQuota } from './view.ts';
 
 type Transcript = PageView['transcript'];
 type Done = Extract<Transcript, { state: 'done' }>;
@@ -815,6 +815,25 @@ describe('逐字稿上方的提示位置（U14）：只顯示最要緊的一張'
   it('只有一則：直接顯示，沒有「還有 N 則」；沒有提示時位置是空的', () => {
     expect(panelNotices({ ...none, strip: true })).toEqual({ shown: 'strip', rest: [], more: undefined });
     expect(panelNotices(none)).toEqual({ shown: undefined, rest: [], more: undefined });
+  });
+});
+
+describe('翻頁了沒：「還有 N 則提示」展開後什麼時候收起', () => {
+  const start: PageTurn = { hashes: [], turn: 0 };
+  const after = (...steps: string[][]) => steps.reduce((prev, hashes) => pageTurn(prev, hashes), start).turn;
+
+  it('剛啟動時 Page 陸續出現，第一個 Page 換人也不算翻頁', () => {
+    expect(after([], ['p2'], ['p1', 'p2'])).toBe(0);
+  });
+
+  it('畫面上的 Page 全換成新的才算翻頁；途中一個都沒有時記著上一批', () => {
+    expect(after(['p1', 'p2'], ['p3', 'p4'])).toBe(1);
+    expect(after(['p1', 'p2'], [], ['p3', 'p4'])).toBe(1);
+    expect(after(['p1', 'p2'], [], ['p1', 'p2'])).toBe(0);
+  });
+
+  it('條漫往下捲：留著一部分舊的 Page 不算翻頁', () => {
+    expect(after(['s1', 's2'], ['s2', 's3'], ['s3', 's4'])).toBe(0);
   });
 });
 

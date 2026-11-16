@@ -4,7 +4,7 @@
  * 全部以根元素 .naru-side-panel 為範圍，放進 shadow root（再載入 tokens.css、components.css）就完整。
  */
 import { Fragment, type ComponentChildren } from 'preact';
-import { useEffect, useId, useState } from 'preact/hooks';
+import { useEffect, useId, useRef, useState } from 'preact/hooks';
 import { FREE_PAGES, pageCount, type BillingPeriod, type Quota } from '../shared/hosted-api.ts';
 import type { LineRef, ModelStatus, PageView, StripStatus } from '../shared/messages.ts';
 import { megabytes } from '../shared/model-download.ts';
@@ -24,6 +24,7 @@ import {
   chargeNote,
   hasUntranslated,
   panelLayout,
+  pageTurn,
   panelNotices,
   quotaView,
   stripView,
@@ -34,6 +35,7 @@ import {
   subscribedNoticeText,
   type EndView,
   type FooterView,
+  type PageTurn,
   type PanelNotice,
   type PanelPage,
   type PageEntry,
@@ -763,6 +765,7 @@ export function SidePanel(props: SidePanelProps) {
   const saved = props.transcriptDisplay;
   const display = currentDisplay(pageMode, saved);
   const [page, setPage] = useState<PanelPage | undefined>(undefined);
+  const turn = useRef<PageTurn>({ hashes: [], turn: 0 });
   // 逐字稿譯文的標點字型（side-panel.css 的 .translation）；外掛、產品網站的展示都 render 這個元件，所以在這裡載入
   useEffect(() => void loadPunctuationFont(), []);
 
@@ -865,8 +868,9 @@ export function SidePanel(props: SidePanelProps) {
         return strip && <StripNoticeCallout text={strip.notice} onDismiss={props.onDismissStripNotice} />;
     }
   };
-  // 翻頁（第一個 Page 換掉）就重設：「還有 N 則提示」回到收起。只看第一個：剛啟動時 Page 陸續偵測到、條漫往下捲多出 Page 都不算
-  const noticeSlot = <NoticeSlot key={pages[0]?.pageHash ?? ''} notices={notices} render={renderNotice} />;
+  // 翻頁（畫面上的 Page 全換掉，規則在 view.ts 的 pageTurn）就重設：「還有 N 則提示」回到收起
+  turn.current = pageTurn(turn.current, pages.map((p) => p.pageHash));
+  const noticeSlot = <NoticeSlot key={turn.current.turn} notices={notices} render={renderNotice} />;
   if (!running)
     return (
       <div class="naru-side-panel">

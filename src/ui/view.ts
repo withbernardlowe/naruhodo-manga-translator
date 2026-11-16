@@ -212,6 +212,22 @@ export function panelNotices(present: {
   return { shown, rest, more: rest.length > 0 ? { count: rest.length, names: rest.map((n) => NOTICE_NAMES[n]).join('、') } : undefined };
 }
 
+/** 畫面上 Page 的 pageHash 與目前翻到第幾次頁；turn 變了，「還有 N 則提示」就收起來。 */
+export interface PageTurn {
+  hashes: readonly string[];
+  turn: number;
+}
+
+/**
+ * 翻頁了沒：畫面上的 Page 全換成新的才算。剛啟動時 Page 陸續出現（第一個 Page 也會換人）、條漫往下捲多出或少掉幾頁都不算；
+ * 翻頁途中 Page 暫時一個都沒有時記著上一批。讀者剛啟動就展開提示，不會因為後面才出現的 Page 又收起來。
+ */
+export function pageTurn(prev: PageTurn, hashes: readonly string[]): PageTurn {
+  if (hashes.length === 0) return prev;
+  const turned = prev.hashes.length > 0 && !hashes.some((h) => prev.hashes.includes(h));
+  return { hashes, turn: turned ? prev.turn + 1 : prev.turn };
+}
+
 /**
  * 整個取代 side panel 內容的一頁（頂部是「← 返回」＋標題，#93）：設定按 ⚙ 打開；
  * 作品頁（作品身分＋Series Notes，#191）從標題列的作品名稱打開，換一部作品從作品頁（或作品確認的「換一部」）打開；
