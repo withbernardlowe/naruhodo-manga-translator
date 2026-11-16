@@ -4,7 +4,7 @@ import type { PageView } from '../shared/messages.ts';
 import type { RatioRect } from '../shared/page-text.ts';
 import type { TranslationMode } from '../shared/translation-mode.ts';
 import type { SeriesOption } from '../shared/series.ts';
-import { accountPageView, accountPlanView, canTranslate, parentPage, quotaView, refundDialogView, seriesActions, setupNotices, sidePanelScreen, sidePanelView, stripView, subscribedNoticeText, translateAction, type SubscribedQuota } from './view.ts';
+import { accountPageView, accountPlanView, canTranslate, panelLayout, parentPage, quotaView, refundDialogView, seriesActions, setupNotices, sidePanelScreen, sidePanelView, stripView, subscribedNoticeText, translateAction, type SubscribedQuota } from './view.ts';
 
 type Transcript = PageView['transcript'];
 type Done = Extract<Transcript, { state: 'done' }>;
@@ -802,5 +802,102 @@ describe('Strip（條漫）改照句數計頁的說明（#282）', () => {
     expect(stripView(signedIn, undefined)).toBeUndefined();
     expect(stripView({ mode: 'ownKey', hasKey: true }, { lines: 21, pages: 3 })).toBeUndefined();
     expect(stripView({ mode: 'hosted', signedIn: false }, { lines: 21, pages: 3 })).toBeUndefined();
+  });
+});
+
+describe('底部固定列與逐字稿最下面的「這個畫面」（按鈕放置方案）', () => {
+  const hosted = { mode: 'hosted', signedIn: true } as const;
+  const layout = (transcripts: Transcript[], quota: Quota | undefined = free(80), access: Parameters<typeof panelLayout>[0]['access'] = hosted) =>
+    panelLayout({ pages: transcripts.map((t, i) => page(`p${i}`, `a${i}`, { transcript: t })), access, translatable: true, quota, strip: undefined });
+
+  it('全部翻好、額度還夠：固定列不顯示；秒數、額度、重新翻譯都在最下面', () => {
+    expect(layout([translated({ latencyMs: 3000 }), translated({ latencyMs: 3500 })])).toEqual({
+      footer: undefined,
+      end: {
+        summary: '已翻譯 2 頁 · 6.5 秒',
+        quota: { text: '免費額度剩 80 頁', warn: false, plansLink: true },
+        strip: undefined,
+        report: true,
+        retranslate: { note: '從辨識開始重來、不用快取；會再用掉 2 頁免費額度（剩 80 頁）', disabled: false },
+      },
+    });
+  });
+
+  const untranslatedPage: Transcript = { state: 'done', text: TEXT, translated: false };
+
+  it('有辨識好、還沒翻的頁：固定列是「N 頁還沒翻譯」＋「翻譯此頁」，沒有「重新翻譯」', () => {
+    expect(layout([translated(), untranslatedPage, untranslatedPage])).toMatchObject({
+      footer: { quota: undefined, plans: false, row: { kind: 'translate', untranslated: 2 } },
+      end: { retranslate: undefined },
+    });
+  });
+
+  it('翻譯中：固定列只有進度，不放「翻譯此頁」（避免連按重複扣頁）', () => {
+    expect(layout([{ ...translated(), translating: true }, untranslatedPage]).footer).toEqual({ quota: undefined, plans: false, row: { kind: 'translating' } });
+  });
+
+  it('辨識中：沒有別的事時顯示進度；另一頁已經可以翻時照樣放「翻譯此頁」', () => {
+    expect(layout([{ state: 'analyzing' }, translated()]).footer).toEqual({ quota: undefined, plans: false, row: { kind: 'analyzing' } });
+    expect(layout([{ state: 'analyzing' }, untranslatedPage]).footer).toEqual({ quota: undefined, plans: false, row: { kind: 'translate', untranslated: 1 } });
+  });
+
+  it('還沒有翻好的頁：最下面只有剩餘額度，沒有回報與重新翻譯', () => {
+    expect(layout([{ state: 'analyzing' }]).end).toEqual({
+      summary: undefined,
+      quota: { text: '免費額度剩 80 頁', warn: false, plansLink: true },
+      strip: undefined,
+      report: false,
+      retranslate: undefined,
+    });
+    expect(layout([{ state: 'analyzing' }], undefined, { mode: 'ownKey', hasKey: true }).end).toBeUndefined();
+  });
+
+  it('額度快用完：剩餘頁數回到固定列，最下面不再重複', () => {
+    expect(layout([translated()], free(12))).toMatchObject({
+      footer: { quota: { text: '免費額度剩 12 頁', warn: true, plansLink: true }, plans: false, row: undefined },
+      end: { quota: undefined, retranslate: { note: '從辨識開始重來、不用快取；會再用掉 1 頁免費額度（剩 12 頁）', disabled: false } },
+    });
+    expect(layout([translated(), translated()], subscribed({ remaining: 280 })).end?.retranslate?.note).toBe('從辨識開始重來、不用快取；會再扣 2 頁（本月剩 280 頁）');
+  });
+
+  it('免費額度用完：固定列是警告那行＋「查看方案」，沒有重新翻譯', () => {
+    expect(layout([translated(), untranslatedPage], free(0))).toMatchObject({
+      footer: { quota: { text: '免費額度已用完', warn: true }, plans: true, row: undefined },
+      end: { retranslate: undefined },
+    });
+  });
+
+  it('訂閱者本月用完：固定列只有一行，沒有按鈕', () => {
+    expect(layout([translated()], subscribed({ remaining: 0 })).footer).toEqual({
+      quota: { text: '本月額度已用完，11 月 15 日重置', warn: true, plansLink: false },
+      plans: false,
+      row: undefined,
+    });
+  });
+
+  it('額度不夠重翻畫面上的每一頁：「重新翻譯」停用並說明，免得翻到一半把原本的譯文也拿掉', () => {
+    expect(layout([translated(), translated()], free(1)).end?.retranslate).toEqual({ note: '額度剩 1 頁，不夠重新翻譯這 2 頁', disabled: true });
+  });
+
+  it('自備金鑰：最下面有模型與費用，重新翻譯說會再呼叫 API', () => {
+    expect(layout([translated({ latencyMs: 1200, costUsd: 0.00123 })], undefined, { mode: 'ownKey', hasKey: true })).toEqual({
+      footer: undefined,
+      end: {
+        summary: '已翻譯 1 頁 · claude-x · 1.2 秒 · $0.00123',
+        quota: undefined,
+        strip: undefined,
+        report: true,
+        retranslate: { note: '從辨識開始重來、不用快取；會再呼叫一次 API，費用另計', disabled: false },
+      },
+    });
+  });
+
+  it('條漫：本話計頁放最下面，重新翻譯說依句數重新計頁', () => {
+    const strip = stripView(hosted, { lines: 21, pages: 3 });
+    const pages = [page('p0', 'a0', { transcript: translated() })];
+    expect(panelLayout({ pages, access: hosted, translatable: true, quota: free(80), strip }).end).toMatchObject({
+      strip: '本話已計 3 頁（21 句）',
+      retranslate: { note: '從辨識開始重來、不用快取；條漫依句數重新計頁' },
+    });
   });
 });

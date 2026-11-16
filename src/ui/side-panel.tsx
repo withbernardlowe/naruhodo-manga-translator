@@ -5,7 +5,7 @@
  */
 import type { ComponentChildren } from 'preact';
 import { useEffect, useId, useState } from 'preact/hooks';
-import { FREE_PAGES, type BillingPeriod, type Quota } from '../shared/hosted-api.ts';
+import { FREE_PAGES, pageCount, type BillingPeriod, type Quota } from '../shared/hosted-api.ts';
 import type { LineRef, ModelStatus, PageView, StripStatus } from '../shared/messages.ts';
 import { megabytes } from '../shared/model-download.ts';
 import type { PageMode } from '../shared/page-mode.ts';
@@ -20,7 +20,9 @@ import { SubscriptionPrice } from './subscribe-button.tsx';
 import { DEFAULT_LEVEL, DisplaySwitch, Transcript, type Display, type Level } from './transcript.tsx';
 import {
   canTranslate,
+  chargeNote,
   hasUntranslated,
+  panelLayout,
   quotaView,
   stripView,
   setupNotices,
@@ -28,10 +30,11 @@ import {
   sidePanelScreen,
   sidePanelView,
   subscribedNoticeText,
-  translateAction,
-  type OverallStatus,
+  type EndView,
+  type FooterView,
   type PanelPage,
   type PageEntry,
+  type QuotaLineView,
   type QuotaView,
   type ConsentCard,
   type SetupNotice,
@@ -75,12 +78,42 @@ const STALE_TEXT: Record<StaleReason, string> = {
   version: '翻譯模型或 prompt 已更新，這頁是用舊版翻的',
 };
 
+/** 重翻要花什麼（view.ts 的 chargeNote）。 */
+type Charge = ReturnType<typeof chargeNote>;
+
+/** 「重新翻譯」＋按鈕下面扣多少的小字（不另外確認，按鈕放置方案）；disabled＝額度不夠。 */
+function RetranslateButton({
+  variant,
+  note,
+  disabled,
+  onClick,
+}: {
+  variant: 'secondary' | 'ghost';
+  note: string | undefined;
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  const noteId = useId();
+  return (
+    <>
+      <Button variant={variant} onClick={onClick} disabled={disabled} aria-describedby={note && noteId}>
+        重新翻譯
+      </Button>
+      {note && (
+        <small id={noteId} class="charge-note">
+          {note}
+        </small>
+      )}
+    </>
+  );
+}
+
 /** 過時只提示、不自動重翻（spec #27 第 4.3 節）；按「重新翻譯」只重翻這一頁。 */
-function StaleHint({ reason, onRetranslate }: { reason: StaleReason; onRetranslate: () => void }) {
+function StaleHint({ reason, charge, onRetranslate }: { reason: StaleReason; charge: Charge; onRetranslate: () => void }) {
   return (
     <Callout tone="warn" role="group" aria-label="過時提示">
       <span>{STALE_TEXT[reason]}</span>
-      <Button onClick={onRetranslate}>重新翻譯</Button>
+      <RetranslateButton variant="secondary" note={charge?.text} disabled={charge?.enough === false} onClick={onRetranslate} />
     </Callout>
   );
 }
@@ -89,11 +122,13 @@ function PageItem({
   entry: { page, side, heading, translationStatus },
   onRetry,
   onRetranslate,
+  staleCharge,
   sync,
 }: {
   entry: PageEntry;
   onRetry: () => void;
   onRetranslate: () => void;
+  staleCharge: Charge;
   sync: TranscriptSync;
 }) {
   const { transcript } = page;
@@ -116,7 +151,7 @@ function PageItem({
       {transcript.state === 'analyzing' && <Progress>辨識中…</Progress>}
       {transcript.state === 'error' && <Callout tone="danger">辨識失敗：{transcript.message}</Callout>}
       {transcript.state === 'done' && transcript.stale && !transcript.translating && (
-        <StaleHint reason={transcript.stale} onRetranslate={onRetranslate} />
+        <StaleHint reason={transcript.stale} charge={staleCharge} onRetranslate={onRetranslate} />
       )}
       {transcript.state === 'done' && transcript.translating && <Progress>翻譯中…</Progress>}
       {transcript.state === 'done' && transcript.translateError && (
@@ -257,8 +292,8 @@ function QuotaExhaustedCallout({
   );
 }
 
-/** 底部狀態列裡剩餘頁數那一行（系列與翻譯狀態之間）；快用完時用警告色。 */
-function QuotaLine({ line, onViewPlans }: { line: NonNullable<QuotaView['line']>; onViewPlans: (() => void) | undefined }) {
+/** 剩餘頁數那一行：平常在逐字稿最下面，快用完、用完時在固定列並用警告色（按鈕放置方案）。 */
+function QuotaLine({ line, onViewPlans }: { line: QuotaLineView; onViewPlans: (() => void) | undefined }) {
   return (
     <div role="status" aria-label="剩餘額度" class={`status-row quota-row${line.warn ? ' quota-row--warn' : ''}`}>
       <span>{line.text}</span>
@@ -267,10 +302,78 @@ function QuotaLine({ line, onViewPlans }: { line: NonNullable<QuotaView['line']>
   );
 }
 
-/** 底部狀態列（spec #27 第 8 節），文字由 view.ts 算好。 */
-function StatusText({ status }: { status: OverallStatus }) {
-  if (status?.kind === 'translating') return <Progress>翻譯中…</Progress>;
-  return status ? <span>{status.text}</span> : null;
+/**
+ * 底部固定列（#77、#92；按鈕放置方案）：有事才出現，最多一顆按鈕——進度、「N 頁還沒翻譯」＋「翻譯此頁」、快用完或用完的額度。
+ * 放在 main 外面才是 contentinfo landmark。
+ */
+function PanelFooter({ footer, onTranslate, onViewPlans }: { footer: FooterView; onTranslate: () => void; onViewPlans: (() => void) | undefined }) {
+  const { quota, plans, row } = footer;
+  return (
+    <footer aria-label="狀態列">
+      {quota && (
+        // 免費額度用完：primary「查看方案」跟那行同一行，但放在 status 外面，狀態只念剩餘頁數
+        <div class="status-row">
+          <QuotaLine line={quota} onViewPlans={onViewPlans} />
+          {plans && <ViewPlansButton variant="primary" onViewPlans={onViewPlans} />}
+        </div>
+      )}
+      {row && (
+        <div class="status-row">
+          {row.kind === 'translate' ? (
+            <>
+              <span>{pageCount(row.untranslated)} 頁還沒翻譯</span>
+              {/* 只翻辨識好、還沒翻的頁，不重新擷取（規則在 translateAction） */}
+              <Button variant="primary" onClick={onTranslate}>
+                翻譯此頁
+              </Button>
+            </>
+          ) : (
+            <Progress>{row.kind === 'translating' ? '翻譯中…' : '辨識中…'}</Progress>
+          )}
+        </div>
+      )}
+    </footer>
+  );
+}
+
+/**
+ * 逐字稿最下面的「這個畫面」（按鈕放置方案）：秒數（自備金鑰加模型、費用）、平常的剩餘頁數、條漫計頁、回報翻譯問題、重新翻譯。
+ * 「重新翻譯」會從辨識整個重來、扣頁，平常很少用，所以不放固定列；扣多少寫在按鈕下面的小字，不另外確認。
+ */
+function ScreenEnd({
+  end,
+  report,
+  onRetranslate,
+  onViewPlans,
+}: {
+  end: EndView;
+  report: ComponentChildren;
+  onRetranslate: () => void;
+  onViewPlans: (() => void) | undefined;
+}) {
+  const { retranslate } = end;
+  return (
+    <section class="screen-end" aria-label="這個畫面">
+      <h2 class="screen-end__title">這個畫面</h2>
+      {end.summary && (
+        <p role="status" aria-label="翻譯摘要">
+          {end.summary}
+        </p>
+      )}
+      {end.quota && <QuotaLine line={end.quota} onViewPlans={onViewPlans} />}
+      {end.strip && (
+        <div role="status" aria-label="條漫計費" class="status-row quota-row">
+          <span>{end.strip}</span>
+        </div>
+      )}
+      {end.report && report}
+      {retranslate && (
+        <div class="screen-end__retranslate">
+          <RetranslateButton variant="ghost" note={retranslate.note} disabled={retranslate.disabled} onClick={onRetranslate} />
+        </div>
+      )}
+    </section>
+  );
 }
 
 const PAGE_MODES: readonly SegmentOption<PageMode>[] = [
@@ -512,8 +615,6 @@ export function SidePanel(props: SidePanelProps) {
   );
   const done = pages.filter((p) => p.transcript.state === 'done');
   const untranslated = hasUntranslated(pages);
-  // 沒登入、沒 key、還沒同意時按了也送不出去：不放按鈕，由上面的設定提示帶路
-  const action = translateAction(pages, canTranslate(access, consent === 'agreed'));
   const notices = setupNotices({ access, consent, untranslated, hostedHint: props.hostedHint });
   const consentCard = notices.consentCard && <DataConsentCard mode={access.mode} card={notices.consentCard} onAccept={props.onAcceptConsent} />;
   const useOwnKey = () => {
@@ -550,6 +651,9 @@ export function SidePanel(props: SidePanelProps) {
   const view = sidePanelView(pages, access.mode);
   const quota = quotaView(access, props.quota);
   const strip = stripView(access, props.strip);
+  // 沒登入、沒 key、還沒同意時按了也送不出去：不放「翻譯此頁」，由上面的設定提示帶路
+  const layout = panelLayout({ pages, access, translatable: canTranslate(access, consent === 'agreed'), quota: props.quota, strip });
+  const staleCharge = chargeNote(access, props.quota, strip !== undefined, 1);
   const sync: TranscriptSync = { display, hovered, onLineHover: props.onLineHover };
   return (
     <div class="naru-side-panel">
@@ -579,40 +683,24 @@ export function SidePanel(props: SidePanelProps) {
               entry={entry}
               onRetry={translate}
               onRetranslate={() => onTranslate(entry.page.pageHash)}
+              staleCharge={staleCharge}
               sync={sync}
             />
           ))}
         </ul>
-        {props.reportProblem && done.some((p) => p.transcript.state === 'done' && p.transcript.translated) && (
-          // 翻頁、換了畫面上的 Page：「報告已複製」是上一個畫面的，回到按鈕
-          <ReportProblem key={done.map((p) => p.pageHash).join()} {...props.reportProblem} />
+        {layout.end && (
+          <ScreenEnd
+            end={layout.end}
+            report={
+              // 翻頁、換了畫面上的 Page：「報告已複製」是上一個畫面的，回到按鈕
+              props.reportProblem && <ReportProblem key={done.map((p) => p.pageHash).join()} {...props.reportProblem} />
+            }
+            onRetranslate={props.onRetranslate}
+            onViewPlans={props.onViewPlans}
+          />
         )}
       </main>
-      {/* 底部固定列；放在 main 外面才是 contentinfo landmark。內建翻譯的剩餘頁數一行、整體翻譯狀態＋按鈕一行（#77、#92）；作品在 Transcript 上方的作品卡（#186） */}
-      <footer aria-label="狀態列">
-        {quota.line && <QuotaLine line={quota.line} onViewPlans={props.onViewPlans} />}
-        {strip?.line && (
-          <div role="status" aria-label="條漫計費" class="status-row quota-row">
-            <span>{strip.line}</span>
-          </div>
-        )}
-        <div class="status-row">
-          <StatusText status={view.status} />
-          {quota.footerButton === 'plans' ? (
-            <ViewPlansButton variant="primary" onViewPlans={props.onViewPlans} />
-          ) : (
-            quota.footerButton === 'translate' &&
-            // 有頁還沒翻譯時只翻那些頁；全部翻好了才是整個畫面重來的「重新翻譯」（規則在 translateAction）
-            (action === 'translate' ? (
-              <Button variant="primary" onClick={translate}>
-                翻譯此頁
-              </Button>
-            ) : (
-              action === 'retranslate' && <Button onClick={props.onRetranslate}>重新翻譯</Button>
-            ))
-          )}
-        </div>
-      </footer>
+      {layout.footer && <PanelFooter footer={layout.footer} onTranslate={translate} onViewPlans={props.onViewPlans} />}
     </div>
   );
 }

@@ -54,8 +54,8 @@ test('SidePanel 放進 shadow root：外觀跟外掛的 side panel 一樣，樣�
   const actual = await site.evaluate((p) => globalThis.__testUi.renderSidePanel({ ...p, shadow: true }), props);
 
   // 樣式真的有套上（不是兩邊都沒載入而相等）
-  const footer = actual.find((e) => e.tag === 'footer')!;
-  expect(footer.style.position).toBe('sticky');
+  const screenEnd = actual.find((e) => e.tag === 'section' && e.class.includes('screen-end'))!;
+  expect(screenEnd.style.display).toBe('flex');
   expect(actual.find((e) => e.tag === 'li' && e.class.includes('hl'))!.style['background-color']).not.toBe('rgba(0, 0, 0, 0)');
   expect(actual).toEqual(expected satisfies StyleSnapshot);
   // 網頁上同樣的 main、footer、input、ul[aria-label=Page]，以及 :root 的 tokens 都沒變

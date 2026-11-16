@@ -1,7 +1,7 @@
 /**
  * #31：side panel 的設定頁輸入 API key → 同意資料使用 → 已啟動的分頁直接翻譯（#93，不必再按「翻譯此頁」）→
- * 逐字稿出現讀音與譯文、狀態列顯示已翻譯。同意寫在 chrome.storage、SW 聽到變更才排翻譯，這段跨 context 的接線只有這裡測得到。
- * 狀態列的格式（模型・秒數・費用、加總）在 src/ui/view.test.ts。
+ * 逐字稿出現讀音與譯文、最下面的「這個畫面」顯示已翻譯。同意寫在 chrome.storage、SW 聽到變更才排翻譯，這段跨 context 的接線只有這裡測得到。
+ * 摘要的格式（模型・秒數・費用、加總）與按鈕放哪裡在 src/ui/view.test.ts。
  * FakeTranslator 取代 Claude，但跟正式 build 一樣要先存 key（requireApiKey）。
  * 也檢查 key 不經過 content script 與 messaging（spec #27 第 5 節）。
  */
@@ -58,7 +58,7 @@ async function contentScriptView(sw: Worker, tabId: number) {
   }, tabId);
 }
 
-test('設定 API key、同意資料使用後，已啟動的分頁直接翻譯：逐字稿出現譯文、狀態列顯示已翻譯；key 不經過 content script', async ({
+test('設定 API key、同意資料使用後，已啟動的分頁直接翻譯：逐字稿出現譯文、「這個畫面」顯示已翻譯；key 不經過 content script', async ({
   context,
   sw,
   extensionId,
@@ -102,17 +102,17 @@ test('設定 API key、同意資料使用後，已啟動的分頁直接翻譯：
   await expect(transcript.getByText('早安！今天好早喔')).toBeVisible();
   // 讀音換成 Translator 的整句讀音（おはよう！きょうははやいね），以ルビ對齊回漢字
   await expect(transcript.getByRole('listitem').filter({ hasText: '早安！今天好早喔' }).locator('rt')).toHaveText(['きょう', 'はや']);
-  await expect(panel.getByRole('contentinfo', { name: '狀態列' })).toContainText(/已翻譯 \d+ 頁/);
-  // 都翻好了：底部的按鈕是「重新翻譯」。這裡抓 unit 看不到的串接：side panel 送 panel:retranslate → SW 重新擷取 → 再送 Translator
+  // 都翻好了：固定列沒事要做就不出現，摘要與「重新翻譯」在逐字稿最下面的「這個畫面」（哪些情況放哪裡由 view.test.ts 管）
+  const screenEnd = panel.getByRole('region', { name: '這個畫面' });
+  await expect(screenEnd).toContainText(/已翻譯 \d+ 頁/);
+  // 這裡抓 unit 看不到的串接：side panel 送 panel:retranslate → SW 重新擷取 → 再送 Translator
   // （重跑 OCR、不查快取、長 Page 的規則由 transcribe.test.ts 管）
-  const footer = panel.getByRole('contentinfo', { name: '狀態列' });
-  await expect(footer.getByRole('button')).toHaveText(['重新翻譯']);
   const before = await sw.evaluate(() => ({ captures: globalThis.__captureLog?.length ?? 0, translates: globalThis.__translateCalls ?? 0 }));
-  await footer.getByRole('button', { name: '重新翻譯' }).click();
+  await screenEnd.getByRole('button', { name: '重新翻譯' }).click();
   await expect.poll(() => sw.evaluate(() => globalThis.__captureLog?.length ?? 0)).toBeGreaterThan(before.captures);
   await expect.poll(() => sw.evaluate(() => globalThis.__translateCalls ?? 0)).toBeGreaterThan(before.translates);
   await expect(transcript.getByText('早安！今天好早喔')).toBeVisible();
-  await expect(footer.getByRole('button', { name: '重新翻譯' })).toBeVisible();
+  await expect(screenEnd.getByRole('button', { name: '重新翻譯' })).toBeVisible();
 
   // unreadable：OCR 原文（灰、刪除線）＋「無法辨識 · 未覆蓋」
   const unreadable = transcript.getByRole('listitem').filter({ hasText: '無法辨識' });

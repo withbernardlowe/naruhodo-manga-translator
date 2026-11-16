@@ -106,11 +106,24 @@
 :where(.naru-side-panel) .backup { display: flex; flex-wrap: wrap; gap: var(--naru-space-2); align-items: center; margin: var(--naru-space-2) 0; }
 :where(.naru-side-panel) .backup p { margin: 0; }
 
-/* 逐字稿最下面的「回報翻譯問題」（Problem Report） */
-:where(.naru-side-panel) .report-problem { margin: var(--naru-space-3) 0; }
+/* 逐字稿最下面的「這個畫面」（按鈕放置方案）：秒數、平常的剩餘頁數、條漫計頁、回報翻譯問題、重新翻譯 */
+:where(.naru-side-panel) .screen-end {
+  display: flex; flex-direction: column; align-items: flex-start; gap: var(--naru-space-2);
+  margin: var(--naru-space-3) 0; padding-top: var(--naru-space-3); border-top: 1px solid var(--naru-line);
+  font-size: var(--naru-text-small); color: var(--naru-ink-2);
+}
+:where(.naru-side-panel) .screen-end > * { margin: 0; }
+:where(.naru-side-panel) .screen-end > .status-row { align-self: stretch; }
+:where(.naru-side-panel) .screen-end__title { font-size: var(--naru-text-label); font-weight: 700; color: var(--naru-ink); }
+:where(.naru-side-panel) .screen-end__retranslate { display: flex; flex-direction: column; align-items: flex-start; gap: var(--naru-space-1); }
+/* 重翻要扣多少：按鈕下面的小字（不另外確認） */
+:where(.naru-side-panel) .charge-note { flex-basis: 100%; font-size: var(--naru-text-caption); color: var(--naru-ink-3); }
+:where(.naru-side-panel) .naru-callout--warn .charge-note { color: inherit; }
+
+/* 「回報翻譯問題」（Problem Report），在「這個畫面」區塊裡 */
 :where(.naru-side-panel) .report-problem p { margin: 0; }
 
-/* 底部固定列（#77）：兩行，任何寬度都不撐出水平捲軸——每個彈性子項都要 min-width: 0 才縮得下去 */
+/* 底部固定列（#77；按鈕放置方案）：有事才出現。任何寬度都不撐出水平捲軸——每個彈性子項都要 min-width: 0 才縮得下去 */
 :where(.naru-side-panel) footer {
   position: sticky; bottom: 0; display: flex; flex-direction: column; gap: var(--naru-space-1);
   padding: var(--naru-space-2) 0 var(--naru-space-3);
@@ -118,7 +131,7 @@
   font-size: var(--naru-text-caption); color: var(--naru-ink-3);
 }
 :where(.naru-side-panel) .status-row { display: flex; align-items: center; gap: var(--naru-space-2); min-width: 0; }
-:where(.naru-side-panel) .status-row > span { flex: 1 1 auto; min-width: 0; }
+:where(.naru-side-panel) .status-row > span, :where(.naru-side-panel) .status-row > .status-row { flex: 1 1 auto; min-width: 0; }
 :where(.naru-side-panel) .status-row > .naru-progress { margin: 0; }
 :where(.naru-side-panel) .status-row > .naru-btn { flex: none; }
 /* 內建翻譯的剩餘頁數（#92）；剩 5 頁以下用警告色 */
