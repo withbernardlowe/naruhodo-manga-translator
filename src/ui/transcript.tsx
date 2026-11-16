@@ -1,40 +1,106 @@
 /**
- * side panel 的逐字稿（spec #27 第 8 節、#39、#70／#76）：依閱讀順序一行一句，上方切換 Display Level，
+ * side panel 的逐字稿（spec #27 第 8 節、#39、#70／#76）：依閱讀順序一行一句，上方「逐字稿」標題列的選單切換 Display Level，
  * 振り仮名用 rubyDisplay（alignRuby）對齊回每段漢字，頁面 ↔ panel 的 hover 同步。
  * 原文標 lang="ja"、譯文標 lang="zh-Hant"：字型跟著語言走，測試也靠它找元素。
  */
-import { useEffect, useRef } from 'preact/hooks';
+import { useEffect, useId, useRef, useState } from 'preact/hooks';
 import type { PageText } from '../shared/page-text.ts';
 import { rubyDisplay, type RubyDisplay } from '../shared/ruby.ts';
+import { displaySummary, LEVEL_LABELS, LEVELS, type Display, type DisplayLevel } from '../shared/transcript-display.ts';
 import { Badge, RevealChip, SegmentedControl, Switch } from './components.tsx';
 
-/** 閱讀時的 Display Level：整頁一起切。 */
-export const LEVELS = ['只看譯文', '原文＋譯文', '加上讀音'] as const;
-export type Level = (typeof LEVELS)[number];
-export const DEFAULT_LEVEL: Level = '加上讀音';
+/** 側邊欄的小圖示：跟「漫畫頁面」的頁面圖示成對，標出這一行管的是側邊欄（U15）。 */
+function PanelIcon() {
+  return (
+    <svg width="14" height="12" viewBox="0 0 14 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+      <rect x="0.75" y="0.75" width="12.5" height="10.5" rx="1.5" />
+      <path d="M9 1v10" />
+    </svg>
+  );
+}
+
+function ChevronIcon() {
+  return (
+    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">
+      <path d="M2 3.5 L5 6.5 L8 3.5" />
+    </svg>
+  );
+}
 
 /**
- * 逐字稿要顯示什麼，依 Page Mode 而定（GLOSSARY 的 Display Level）：閱讀時三個層級；
- * 學習時只有振り仮名開關，譯文一律藏在「譯」區塊後面。
+ * 「逐字稿」標題列（U15）：右邊的選單按鈕寫著目前的顯示方式，打開後閱讀時是 Display Level、學習時是振り仮名 Switch。
+ * 放在逐字稿正上方，位置本身說明它只管側邊欄；選單裡也明寫頁面不變。點選單外面或按 Escape 關上。
  */
-export type Display = { mode: 'read'; level: Level } | { mode: 'learn'; furigana: boolean };
-
-/** 逐字稿上方的切換：閱讀時是 Display Level，學習時是振り仮名 Switch。 */
-export function DisplaySwitch({
+export function TranscriptHeading({
   display,
   onLevel,
   onFurigana,
 }: {
   display: Display;
-  onLevel: (level: Level) => void;
+  onLevel: (level: DisplayLevel) => void;
   onFurigana: (on: boolean) => void;
 }) {
+  const [open, setOpen] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
+  const button = useRef<HTMLButtonElement>(null);
+  const menuId = useId();
+  const noteId = useId();
+  useEffect(() => {
+    const el = root.current;
+    if (!open || !el) return;
+    // 可能 render 在網站的 shadow root 裡（產品網站的展示）：用 composedPath 判斷點的是不是選單
+    const onPointer = (e: PointerEvent) => {
+      if (!e.composedPath().includes(el)) setOpen(false);
+    };
+    const doc = el.ownerDocument;
+    doc.addEventListener('pointerdown', onPointer);
+    return () => doc.removeEventListener('pointerdown', onPointer);
+  }, [open]);
+  // Escape 只在按鈕與選單裡處理（focus 在它們身上時），不攔整頁的鍵盤
+  const onKeyDown = (e: KeyboardEvent) => {
+    if (!open || e.key !== 'Escape') return;
+    e.stopPropagation();
+    setOpen(false);
+    button.current?.focus();
+  };
+  const summary = displaySummary(display);
+  const chooseLevel = (level: DisplayLevel) => {
+    onLevel(level);
+    setOpen(false);
+  };
   return (
-    <div class="levels">
-      {display.mode === 'read' ? (
-        <SegmentedControl label="顯示層級" options={LEVELS.map((l) => ({ value: l, label: l }))} value={display.level} onChange={onLevel} />
-      ) : (
-        <Switch label="顯示讀音" checked={display.furigana} onChange={onFurigana} />
+    <div class="transcript-head" ref={root} onKeyDown={onKeyDown}>
+      <PanelIcon />
+      <span class="transcript-head__label">逐字稿</span>
+      <span class="transcript-head__spacer" />
+      <button
+        ref={button}
+        type="button"
+        class="naru-btn naru-btn--secondary transcript-head__menu"
+        aria-label={`逐字稿顯示：${summary}`}
+        aria-expanded={open}
+        aria-controls={menuId}
+        onClick={() => setOpen(!open)}
+      >
+        {summary}
+        <ChevronIcon />
+      </button>
+      {open && (
+        <div id={menuId} class="transcript-menu" role="group" aria-label="逐字稿顯示" aria-describedby={noteId}>
+          <p id={noteId} class="transcript-menu__note">
+            只改側邊欄的逐字稿，漫畫頁面不變
+          </p>
+          {display.mode === 'read' ? (
+            <SegmentedControl
+              label="顯示層級"
+              options={LEVELS.map((l) => ({ value: l, label: LEVEL_LABELS[l] }))}
+              value={display.level}
+              onChange={chooseLevel}
+            />
+          ) : (
+            <Switch label="顯示讀音" checked={display.furigana} onChange={onFurigana} />
+          )}
+        </div>
       )}
     </div>
   );
@@ -78,8 +144,8 @@ export interface TranscriptProps {
 /** 逐字稿：Balloon 與 Loose Text 依閱讀順序混在同一串；Loose Text 標「框外文字」。 */
 export function Transcript({ text, translated, display, hoveredId, onHover }: TranscriptProps) {
   const learn = display.mode === 'learn';
-  const showRuby = learn ? display.furigana : display.level === '加上讀音';
-  const translationOnly = !learn && display.level === '只看譯文';
+  const showRuby = learn ? display.furigana : display.level === 'withReading';
+  const translationOnly = !learn && display.level === 'translationOnly';
   const lines = [
     ...text.balloons.map((b) => ({ ...b, loose: false })),
     ...text.looseText.map((l) => ({ ...l, loose: true })),

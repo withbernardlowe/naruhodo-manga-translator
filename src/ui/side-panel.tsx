@@ -11,13 +11,14 @@ import { megabytes } from '../shared/model-download.ts';
 import type { PageMode } from '../shared/page-mode.ts';
 import { loadPunctuationFont } from '../shared/punctuation-face.ts';
 import type { StaleReason } from '../shared/series-notes.ts';
+import { currentDisplay, type Display, type TranscriptDisplay } from '../shared/transcript-display.ts';
 import type { TranslationMode } from '../shared/translation-mode.ts';
 import { Badge, Button, Callout, PageHeader, Progress, SegmentedControl, type SegmentOption } from './components.tsx';
 import type { ConsentState } from '../shared/data-consent.ts';
 import { ConsentDisclosure } from './data-flow.tsx';
 import { PRIVACY_URL } from './links.ts';
 import { SubscriptionPrice } from './subscribe-button.tsx';
-import { DEFAULT_LEVEL, DisplaySwitch, Transcript, type Display, type Level } from './transcript.tsx';
+import { Transcript, TranscriptHeading } from './transcript.tsx';
 import {
   canTranslate,
   chargeNote,
@@ -377,16 +378,34 @@ function ScreenEnd({
 }
 
 const PAGE_MODES: readonly SegmentOption<PageMode>[] = [
-  { value: 'read', label: '閱讀', description: '頁面直接顯示中文' },
-  { value: 'learn', label: '學習', description: '保留日文，滑過看讀音' },
+  { value: 'read', label: '閱讀', description: '漫畫頁面直接顯示中文' },
+  { value: 'learn', label: '學習', description: '漫畫頁面保留日文，滑過看讀音；逐字稿的譯文也先收起來' },
 ];
+
+/** 漫畫頁面的小圖示：跟逐字稿標題列的側邊欄圖示成對（U15）。 */
+function PageIcon() {
+  return (
+    <svg width="12" height="14" viewBox="0 0 12 14" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+      <rect x="0.75" y="0.75" width="10.5" height="12.5" rx="1.5" />
+    </svg>
+  );
+}
 
 /**
  * Page Mode 切換（spec #70、#73）：全域設定，外掛存在 chrome.storage.local；頁面上的 content script 自己聽變更。
- * 學習時頁面不擦字、不畫譯文，翻譯照常進行。
+ * 學習時頁面不擦字、不畫譯文，翻譯照常進行。一行寫著「漫畫頁面」，跟逐字稿標題列的顯示選單分開，各自標出管哪裡（U15）；
+ * 兩種模式的說明在按鈕的 hover 提示裡。
  */
 function PageModeSwitch({ mode, choose }: { mode: PageMode; choose: (mode: PageMode) => void }) {
-  return <SegmentedControl label="頁面模式" variant="tabs" options={PAGE_MODES} value={mode} onChange={choose} />;
+  return (
+    <div class="page-mode">
+      <PageIcon />
+      <span class="page-mode__label" aria-hidden="true">
+        漫畫頁面
+      </span>
+      <SegmentedControl label="頁面模式" options={PAGE_MODES} value={mode} onChange={choose} />
+    </div>
+  );
 }
 
 /** 標題：logo（外掛 icon 的小尺寸母檔）＋名稱。 */
@@ -435,6 +454,9 @@ export interface SidePanelProps {
   /** 標題旁的 logo（外掛是 icons/naruhodo-small.svg）。 */
   logoSrc: string;
   onPageModeChange: (mode: PageMode) => void;
+  /** 逐字稿的顯示方式（Display Level 與振り仮名開關）；依 Page Mode 用其中一個。 */
+  transcriptDisplay: TranscriptDisplay;
+  onTranscriptDisplayChange: (display: TranscriptDisplay) => void;
   /** 重新擷取頁面（模型錯誤的「重試」）。 */
   onScan: () => void;
   /** 翻譯這個 tab 的頁；給 pageHash 就只重翻那一頁。 */
@@ -575,9 +597,8 @@ function ReportProblem({ copy, open }: NonNullable<SidePanelProps['reportProblem
 
 export function SidePanel(props: SidePanelProps) {
   const { running, pages, modelStatus, access, consent, pageMode, hovered, onScan, onTranslate } = props;
-  const [level, setLevel] = useState<Level>(DEFAULT_LEVEL);
-  const [furigana, setFurigana] = useState(true);
-  const display: Display = pageMode === 'learn' ? { mode: 'learn', furigana } : { mode: 'read', level };
+  const saved = props.transcriptDisplay;
+  const display = currentDisplay(pageMode, saved);
   const [page, setPage] = useState<PanelPage | undefined>(undefined);
   // 逐字稿譯文的標點字型（side-panel.css 的 .translation）；外掛、產品網站的展示都 render 這個元件，所以在這裡載入
   useEffect(() => void loadPunctuationFont(), []);
@@ -671,7 +692,13 @@ export function SidePanel(props: SidePanelProps) {
         {quota.exhausted && <QuotaExhaustedCallout exhausted={quota.exhausted} onViewPlans={props.onViewPlans} onUseOwnKey={useOwnKey} />}
         {subscribedNotice}
         {props.renderSeriesCard?.(setPage)}
-        {done.length > 0 && <DisplaySwitch display={display} onLevel={setLevel} onFurigana={setFurigana} />}
+        {done.length > 0 && (
+          <TranscriptHeading
+            display={display}
+            onLevel={(level) => props.onTranscriptDisplayChange({ ...saved, level })}
+            onFurigana={(furigana) => props.onTranscriptDisplayChange({ ...saved, furigana })}
+          />
+        )}
         {/* 不是錯誤：首頁、目錄頁本來就沒有 Page（縮圖太小不算），讓讀者知道外掛是刻意沒翻 */}
         {pages.length === 0 && <Callout role="status">這個畫面沒有找到漫畫頁</Callout>}
         {strip && <Callout role="status">{strip.notice}</Callout>}

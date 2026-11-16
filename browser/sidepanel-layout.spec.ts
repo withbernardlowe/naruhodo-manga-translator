@@ -99,10 +99,14 @@ test.describe('逐字稿出來之前', () => {
     const consent = main.getByRole('region', { name: '資料使用說明' });
     await consent.getByRole('button', { name: '同意並啟用翻譯' }).click();
     await expect(consent).toHaveCount(0);
-    // Page 列表與逐字稿之前的控制項：⚙（只有圖示）、Page Mode 兩格（含副標）、作品卡的問句列（#186）。顯示層級要等逐字稿出來，不在這裡
+    // Page 列表與逐字稿之前的控制項：⚙（只有圖示）、Page Mode 兩格、作品卡的問句列（#186）。逐字稿標題列的顯示選單要等逐字稿出來，不在這裡
     // 停止＝再點一次外掛圖示，沒有按鈕；作品卡本身是一顆按鈕（打開作品頁，#191），問句列在它下面
-    await expect(main.getByRole('button').filter({ visible: true })).toHaveText(['', /^閱讀/, /^學習/, /›$/, '是', '換一部']);
+    await expect(main.getByRole('button').filter({ visible: true })).toHaveText(['', '閱讀', '學習', /›$/, '是', '換一部']);
     await expect(main.getByRole('switch')).toHaveCount(0);
+    // Page Mode 那一行寫明管的是漫畫頁面（U15）；兩種模式的說明在 hover 提示，學習的說明也講到逐字稿
+    await expect(main.getByText('漫畫頁面', { exact: true })).toBeVisible();
+    await expect(main.getByRole('button', { name: '學習', exact: true })).toHaveAccessibleDescription(/逐字稿的譯文也先收起來/);
+    await expect(main.getByRole('button', { name: /^逐字稿顯示/ })).toHaveCount(0);
 
     // ⚙ 直接打開設定頁（沒有選單）
     await openSettings(panel);

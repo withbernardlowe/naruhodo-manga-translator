@@ -11,6 +11,7 @@ import { createOverlay, type Overlay } from '../../../src/content/overlay.ts';
 import logoSrc from '../../../src/icons/naruhodo-small.svg?url';
 import type { LineRef } from '../../../src/shared/messages.ts';
 import type { PageMode } from '../../../src/shared/page-mode.ts';
+import { DEFAULT_TRANSCRIPT_DISPLAY, type TranscriptDisplay } from '../../../src/shared/transcript-display.ts';
 import TOKENS from '../../../src/shared/tokens.css';
 import COMPONENTS from '../../../src/ui/components.css';
 import SIDE_PANEL from '../../../src/ui/side-panel.css';
@@ -36,6 +37,7 @@ export interface DemoCopy {
 export function Demo({ copy }: { copy: DemoCopy }) {
   const [phase, setPhase] = useState<DemoPhase>('closed');
   const [pageMode, setPageMode] = useState<PageMode>('read');
+  const [transcriptDisplay, setTranscriptDisplay] = useState<TranscriptDisplay>(DEFAULT_TRANSCRIPT_DISPLAY);
   const [hovered, setHovered] = useState<LineRef | undefined>(undefined);
   const image = useRef<HTMLImageElement>(null);
   const panelHost = useRef<HTMLDivElement>(null);
@@ -100,6 +102,8 @@ export function Demo({ copy }: { copy: DemoCopy }) {
         hovered={hovered}
         logoSrc={logoSrc}
         onPageModeChange={setPageMode}
+        transcriptDisplay={transcriptDisplay}
+        onTranscriptDisplayChange={setTranscriptDisplay}
         onScan={noop}
         onTranslate={noop}
         onRetranslate={noop}

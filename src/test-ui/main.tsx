@@ -5,6 +5,7 @@ import { render } from 'preact';
 import type { LineRef, PageView } from '../shared/messages.ts';
 import type { PageMode } from '../shared/page-mode.ts';
 import type { PageText, RatioRect } from '../shared/page-text.ts';
+import { DEFAULT_TRANSCRIPT_DISPLAY } from '../shared/transcript-display.ts';
 import TOKENS from '../shared/tokens.css';
 import CONTAINER from '../sidepanel/sidepanel.css';
 import COMPONENTS from '../ui/components.css';
@@ -74,6 +75,8 @@ globalThis.__testUi = {
         hovered={hovered}
         logoSrc=""
         onPageModeChange={noop}
+        transcriptDisplay={DEFAULT_TRANSCRIPT_DISPLAY}
+        onTranscriptDisplayChange={noop}
         onScan={noop}
         onTranslate={noop}
         onRetranslate={noop}
