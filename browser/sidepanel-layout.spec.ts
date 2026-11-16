@@ -89,7 +89,7 @@ test.describe('逐字稿出來之前', () => {
   // 顯示層級的按鈕要等逐字稿出來才有；FakeEngine 幾乎不花時間，讓它慢到測試結束都還沒出來
   test.use({ fakeOcrDelayMs: 60_000 });
 
-  test('頂部只有 logo、名稱、狀態、⚙ 與 Page Mode 切換', async ({ context, sw, extensionId, mockSite }) => {
+  test('頂部只有 logo、名稱、狀態、停止、⚙ 與 Page Mode 切換', async ({ context, sw, extensionId, mockSite }) => {
     const { panel } = await activateOnMockSite({ context, sw, extensionId, mockSite });
     const main = panel.getByRole('main');
 
@@ -99,9 +99,9 @@ test.describe('逐字稿出來之前', () => {
     const consent = main.getByRole('region', { name: '資料使用說明' });
     await consent.getByRole('button', { name: '同意並啟用翻譯' }).click();
     await expect(consent).toHaveCount(0);
-    // Page 列表與逐字稿之前的控制項：⚙（只有圖示）、Page Mode 兩格（含副標）、作品卡的問句列（#186）。顯示層級要等逐字稿出來，不在這裡
-    // 停止＝再點一次外掛圖示，沒有按鈕；作品卡本身是一顆按鈕（打開作品頁，#191），問句列在它下面
-    await expect(main.getByRole('button').filter({ visible: true })).toHaveText(['', /^閱讀/, /^學習/, /›$/, '是', '換一部']);
+    // Page 列表與逐字稿之前的控制項：停止（ADR 0003）、⚙（只有圖示）、Page Mode 兩格（含副標）、作品卡的問句列（#186）。顯示層級要等逐字稿出來，不在這裡
+    // 作品卡本身是一顆按鈕（打開作品頁，#191），問句列在它下面
+    await expect(main.getByRole('button').filter({ visible: true })).toHaveText(['停止', '', /^閱讀/, /^學習/, /›$/, '是', '換一部']);
     await expect(main.getByRole('switch')).toHaveCount(0);
 
     // ⚙ 直接打開設定頁（沒有選單）

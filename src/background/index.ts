@@ -34,7 +34,9 @@ import { accountUrl, blockedPageUrl } from '../shared/account-page.ts';
 import { onboardingUrl, saveInstallState, saveOnboarding } from '../shared/onboarding.ts';
 import { hostedBlockedStep } from '../shared/onboarding-step.ts';
 import type { ActionBadge, StatusAction } from '../shared/page-status.ts';
-import { quotaIndicator, stripTitle } from '../shared/quota-indicator.ts';
+import { quotaIndicator } from '../shared/quota-indicator.ts';
+import { createActionTitleSync, iconClick } from '../shared/action-title.ts';
+import { createPanelOpenTracker } from './side-panel-open.ts';
 import { createQuotaIndicatorSync, type QuotaLookup } from './quota-indicator-sync.ts';
 import { loadSidePanelOnActivation, watchSidePanelOnActivation } from '../shared/side-panel-setting.ts';
 import { loadPendingPayment, savePendingPayment, showSubscribedNotice } from '../shared/payment-return.ts';
@@ -367,13 +369,13 @@ const BADGES: Record<ActionBadge, { text: string; color: string }> = {
   stripLowQuota: { text: '條', color: '#E8710A' },
 };
 
-/** 圖示的 hover 提示：全域那一份（剩餘頁數，#237），以及正在讀 Strip 的分頁（多一行計費方式，#282）。 */
-let actionTitle = quotaIndicator(undefined).title;
-/** 設過分頁專屬 hover 提示的分頁 → 現在是不是 Strip；全域的提示變了要跟著重設（分頁專屬的不會自己跟著變）。 */
-const stripTitles = new Map<number, boolean>();
-const showTabTitle = (tabId: number, strip: boolean) =>
-  // 分頁已經關了也沒關係
-  chrome.action.setTitle({ tabId, title: strip ? stripTitle(actionTitle) : actionTitle }).catch(() => {});
+/**
+ * 圖示的 hover 提示（ADR 0003）：點一下會怎樣、剩餘頁數（#237）、正在讀 Strip 的分頁多一行計費方式（#282）。
+ * 沒帶 tabId 的是全域那份（沒在翻譯的分頁）；分頁已經關了也沒關係。
+ */
+const actionTitles = createActionTitleSync((title, tabId) => {
+  chrome.action.setTitle(tabId === undefined ? { title } : { tabId, title }).catch(() => {});
+});
 
 /** 內建翻譯、已登入時的剩餘額度；自備金鑰或沒登入（包含 token 已失效）是 none。 */
 async function lookupQuota(): Promise<QuotaLookup> {
@@ -391,10 +393,8 @@ async function lookupQuota(): Promise<QuotaLookup> {
  */
 const quotaIndicatorSync = createQuotaIndicatorSync({
   lookup: lookupQuota,
-  async show({ title, menuTitle, lowQuota }) {
-    actionTitle = title;
-    await chrome.action.setTitle({ title });
-    for (const [tabId, strip] of stripTitles) void showTabTitle(tabId, strip);
+  async show({ quotaLine, menuTitle, lowQuota }) {
+    actionTitles.quota(quotaLine);
     // 選單還沒建好（SW 剛啟動）時會失敗：建好之後會再更新一次
     chrome.contextMenus.update(MENU_ACCOUNT, { title: menuTitle }, () => void chrome.runtime.lastError);
     await pageStatus.quotaChanged(lowQuota);
@@ -422,8 +422,9 @@ const pageStatus = createPageStatusSync({
   // 自備金鑰沒有頁數可計；沒登入時還翻不了
   stripBilled: async () => (await loadTranslationMode()) === 'hosted' && (await hostedSessionToken()) !== undefined,
   setStrip(tabId, strip) {
-    stripTitles.set(tabId, strip);
-    void showTabTitle(tabId, strip);
+    if (strip) stripTabs.add(tabId);
+    else stripTabs.delete(tabId);
+    void refreshActionTitle(tabId);
   },
 });
 
@@ -624,8 +625,56 @@ chrome.sidePanel.setOptions({ enabled: false }).catch((e: unknown) => console.wa
  */
 let sidePanelOnActivation: boolean | undefined;
 watchSidePanelOnActivation((open) => {
+  const changed = sidePanelOnActivation !== undefined && sidePanelOnActivation !== open;
   sidePanelOnActivation = open;
+  // 點翻譯中的分頁會怎樣跟著變（打開側邊欄／停止）
+  if (changed) void store.entries().then((tabs) => tabs.forEach(([tabId]) => void refreshActionTitle(tabId)));
 });
+
+/**
+ * 每個分頁的 side panel 開著沒（ADR 0003）：已啟動時點圖示，關著就打開、開著才停止。
+ * 從 Chrome 內建「開啟側邊面板」打開、按 × 關掉都會觸發；全域 side panel（沒有 tabId）永遠關著，不用記。
+ */
+const PANEL_OPEN_KEY = 'sidePanelOpenTabs';
+const panels = createPanelOpenTracker({
+  load: async () => {
+    const stored = (await chrome.storage.session.get(PANEL_OPEN_KEY))[PANEL_OPEN_KEY];
+    return Array.isArray(stored) ? stored.filter((tabId): tabId is number => typeof tabId === 'number') : [];
+  },
+  save: (tabIds) => chrome.storage.session.set({ [PANEL_OPEN_KEY]: tabIds }),
+});
+chrome.sidePanel.onOpened.addListener(({ tabId }) => {
+  if (tabId === undefined) return;
+  trace('sidePanel:opened', { tabId });
+  panels.opened(tabId);
+  void refreshActionTitle(tabId);
+});
+chrome.sidePanel.onClosed.addListener(({ tabId }) => {
+  if (tabId === undefined) return;
+  trace('sidePanel:closed', { tabId });
+  panels.closed(tabId);
+  void refreshActionTitle(tabId);
+});
+
+/** 正在讀 Strip 的分頁（pageStatus 告訴的）：hover 提示多一行計費方式。SW 休息後是空的，pageStatus 下次更新時補上。 */
+const stripTabs = new Set<number>();
+/** 每個分頁最新一次 refreshActionTitle 的編號：比它舊的算完就丟掉，不蓋掉新的。分頁關掉才刪（刪了編號會重來）。 */
+const titleRefreshes = new Map<number, number>();
+/** 這個 SW 看過關掉的分頁（tab ID 不會重用）：之後才算完的 refreshActionTitle 不再設它。 */
+const closedTabs = new Set<number>();
+
+/** 圖示的 hover 提示跟著「點一下會怎樣」改（ADR 0003）；規則同 activation.toggle（iconClick）。 */
+async function refreshActionTitle(tabId: number): Promise<void> {
+  const seq = (titleRefreshes.get(tabId) ?? 0) + 1;
+  titleRefreshes.set(tabId, seq);
+  const [active, panelOpen, panelOnActivation] = await Promise.all([
+    activation.isActive(tabId),
+    panels.openNow(tabId),
+    sidePanelOnActivation ?? loadSidePanelOnActivation(),
+  ]);
+  if (titleRefreshes.get(tabId) !== seq || closedTabs.has(tabId)) return;
+  actionTitles.tab(tabId, { click: iconClick({ active, panelOnActivation, panelOpen }), strip: stripTabs.has(tabId) });
+}
 
 /**
  * 點圖示的當下卡在哪（#185）：沒登入是「同意並登入」，還登入著但沒同意是補同意，額度 0 是帳號頁（#213），
@@ -664,6 +713,7 @@ const activation = createActivation({
   getTabUrl: async (tabId) => (await chrome.tabs.get(tabId)).url,
   sidePanelOnActivation: () => sidePanelOnActivation,
   loadSidePanelOnActivation,
+  panelOpen: (tabId) => panels.openNow(tabId),
   openSidePanel(tabId) {
     // 不 await setOptions：await 會讓 open() 離開 user gesture。兩個呼叫會依序送到瀏覽器。
     // 用 tab 專屬的路徑帶上 tabId，side panel 才知道自己跟著哪個分頁。
@@ -690,6 +740,7 @@ const activation = createActivation({
   onStatusChanged(tabId, active) {
     trace('status', { tabId, active });
     notifyPanel({ type: 'status:changed', tabId, active });
+    void refreshActionTitle(tabId);
     if (active) {
       void pageStatus.activated(tabId);
       scan(tabId);
@@ -702,7 +753,7 @@ const activation = createActivation({
   },
 });
 
-// 圖示是開關（#185）：沒啟動就啟動，已啟動就停止
+// 圖示是開關（#185）：沒啟動就啟動；已啟動時側邊欄被關掉了就重新打開，開著才停止（ADR 0003）
 chrome.action.onClicked.addListener((tab) => {
   if (tab.id !== undefined) void activation.toggle(tab.id);
 });
@@ -834,10 +885,16 @@ async function statusAction(tabId: number, action: StatusAction, pageHash: strin
 chrome.tabs.onRemoved.addListener((tabId, { windowId }) => {
   void paymentReturn.tabRemoved(tabId, windowId);
   void activation.handleTabRemoved(tabId);
+  panels.forget(tabId);
   scanner.clear(tabId);
   transcriber.clear(tabId);
   pageStatus.clear(tabId);
   outlineSync.reset(tabId);
+  // 放在最後：上面的清理（pageStatus.clear 會 setStrip）觸發的 refreshActionTitle 也不會再把它記回去
+  closedTabs.add(tabId);
+  stripTabs.delete(tabId);
+  titleRefreshes.delete(tabId);
+  actionTitles.forget(tabId);
 });
 
 chrome.runtime.onMessage.addListener((message: Message, sender, sendResponse) => {
@@ -883,6 +940,13 @@ chrome.runtime.onMessage.addListener((message: Message, sender, sendResponse) =>
     case 'onboarding:prefetchModels':
       prefetchModels().catch((e: unknown) => console.warn('prefetch failed', e));
       return false;
+    case 'panel:stop':
+      // 失敗也要回應：side panel 在等
+      activation
+        .stopFromPanel(message.tabId)
+        .catch((e: unknown) => console.warn('panel:stop failed', e))
+        .finally(() => sendResponse());
+      return true;
     case 'panel:getStatus':
       activation.isActive(message.tabId).then((active) => sendResponse({ active } satisfies StatusResponse));
       return true;

@@ -1,6 +1,6 @@
 // 版本號只寫在 package.json，由 release workflow 更新（.github/workflows/release.yml）
 import pkg from '../package.json' with { type: 'json' };
-import { ACTION_NAME } from './shared/quota-indicator.ts';
+import { actionTitle } from './shared/action-title.ts';
 
 /** 外掛 icon 的尺寸：工具列 16/32、管理頁 48、安裝與 Web Store 128。PNG 由 scripts/icons.ts 從 SVG 母檔產出。 */
 export const ICON_SIZES = [16, 32, 48, 128] as const;
@@ -15,7 +15,8 @@ const icons = Object.fromEntries(ICON_SIZES.map((size) => [String(size), `icons/
  * 與 unlimitedStorage（ADR 0002）。spec #27 第 13 節第 6 項決定以合併後的清單為準。
  * storage：Page Mode 存在 chrome.storage.local（spec #70、#73），沒有安裝警告。
  * contextMenus：圖示的右鍵選單（「帳號與訂閱」，#213；側邊欄用 Chrome 自己的「開啟側邊面板」，#269），沒有安裝警告。
- * minimum_chrome_version 141：圖示當開關、停止時用 sidePanel.close() 關掉 side panel（#185）。
+ * minimum_chrome_version 142：圖示當開關、停止時用 sidePanel.close() 關掉 side panel（141，#185）；
+ * 已啟動時點圖示要知道 side panel 被讀者關掉了沒，靠 sidePanel.onClosed（142，ADR 0003）。
  */
 export function buildManifest({ e2e, debug = false }: { e2e: boolean; debug?: boolean }): chrome.runtime.ManifestV3 {
   return {
@@ -26,14 +27,14 @@ export function buildManifest({ e2e, debug = false }: { e2e: boolean; debug?: bo
     version: pkg.version,
     // 也是 Web Store 的摘要（最多 132 字），見 docs/webstore/listing.md
     description: '把畫面上的日文漫畫原地翻成繁體中文，並列出原文、讀音與譯文，邊看邊學日文',
-    minimum_chrome_version: '141',
+    minimum_chrome_version: '142',
     icons,
     permissions: ['activeTab', 'scripting', 'sidePanel', 'offscreen', 'storage', 'unlimitedStorage', 'contextMenus'],
     // e2e 與 debug build 不靠點圖示拿 activeTab，改由測試或 agent 送 test:activate 啟動（debug：#112）
     ...(e2e || debug ? { host_permissions: ['<all_urls>'] } : {}),
     background: { service_worker: 'background.js', type: 'module' },
-    // hover 提示：內建翻譯、已登入時 SW 在第二行加上剩餘頁數（#237）
-    action: { default_title: ACTION_NAME, default_icon: icons },
+    // hover 提示：SW 依狀態改「點一下會怎樣」（ADR 0003），內建翻譯、已登入時再加上剩餘頁數（#237）
+    action: { default_title: actionTitle({ click: 'start', quotaLine: undefined }), default_icon: icons },
     side_panel: { default_path: 'sidepanel.html' },
     // 讓外掛頁面（offscreen document）crossOriginIsolated，onnxruntime-web 的 wasm 才能用 SharedArrayBuffer 多執行緒。
     // 外掛頁面只載入自己的檔案、data URL，以及有 CORS 的 Hugging Face 下載，require-corp 不會擋到。

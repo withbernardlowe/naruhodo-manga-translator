@@ -27,6 +27,12 @@ function fakeChrome(urls: Record<number, string>) {
     stored: true,
     blocked: undefined,
   };
+  /** 每個 tab 的側邊欄開著沒（sidePanel.onOpened／onClosed 記下的）；undefined＝SW 剛醒來還沒讀到。 */
+  const panels: { open: Record<number, boolean> | undefined; stored: Record<number, boolean> } = {
+    open: {},
+    /** storage.session 裡的值（SW 剛醒來時非同步讀到的，點圖示之前的狀態）。 */
+    stored: {},
+  };
   const statusEvents: [number, boolean][] = [];
   const failInjectionFor = new Set<number>();
   const createdSeries: string[] = [];
@@ -51,7 +57,11 @@ function fakeChrome(urls: Record<number, string>) {
     getTabUrl: async (tabId) => urls[tabId],
     sidePanelOnActivation: () => settings.panelOnActivation,
     loadSidePanelOnActivation: async () => settings.stored,
-    openSidePanel: async (tabId) => void calls.openedPanels.push(tabId),
+    panelOpen: (tabId) => (panels.open === undefined ? Promise.resolve(panels.stored[tabId] ?? false) : (panels.open[tabId] ?? false)),
+    openSidePanel: async (tabId) => {
+      calls.openedPanels.push(tabId);
+      if (panels.open) panels.open[tabId] = true;
+    },
     enableSidePanel: async (tabId) => void calls.enabledPanels.push(tabId),
     closeSidePanel: async (tabId) => void calls.closedPanels.push(tabId),
     disableSidePanel: async (tabId) => void calls.disabledPanels.push(tabId),
@@ -88,6 +98,7 @@ function fakeChrome(urls: Record<number, string>) {
     deps,
     calls,
     settings,
+    panels,
     statusEvents,
     failInjectionFor,
     urls,
@@ -235,7 +246,7 @@ describe('toggle（點圖示、快捷鍵）', () => {
     expect(chrome.calls.closedPanels).toEqual([]);
   });
 
-  it('知道已啟動的 tab 再點一下：不先打開側邊欄', async () => {
+  it('知道已啟動、側邊欄開著的 tab 再點一下：不先打開側邊欄', async () => {
     const chrome = fakeChrome({ 1: EPISODE });
     const activation = createActivation(chrome.deps);
     await activation.toggle(1);
@@ -243,6 +254,90 @@ describe('toggle（點圖示、快捷鍵）', () => {
     await activation.toggle(1);
 
     expect(chrome.calls.openedPanels).toEqual([1]);
+  });
+});
+
+describe('已啟動時點圖示：側邊欄關著就打開，開著才停止（ADR 0003）', () => {
+  it('讀者按 × 關掉側邊欄後再點圖示：同步打開側邊欄，翻譯繼續', async () => {
+    const chrome = fakeChrome({ 1: EPISODE });
+    const activation = createActivation(chrome.deps);
+    await activation.toggle(1);
+    chrome.panels.open = { 1: false };
+
+    const clicked = activation.toggle(1);
+    expect(chrome.calls.openedPanels).toEqual([1, 1]);
+    await clicked;
+
+    expect(await activation.isActive(1)).toBe(true);
+    expect(chrome.calls.stopped).toEqual([]);
+    expect(chrome.calls.disabledPanels).toEqual([]);
+  });
+
+  it('側邊欄回來之後再點一下：停止並關掉側邊欄', async () => {
+    const chrome = fakeChrome({ 1: EPISODE });
+    const activation = createActivation(chrome.deps);
+    await activation.toggle(1);
+    chrome.panels.open = { 1: false };
+    await activation.toggle(1);
+
+    await activation.toggle(1);
+
+    expect(await activation.isActive(1)).toBe(false);
+    expect(chrome.calls.disabledPanels).toEqual([1]);
+  });
+
+  it('Side Panel on Activation 關著：已啟動時點一下就停止，不打開側邊欄', async () => {
+    const chrome = fakeChrome({ 1: EPISODE });
+    chrome.settings.panelOnActivation = false;
+    const activation = createActivation(chrome.deps);
+    await activation.toggle(1);
+
+    await activation.toggle(1);
+
+    expect(await activation.isActive(1)).toBe(false);
+    expect(chrome.calls.openedPanels).toEqual([]);
+    expect(chrome.calls.disabledPanels).toEqual([1]);
+  });
+
+  /** 已啟動的 tab 換一個新的 SW（記憶體全空、狀態還在 store 裡）。 */
+  async function afterSwRestart(panelWasOpen: boolean) {
+    const chrome = fakeChrome({ 1: EPISODE });
+    await createActivation(chrome.deps).toggle(1);
+    chrome.panels.open = undefined;
+    chrome.panels.stored = { 1: panelWasOpen };
+    chrome.settings.panelOnActivation = undefined;
+    chrome.calls.openedPanels.length = 0;
+    return { chrome, activation: createActivation(chrome.deps) };
+  }
+
+  it('SW 剛醒來、點之前側邊欄關著：同步打開，翻譯繼續', async () => {
+    const { chrome, activation } = await afterSwRestart(false);
+
+    const clicked = activation.toggle(1);
+    expect(chrome.calls.openedPanels).toEqual([1]);
+    await clicked;
+
+    expect(await activation.isActive(1)).toBe(true);
+    expect(chrome.calls.disabledPanels).toEqual([]);
+  });
+
+  it('SW 剛醒來、點之前側邊欄開著：先打開（不知道），讀到之後停止並關掉', async () => {
+    const { chrome, activation } = await afterSwRestart(true);
+
+    await activation.toggle(1);
+
+    expect(await activation.isActive(1)).toBe(false);
+    expect(chrome.calls.disabledPanels).toEqual([1]);
+  });
+
+  it('SW 剛醒來、讀到設定是關的：照設定關著的讀者處理，點一下就停止', async () => {
+    const { chrome, activation } = await afterSwRestart(false);
+    chrome.settings.stored = false;
+
+    await activation.toggle(1);
+
+    expect(await activation.isActive(1)).toBe(false);
+    expect(chrome.calls.disabledPanels).toEqual([1]);
   });
 
   it('啟動當下卡住（例如沒登入）：照常啟動，同時打開 onboarding 並帶入能解決問題的那一步', async () => {
@@ -328,6 +423,20 @@ describe('toggle（點圖示、快捷鍵）', () => {
 
     await activation.handleTabUpdated(1, { status: 'complete' });
 
+    expect(chrome.calls.disabledPanels).toEqual([1]);
+  });
+});
+
+describe('side panel 的「停止」', () => {
+  it('停止翻譯、移除覆蓋層，並關掉側邊欄', async () => {
+    const chrome = fakeChrome({ 1: EPISODE });
+    const activation = createActivation(chrome.deps);
+    await activation.toggle(1);
+
+    await activation.stopFromPanel(1);
+
+    expect(await activation.isActive(1)).toBe(false);
+    expect(chrome.calls.stopped).toEqual([1]);
     expect(chrome.calls.disabledPanels).toEqual([1]);
   });
 });

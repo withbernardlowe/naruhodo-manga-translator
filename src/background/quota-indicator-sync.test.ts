@@ -16,14 +16,14 @@ function setup(lookups: (() => Promise<QuotaLookup>)[]) {
 }
 
 describe('圖示的剩餘頁數跟著額度更新（#237）', () => {
-  it('讀到額度就更新；自備金鑰或沒登入回到只有名字', async () => {
+  it('讀到額度就更新；自備金鑰或沒登入就拿掉額度那行', async () => {
     const { sync, shown } = setup([async () => free(18), async () => ({ kind: 'none' })]);
 
     await sync.refresh();
     await sync.refresh();
 
     expect(shown.map((s) => s.lowQuota)).toEqual([true, false]);
-    expect(shown[1]!.title).toBe('Naruhodo 漫畫翻譯');
+    expect(shown[1]!.quotaLine).toBeUndefined();
   });
 
   it('讀不到額度（離線、Worker 出錯）：維持上次的樣子', async () => {
@@ -47,6 +47,6 @@ describe('圖示的剩餘頁數跟著額度更新（#237）', () => {
     await running;
 
     expect(calls()).toBe(2);
-    expect(shown.at(-1)!.title).toBe('Naruhodo 漫畫翻譯\n免費額度剩 27 頁');
+    expect(shown.at(-1)!.quotaLine).toBe('免費額度剩 27 頁');
   });
 });

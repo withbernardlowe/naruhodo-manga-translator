@@ -68,6 +68,17 @@ test('停止（再點一次圖示）後清掉 content script，重新整理也�
   expect(await isContentScriptInjected(sw, tabId)).toBe(false);
 });
 
+// unit（activation.test.ts）測得到停止的規則，測不到側邊欄的按鈕 → panel:stop 訊息 → SW 這條線
+test('按側邊欄標題列的「停止」：清掉 content script，側邊欄回到未啟動', async ({ context, sw, extensionId, mockSite }) => {
+  const { panel, tabId } = await activateOnMockSite({ context, sw, extensionId, mockSite });
+
+  await panel.getByRole('button', { name: '停止翻譯這個分頁' }).click();
+
+  await expect(panel.getByText('請點外掛圖示啟動')).toBeVisible();
+  await expect(panel.getByRole('button', { name: '停止翻譯這個分頁' })).toHaveCount(0);
+  await expect.poll(() => isContentScriptInjected(sw, tabId)).toBe(false);
+});
+
 test('換 origin 就停止', async ({ context, sw, extensionId, mockSite }) => {
   const { page, panel, tabId } = await activateOnMockSite({ context, sw, extensionId, mockSite });
 

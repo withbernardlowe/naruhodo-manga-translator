@@ -418,6 +418,18 @@ function SettingsButton({ onOpen }: { onOpen: () => void }) {
   );
 }
 
+/** 「停止」：紅色小方塊＋字，跟 ⚙ 並排在標題列。 */
+function StopButton({ onStop }: { onStop: () => void }) {
+  return (
+    <Button variant="ghost" class="panel-header__stop" aria-label="停止翻譯這個分頁" onClick={onStop}>
+      <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+        <rect width="10" height="10" rx="2" fill="currentColor" />
+      </svg>
+      停止
+    </Button>
+  );
+}
+
 export interface SidePanelProps {
   /** 有已啟動的 tab：顯示 Page Mode 與逐字稿；false＝只顯示「請點外掛圖示啟動」。 */
   running: boolean;
@@ -441,6 +453,8 @@ export interface SidePanelProps {
   onTranslate: (pageHash?: string) => void;
   /** 底部的「重新翻譯」：畫面上的頁從辨識開始整個重來（Retranslation）。 */
   onRetranslate: () => void;
+  /** 標題列的「停止」（ADR 0003）：停止翻譯這個 tab 並關掉 side panel。沒給就不顯示（網站的展示沒有分頁可停）。 */
+  onStop?: () => void;
   /** 滑過逐字稿的某行；null＝離開。 */
   onLineHover: (line: LineRef | null) => void;
   /** 說明卡的「同意並啟用翻譯」：記下目前翻譯模式的同意。 */
@@ -604,12 +618,13 @@ export function SidePanel(props: SidePanelProps) {
       </PanelPageView>
     );
   }
-  // 頂部只有 logo、名稱、狀態、⚙（#77）；停止＝再點一次外掛圖示，⚙ 直接打開設定頁
+  // 頂部只有 logo、名稱、狀態、停止、⚙（#77）。停止也可以點外掛圖示（側邊欄開著時，ADR 0003）；⚙ 直接打開設定頁
   const header = (
     <div class="panel-header">
       <Title logoSrc={props.logoSrc} />
       {running && <Badge tone="ok">已啟動</Badge>}
       <span class="panel-header__spacer" />
+      {running && props.onStop && <StopButton onStop={props.onStop} />}
       {props.renderSettings && <SettingsButton onOpen={() => setPage('settings')} />}
     </div>
   );

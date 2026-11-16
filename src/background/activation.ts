@@ -6,10 +6,12 @@
  * 一啟動就通知（開始擷取），getSeriesId 等猜完才回答，所以翻譯呼叫等兩邊都完成才出發。
  * 同分頁換網址：網址模式命中就換；對不上就在載入完成後重讀標題，跟上次一樣就不猜，不一樣才重猜。
  *
- * 圖示是開關（#185、ADR 0003）：沒啟動就啟動，Side Panel on Activation 開著才一起開 side panel；已啟動就停止並關掉 side panel。
+ * 圖示是開關（#185、ADR 0003）：沒啟動就啟動，Side Panel on Activation 開著才一起開 side panel。
+ * 已啟動時：side panel 被讀者關掉了就重新打開（翻譯繼續），開著（或設定關著）才停止並關掉 side panel。side panel 的「停止」也一樣停止。
  * 只有翻譯中的 tab 的 side panel 是 enabled（#269）：Chrome 圖示右鍵的「開啟側邊面板」只在這些 tab 出現，打開一定有用。
  * 點圖示的當下卡住（沒同意、沒登入、額度 0）照常啟動，同時打開 onboarding 能解決問題的那一步。
  */
+import { iconClick } from '../shared/action-title.ts';
 import type { RequestedStep } from '../shared/onboarding.ts';
 import type { TitleGuess } from '../shared/series.ts';
 import { createTrace } from '../shared/trace.ts';
@@ -52,6 +54,11 @@ export interface ActivationDeps {
   sidePanelOnActivation(): boolean | undefined;
   /** 從 chrome.storage 讀 Side Panel on Activation（SW 剛醒來、同步的值還是 undefined 時）。 */
   loadSidePanelOnActivation(): Promise<boolean>;
+  /**
+   * 這個 tab 的 side panel 這一刻開著沒（side-panel-open.ts 從 sidePanel.onOpened／onClosed 記下的）。
+   * 知道就同步回答（理由同 sidePanelOnActivation）；SW 剛醒來還沒從 storage 讀到時是 promise，回答的仍是問的那一刻。
+   */
+  panelOpen(tabId: number): boolean | Promise<boolean>;
   /** 把這個 tab 的 side panel 設成 enabled（帶 tabId 的路徑）並打開，必須在 user gesture 裡同步呼叫。 */
   openSidePanel(tabId: number): Promise<void>;
   /** 只把這個 tab 的 side panel 設成 enabled、不打開：讀者之後能從 Chrome 的「開啟側邊面板」打開。 */
@@ -153,17 +160,42 @@ export function createActivation(deps: ActivationDeps) {
   }
 
   /**
-   * 點圖示／快捷鍵：沒啟動就啟動（設定開著就一起開 side panel），已啟動就停止並關掉 side panel。
-   * 已啟動的 tab 這時不開 side panel；SW 剛醒來還不知道（knownActive 沒有）就照沒啟動處理，查到已啟動再關掉。
+   * 點圖示／快捷鍵（ADR 0003）：沒啟動就啟動（設定開著就一起開 side panel）。
+   * 已啟動時看 side panel：設定開著、side panel 關著（讀者按了 ×）就打開，翻譯繼續；開著才停止並關掉 side panel。
+   * 設定關著的讀者不用 side panel，已啟動時點一下就停止。
+   * 會不會停止要在第一個 await 之前決定（不停止就要同步 open()）：SW 知道已啟動、也知道 side panel 開著或設定關著才不開；
+   * 其他情況（SW 剛醒來）一律先打開，再讀 storage 裡「點之前」的狀態，該停止就停止（停止會關掉 side panel）。
    */
   async function toggle(tabId: number): Promise<void> {
-    if (knownActive.get(tabId) !== true) openPanelOnActivation(tabId);
-    if (await isActive(tabId)) {
-      await stop(tabId);
-      await deps.disableSidePanel(tabId).catch(() => {});
+    // 一定要在 open() 之前問：那次 open() 觸發的 onOpened 不算「點之前」
+    const panelOpen = deps.panelOpen(tabId);
+    const knownStop =
+      knownActive.get(tabId) === true && (deps.sidePanelOnActivation() === false || panelOpen === true);
+    if (!knownStop) openPanelOnActivation(tabId);
+    if (!(await isActive(tabId))) {
+      await startFromGesture(tabId);
       return;
     }
-    await startFromGesture(tabId);
+    if (!knownStop && !(await shouldStop(panelOpen))) {
+      trace('toggle:openPanel', { tabId });
+      return;
+    }
+    await stopAndDisablePanel(tabId);
+  }
+
+  /** 已啟動、剛才先打開了 side panel：照 iconClick 的規則（設定關著，或點之前 side panel 就開著）才停止。 */
+  async function shouldStop(panelOpen: boolean | Promise<boolean>): Promise<boolean> {
+    const [panelOnActivation, open] = await Promise.all([
+      deps.sidePanelOnActivation() ?? deps.loadSidePanelOnActivation().catch(() => true),
+      Promise.resolve(panelOpen).catch(() => false),
+    ]);
+    return iconClick({ active: true, panelOnActivation, panelOpen: open }) === 'stop';
+  }
+
+  /** 讀者要停止（點圖示、side panel 的「停止」）：移除覆蓋層、關掉 side panel 並設回 disabled。 */
+  async function stopAndDisablePanel(tabId: number): Promise<void> {
+    await stop(tabId);
+    await deps.disableSidePanel(tabId).catch(() => {});
   }
 
   /** 點圖示（或快捷鍵）的新啟動。 */
@@ -406,5 +438,5 @@ export function createActivation(deps: ActivationDeps) {
     return stopped;
   }
 
-  return { activate, toggle, stop, stopSeries, isActive, isSeriesPending, getTab, getSeriesId, setSeriesId, handleTabUpdated, handleTabRemoved };
+  return { activate, toggle, stopFromPanel: stopAndDisablePanel, stop, stopSeries, isActive, isSeriesPending, getTab, getSeriesId, setSeriesId, handleTabUpdated, handleTabRemoved };
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Quota } from './hosted-api.ts';
-import { quotaIndicator, stripTitle } from './quota-indicator.ts';
+import { quotaIndicator } from './quota-indicator.ts';
 
 const free = (remaining: number): Quota => ({ plan: 'free', remaining });
 const subscribed = (remaining: number): Quota => ({
@@ -16,21 +16,21 @@ const subscribed = (remaining: number): Quota => ({
   renewalPriceUsd: 48,
 });
 
-describe('圖示 hover 提示、右鍵選單與「快用完」（#237）', () => {
-  it('沒用內建翻譯或沒登入：只有名字，選單與圓點維持原樣', () => {
-    expect(quotaIndicator(undefined)).toEqual({ title: 'Naruhodo 漫畫翻譯', menuTitle: '帳號與訂閱', lowQuota: false });
+describe('圖示 hover 提示的額度那行、右鍵選單與「快用完」（#237）', () => {
+  it('沒用內建翻譯或沒登入：沒有額度那行，選單與圓點維持原樣', () => {
+    expect(quotaIndicator(undefined)).toEqual({ quotaLine: undefined, menuTitle: '帳號與訂閱', lowQuota: false });
   });
 
-  it('訂閱中：第二行是本月剩餘與重置日', () => {
+  it('訂閱中：本月剩餘與重置日', () => {
     expect(quotaIndicator(subscribed(612))).toEqual({
-      title: 'Naruhodo 漫畫翻譯\n本月剩 612 頁・12/3 重置',
+      quotaLine: '本月剩 612 頁・12/3 重置',
       menuTitle: '帳號與訂閱',
       lowQuota: false,
     });
   });
 
-  it('免費：第二行是免費額度', () => {
-    expect(quotaIndicator(free(42)).title).toBe('Naruhodo 漫畫翻譯\n免費額度剩 42 頁');
+  it('免費：免費額度', () => {
+    expect(quotaIndicator(free(42)).quotaLine).toBe('免費額度剩 42 頁');
   });
 
   it('Free Pages 剩 25 頁以下是快用完：圓點變橘、選單帶上剩餘頁數', () => {
@@ -46,16 +46,10 @@ describe('圖示 hover 提示、右鍵選單與「快用完」（#237）', () =>
 
   it('用完了', () => {
     expect(quotaIndicator(subscribed(0))).toEqual({
-      title: 'Naruhodo 漫畫翻譯\n本月額度用完了・12/3 重置',
+      quotaLine: '本月額度用完了・12/3 重置',
       menuTitle: '帳號與訂閱・額度用完了',
       lowQuota: true,
     });
-    expect(quotaIndicator(free(0))).toMatchObject({ title: 'Naruhodo 漫畫翻譯\n免費額度用完了', menuTitle: '帳號與訂閱・額度用完了' });
-  });
-});
-
-describe('正在讀 Strip（條漫）的分頁（#282）', () => {
-  it('hover 提示在剩餘頁數底下多一行計費方式', () => {
-    expect(stripTitle(quotaIndicator(free(37)).title)).toBe('Naruhodo 漫畫翻譯\n免費額度剩 37 頁\n條漫：每 8 句計 1 頁');
+    expect(quotaIndicator(free(0))).toMatchObject({ quotaLine: '免費額度用完了', menuTitle: '帳號與訂閱・額度用完了' });
   });
 });
