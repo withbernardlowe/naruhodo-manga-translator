@@ -131,8 +131,10 @@ export function translateAction(pages: PageView[], translatable: boolean): 'tran
 
 /** 有辨識完、還沒翻譯的頁（沒有 key、翻譯失敗、額度用完）。 */
 export function hasUntranslated(pages: PageView[]): boolean {
-  return pages.some(({ transcript: t }) => t.state === 'done' && !t.translated);
+  return pages.some(isUntranslated);
 }
+
+const isUntranslated = ({ transcript: t }: PageView): boolean => t.state === 'done' && !t.translated;
 
 /**
  * 逐字稿上方的提示：signedOut＝「尚未登入」（內建翻譯），noKey＝「尚未設定 API key」（自備金鑰），
@@ -294,6 +296,102 @@ export function quotaView(access: TranslationAccess, quota: Quota | undefined): 
     exhausted: undefined,
     footerButton: 'translate',
   };
+}
+
+/**
+ * 重翻要花什麼：按鈕下面的小字，不另外確認（按鈕放置方案）。enough＝false 是內建翻譯的額度不夠重翻 pages 頁，按鈕停用：
+ * 重翻會先拿掉目前的譯文，翻到一半額度用完的話原本好好的譯文也沒了。
+ * stripBilling＝這個分頁的條漫依句數計頁，事先算不出要扣幾頁，只說會重新計。
+ */
+export function chargeNote(
+  access: TranslationAccess,
+  quota: Quota | undefined,
+  stripBilling: boolean,
+  pages: number,
+): { text: string; enough: boolean } | undefined {
+  if (access.mode === 'ownKey') return { text: '會再呼叫一次 API，費用另計', enough: true };
+  if (!access.signedIn) return undefined;
+  if (stripBilling) return { text: '條漫依句數重新計頁', enough: true };
+  if (!quota) return { text: `會再扣 ${pageCount(pages)} 頁`, enough: true };
+  if (quota.remaining < pages) return { text: `額度剩 ${pageCount(quota.remaining)} 頁，不夠重新翻譯這 ${pageCount(pages)} 頁`, enough: false };
+  const left = pageCount(quota.remaining);
+  return {
+    text: quota.plan === 'subscribed' ? `會再扣 ${pageCount(pages)} 頁（本月剩 ${left} 頁）` : `會再用掉 ${pageCount(pages)} 頁免費額度（剩 ${left} 頁）`,
+    enough: true,
+  };
+}
+
+/** 剩餘頁數那一行（quotaView 的 line）。 */
+export type QuotaLineView = NonNullable<QuotaView['line']>;
+
+/**
+ * 底部固定列（按鈕放置方案）：有事才出現，最多一顆按鈕（額度那行的「查看方案」小字連結不算）。
+ * quota 只在快用完、用完（warn）時上來，plans＝同一行右邊的 primary「查看方案」；row＝進度，或「N 頁還沒翻譯」＋「翻譯此頁」。
+ */
+export interface FooterView {
+  quota: QuotaLineView | undefined;
+  plans: boolean;
+  row: { kind: 'translating' | 'analyzing' } | { kind: 'translate'; untranslated: number } | undefined;
+}
+
+/** 逐字稿最下面的「這個畫面」區塊：秒數、平常的剩餘額度、條漫計頁、回報翻譯問題、重新翻譯。 */
+export interface EndView {
+  summary: string | undefined;
+  quota: QuotaLineView | undefined;
+  strip: string | undefined;
+  /** 「回報翻譯問題」：畫面上有翻好的頁才有東西可以回報。 */
+  report: boolean;
+  /** 整個畫面的「重新翻譯」；note 是按鈕下面的小字。 */
+  retranslate: { note: string | undefined; disabled: boolean } | undefined;
+}
+
+/**
+ * 側邊欄的按鈕放哪裡（按鈕放置方案）：固定列只放當下唯一要做的事與進度，其他收到最下面。end 是 undefined＝最下面沒有東西可放。
+ */
+export function panelLayout({
+  pages,
+  access,
+  translatable,
+  quota,
+  strip,
+}: {
+  pages: PageView[];
+  access: TranslationAccess;
+  /** canTranslate 的結果。 */
+  translatable: boolean;
+  quota: Quota | undefined;
+  strip: StripView | undefined;
+}): { footer: FooterView | undefined; end: EndView | undefined } {
+  const q = quotaView(access, quota);
+  const status = overallStatus(pages, access.mode);
+  const action = q.footerButton === 'translate' ? translateAction(pages, translatable) : undefined;
+  // 翻譯中不放「翻譯此頁」，免得連按重複扣頁；辨識中別的頁已經可以翻時照樣放
+  const row: FooterView['row'] =
+    status?.kind === 'translating'
+      ? { kind: 'translating' }
+      : action === 'translate'
+        ? { kind: 'translate', untranslated: pages.filter(isUntranslated).length }
+        : pages.some((p) => p.transcript.state === 'analyzing')
+          ? { kind: 'analyzing' }
+          : undefined;
+  const footerQuota = q.line?.warn ? q.line : undefined;
+  const plans = q.footerButton === 'plans';
+  const footer = footerQuota || plans || row ? { quota: footerQuota, plans, row } : undefined;
+
+  const charge = action === 'retranslate' ? chargeNote(access, quota, strip !== undefined, pages.length) : undefined;
+  const end: EndView = {
+    summary: status?.kind === 'summary' ? status.text : undefined,
+    quota: q.line && !q.line.warn ? q.line : undefined,
+    strip: strip?.line,
+    report: pages.some(({ transcript: t }) => t.state === 'done' && t.translated),
+    retranslate:
+      action === 'retranslate'
+        ? // 整個畫面從辨識重來，所以小字要先說清楚；過時提示的單頁重翻沿用辨識結果，只寫扣多少
+          { note: charge && (charge.enough ? `從辨識開始重來、不用快取；${charge.text}` : charge.text), disabled: charge?.enough === false }
+        : undefined,
+  };
+  const empty = !end.summary && !end.quota && !end.strip && !end.report && !end.retranslate;
+  return { footer, end: empty ? undefined : end };
 }
 
 /** 付款確認後 side panel 顯示一次的「已訂閱」，帶讀者付的扣款週期。 */

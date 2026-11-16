@@ -109,7 +109,7 @@ test('在別頁改了某頁用到的條目，翻回那頁（快取）出現過�
   await page.bringToFront();
   await page.keyboard.press('ArrowRight');
   await expect(staleHint(panel)).toContainText('角色與用語已更新');
-  await expect(panel.getByRole('contentinfo', { name: '狀態列' })).toContainText('角色與用語已更新');
+  await expect(panel.getByRole('region', { name: '這個畫面' })).toContainText('角色與用語已更新');
 });
 
 test('匯出 JSON 真的下載得到檔案，在乾淨的 profile 選檔匯入後 Notes 與快取都在', async ({ context, sw, extensionId, mockSite }) => {
