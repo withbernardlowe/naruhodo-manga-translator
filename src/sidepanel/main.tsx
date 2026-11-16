@@ -25,6 +25,12 @@ import { dismissHostedHint, onboardingUrl, watchHostedHint, watchOnboarding, typ
 import { DEFAULT_PAGE_MODE, savePageMode, watchPageMode, type PageMode } from '../shared/page-mode.ts';
 import { dismissSubscribedNotice, watchSubscribedNotice } from '../shared/payment-return.ts';
 import { DEFAULT_SIDE_PANEL_ON_ACTIVATION, saveSidePanelOnActivation, watchSidePanelOnActivation } from '../shared/side-panel-setting.ts';
+import {
+  DEFAULT_TRANSCRIPT_DISPLAY,
+  saveTranscriptDisplay,
+  watchTranscriptDisplay,
+  type TranscriptDisplay,
+} from '../shared/transcript-display.ts';
 import { saveTranslationMode, type TranslationMode } from '../shared/translation-mode.ts';
 import { Badge, Button, RadioCard, Switch } from '../ui/components.tsx';
 import { problemReport, type ProblemReportContext } from '../shared/problem-report.ts';
@@ -342,6 +348,17 @@ function usePageMode(): [PageMode, (mode: PageMode) => void] {
   return [mode, choose];
 }
 
+/** 逐字稿的顯示方式與切換函式；跟 Page Mode 一樣全域記住，別的 side panel 切了也跟著變。 */
+function useTranscriptDisplay(): [TranscriptDisplay, (display: TranscriptDisplay) => void] {
+  const [display, setDisplay] = useState<TranscriptDisplay>(DEFAULT_TRANSCRIPT_DISPLAY);
+  useEffect(() => watchTranscriptDisplay(setDisplay), []);
+  const choose = (value: TranscriptDisplay) => {
+    setDisplay(value);
+    void saveTranscriptDisplay(value);
+  };
+  return [display, choose];
+}
+
 /** 名稱輸入（新增作品／取名字）；送出空白不算。 */
 function NameForm({ label, submit, initial = '', onDone }: { label: string; submit: string; initial?: string; onDone: (name: string | undefined) => void }) {
   const [name, setName] = useState(initial);
@@ -627,6 +644,7 @@ function App({ tabId }: { tabId: number | undefined }) {
   const [modelStatus, setModelStatus] = useState<ModelStatus>({ state: 'idle' });
   const [hasKey, setHasKey] = useState(true);
   const [pageMode, choosePageMode] = usePageMode();
+  const [transcriptDisplay, chooseTranscriptDisplay] = useTranscriptDisplay();
   const [hovered, setHovered] = useState<LineRef | undefined>(undefined);
   const consent = useDataConsent();
   const translationMode = useTranslationMode();
@@ -685,6 +703,8 @@ function App({ tabId }: { tabId: number | undefined }) {
       hovered={hovered}
       logoSrc="icons/naruhodo-small.svg"
       onPageModeChange={choosePageMode}
+      transcriptDisplay={transcriptDisplay}
+      onTranscriptDisplayChange={chooseTranscriptDisplay}
       onScan={() => void send({ type: 'panel:scan', tabId: tabId! })}
       onTranslate={(pageHash) => void send({ type: 'panel:translate', tabId: tabId!, ...(pageHash === undefined ? {} : { pageHash }) })}
       onRetranslate={() => void send({ type: 'panel:retranslate', tabId: tabId! })}

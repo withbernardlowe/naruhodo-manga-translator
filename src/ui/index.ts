@@ -5,6 +5,6 @@
  */
 export { SidePanel, type SidePanelProps } from './side-panel.tsx';
 export { Badge, Button, Callout, PageHeader, Progress, RadioCard, RevealChip, SegmentedControl, Switch } from './components.tsx';
-export { DisplaySwitch, Transcript } from './transcript.tsx';
+export { Transcript, TranscriptHeading } from './transcript.tsx';
 export { SignIn, type SignInProps } from './sign-in.tsx';
 export { sidePanelView } from './view.ts';

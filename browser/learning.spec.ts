@@ -4,7 +4,7 @@
  * OCR 用 FakeEngine 重播（ADR 0007），讀音來自 kuromoji、譯文來自 FakeTranslator（ground truth）。
  */
 import type { Locator, Page } from '@playwright/test';
-import { activateOnMockSite, expect, test } from './fixtures.ts';
+import { activateOnMockSite, expect, openSidePanel, test } from './fixtures.ts';
 import { overlayTexts, pageMode, shownTranslations } from './overlay-helpers.ts';
 
 test.use({ viewport: null, fakeTranslator: true });
@@ -17,23 +17,46 @@ const firstTranscript = (panel: Page): Locator =>
 
 const level = (panel: Page, name: string) => panel.getByRole('group', { name: '顯示層級' }).getByRole('button', { name, exact: true });
 
+/** 「逐字稿」標題列的顯示選單按鈕（U15）；名字帶著目前的設定，例如「逐字稿顯示：加上讀音」。 */
+const displayMenu = (panel: Page): Locator => panel.getByRole('button', { name: /^逐字稿顯示/ });
+
+/** 打開顯示選單選一個層級；選完選單自己關上。 */
+async function chooseLevel(panel: Page, name: string): Promise<void> {
+  await displayMenu(panel).click();
+  await level(panel, name).click();
+  await expect(displayMenu(panel)).toHaveAccessibleName(`逐字稿顯示：${name}`);
+  await expect(panel.getByRole('group', { name: '顯示層級' })).toHaveCount(0);
+}
+
 /** 逐字稿一行裡的日文原文（不含徽章與譯文）。 */
 const original = (line: Locator): Locator => line.locator('[lang="ja"]').first();
 /** 逐字稿一行裡的中文譯文。 */
 const translation = (line: Locator): Locator => line.locator('[lang="zh-Hant"]');
 
-test('閱讀時切換三種顯示層級，逐字稿內容正確', async ({ context, sw, extensionId, mockSite }) => {
-  const { panel } = await activateOnMockSite({ context, sw, extensionId, mockSite });
-  const transcript = firstTranscript(panel);
-  const greeting = transcript.getByRole('listitem').filter({ hasText: GREETING_ZH });
+test('閱讀時從逐字稿顯示選單切換三種層級：逐字稿內容正確、頁面不變、重開 side panel 還記得', async ({ context, sw, extensionId, mockSite }) => {
+  const activated = await activateOnMockSite({ context, sw, extensionId, mockSite });
+  let panel = activated.panel;
+  let transcript = firstTranscript(panel);
+  let greeting = transcript.getByRole('listitem').filter({ hasText: GREETING_ZH });
   await expect(greeting).toBeVisible();
+  /** 頁面上看得到問候句的中文譯文（閱讀模式的頁面）。 */
+  const greetingShownOnPage = async () =>
+    (await overlayTexts(activated.page)).some((t) => t.text.replace(/\s/g, '') === GREETING_ZH) && (await shownTranslations(activated.page).count()) > 0;
+  await expect.poll(greetingShownOnPage).toBe(true);
 
-  // 只有三個層級（「只看日文」由學習取代）；上方不再有ルビ說明框
+  // 選單關著時，按鈕上就寫著目前的層級；打開後才有三個層級（「只看日文」由學習取代），並說明只改側邊欄
+  await expect(displayMenu(panel)).toHaveAccessibleName('逐字稿顯示：加上讀音');
+  await expect(panel.getByRole('group', { name: '顯示層級' })).toHaveCount(0);
+  await displayMenu(panel).click();
   await expect(panel.getByRole('group', { name: '顯示層級' }).getByRole('button')).toHaveText(['只看譯文', '原文＋譯文', '加上讀音']);
+  await expect(panel.getByText('只改側邊欄的逐字稿，漫畫頁面不變')).toBeVisible();
+  await expect(level(panel, '加上讀音')).toHaveAttribute('aria-pressed', 'true');
+  // Escape 關上選單
+  await panel.keyboard.press('Escape');
+  await expect(panel.getByRole('group', { name: '顯示層級' })).toHaveCount(0);
   await expect(panel.getByText('ルビ為 LLM 推測')).toHaveCount(0);
 
   // 預設：加上讀音（原文帶ルビ＋譯文）；讀音全是推測，不另外標徽章
-  await expect(level(panel, '加上讀音')).toHaveAttribute('aria-pressed', 'true');
   await expect(original(greeting).locator('rt')).toHaveText(['きょう', 'はや']);
   await expect(original(greeting).locator('ruby').first()).toContainText('今日');
   await expect(transcript.getByText('讀音為推測')).toHaveCount(0);
@@ -42,22 +65,31 @@ test('閱讀時切換三種顯示層級，逐字稿內容正確', async ({ conte
   await expect(original(greeting)).toHaveCSS('font-size', '17px');
   await expect(translation(greeting)).toHaveCSS('font-size', '14px');
 
-  await level(panel, '原文＋譯文').click();
-  await expect(level(panel, '原文＋譯文')).toHaveAttribute('aria-pressed', 'true');
-  await expect(level(panel, '加上讀音')).toHaveAttribute('aria-pressed', 'false');
+  await chooseLevel(panel, '原文＋譯文');
   await expect(transcript.locator('rt')).toHaveCount(0);
   await expect(original(greeting)).toContainText('今日は早いね');
   await expect(translation(greeting)).toHaveText(GREETING_ZH);
 
-  await level(panel, '只看譯文').click();
+  await chooseLevel(panel, '只看譯文');
   await expect(transcript.locator('[lang="ja"]')).toHaveCount(0);
   await expect(translation(greeting)).toHaveText(GREETING_ZH);
+  // 只改側邊欄：頁面上照樣顯示中文譯文（頁面其他 Page 可能還在陸續翻好，所以不比數量）
+  expect(await greetingShownOnPage()).toBe(true);
+
+  // 重開 side panel：層級記得（跟 Page Mode 一樣存在 chrome.storage.local）
+  await panel.close();
+  panel = await openSidePanel(context, extensionId, activated.tabId);
+  transcript = firstTranscript(panel);
+  greeting = transcript.getByRole('listitem').filter({ hasText: GREETING_ZH });
+  await expect(displayMenu(panel)).toHaveAccessibleName('逐字稿顯示：只看譯文');
+  await expect(translation(greeting)).toHaveText(GREETING_ZH);
+  await expect(transcript.locator('[lang="ja"]')).toHaveCount(0);
 
   // 整頁一起切：第 2 頁也是
   const second = panel.getByRole('list', { name: '逐字稿' }).nth(1);
   await expect(second.getByRole('listitem').first()).toBeVisible();
   await expect(second.locator('[lang="ja"]')).toHaveCount(0);
-  await level(panel, '加上讀音').click();
+  await chooseLevel(panel, '加上讀音');
   await expect(second.locator('rt').first()).toBeVisible();
 });
 
@@ -70,10 +102,14 @@ test('學習時逐字稿藏譯文，滑過「譯」區塊才出現；振り仮�
   const greeting = transcript.getByRole('listitem').nth(index);
 
   await pageMode(panel, '學習').click();
-  // 沒有 Display Level 切換，改成振り仮名 Switch（預設開）
+  // 選單按鈕還在原位，只換了字；選單裡沒有 Display Level，只有振り仮名 Switch（預設開）
+  await expect(displayMenu(panel)).toHaveAccessibleName('逐字稿顯示：讀音：開');
+  await displayMenu(panel).click();
   await expect(panel.getByRole('group', { name: '顯示層級' })).toHaveCount(0);
   const furigana = panel.getByRole('switch', { name: '顯示讀音' });
   await expect(furigana).toBeChecked();
+  await panel.keyboard.press('Escape');
+  await expect(furigana).toHaveCount(0);
   await expect(original(greeting).locator('rt')).toHaveText(['きょう', 'はや']);
   // 譯文藏在「譯」區塊後面
   await expect(transcript).not.toContainText(GREETING_ZH);
@@ -86,18 +122,21 @@ test('學習時逐字稿藏譯文，滑過「譯」區塊才出現；振り仮�
   await expect(transcript).not.toContainText(GREETING_ZH);
   await expect(reveal).toContainText('滑過這裡看譯文');
 
-  // 關掉振り仮名：ルビ不見，原文還在、譯文仍藏著
+  // 關掉振り仮名：ルビ不見，原文還在、譯文仍藏著；開關不會關上選單
+  await displayMenu(panel).click();
   await furigana.click();
   await expect(furigana).not.toBeChecked();
   await expect(transcript.locator('rt')).toHaveCount(0);
   await expect(original(greeting)).toContainText('今日は早いね');
   await expect(transcript).not.toContainText(GREETING_ZH);
+  await expect(displayMenu(panel)).toHaveAccessibleName('逐字稿顯示：讀音：關');
   await furigana.click();
   await expect(original(greeting).locator('rt')).toHaveText(['きょう', 'はや']);
+  await panel.keyboard.press('Escape');
 
-  // 切回閱讀：Display Level 回來，譯文直接顯示
+  // 切回閱讀：Display Level 回來（還是原本的加上讀音），譯文直接顯示
   await pageMode(panel, '閱讀').click();
-  await expect(level(panel, '加上讀音')).toHaveAttribute('aria-pressed', 'true');
+  await expect(displayMenu(panel)).toHaveAccessibleName('逐字稿顯示：加上讀音');
   await expect(translation(greeting)).toHaveText(GREETING_ZH);
 });
 

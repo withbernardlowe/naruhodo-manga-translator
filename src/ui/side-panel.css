@@ -69,9 +69,29 @@
 /* 振り仮名用朱色（白底與高亮底都過 WCAG AA） */
 :where(.naru-side-panel) rt, :where(.naru-side-panel) .reading { color: var(--naru-ruby); }
 :where(.naru-side-panel) .reading { display: block; font-size: 0.6em; line-height: 1.4; }
-:where(.naru-side-panel) .levels { margin: var(--naru-space-2) 0; }
-/* Page Mode 分頁：延伸到 panel 左右兩邊，下面整片內容都屬於這個模式 */
-:where(.naru-side-panel) main > .naru-tabs { margin: 0 calc(-1 * var(--naru-space-3)) var(--naru-space-3); padding: 0 var(--naru-space-3); }
+/*
+ * 兩個切換各自標出管哪裡（U15）：「漫畫頁面」一行（頁面圖示＋名稱＋閱讀／學習），
+ * 「逐字稿」標題列（側邊欄圖示＋名稱＋顯示選單）。兩行同樣的排法，名稱就是範圍。
+ */
+:where(.naru-side-panel) .page-mode, :where(.naru-side-panel) .transcript-head {
+  display: flex; align-items: center; gap: var(--naru-space-2); min-width: 0;
+  font-size: var(--naru-text-small); font-weight: 700; color: var(--naru-ink-2);
+}
+:where(.naru-side-panel) .page-mode { margin: 0 0 var(--naru-space-3); }
+:where(.naru-side-panel) .page-mode > svg, :where(.naru-side-panel) .transcript-head > svg { flex: none; }
+:where(.naru-side-panel) .page-mode__label { flex: 1 1 auto; min-width: 0; }
+:where(.naru-side-panel) .page-mode > .naru-seg { flex: none; width: 128px; }
+:where(.naru-side-panel) .transcript-head { position: relative; margin: var(--naru-space-3) 0 var(--naru-space-1); }
+:where(.naru-side-panel) .transcript-head__spacer { flex: 1 1 0; }
+:where(.naru-side-panel) .transcript-head__menu { flex: none; gap: var(--naru-space-1); font-weight: 500; }
+/* 顯示選單：從標題列下面長出來，寬度跟標題列一樣，不會超出 panel */
+:where(.naru-side-panel) .transcript-menu {
+  position: absolute; left: 0; right: 0; top: calc(100% + var(--naru-space-1)); z-index: 2;
+  display: flex; flex-direction: column; gap: var(--naru-space-2); padding: var(--naru-space-3);
+  background: var(--naru-surface); border: 1px solid var(--naru-line-strong); border-radius: var(--naru-radius-md);
+  box-shadow: var(--naru-shadow-2); font-weight: 400; color: var(--naru-ink);
+}
+:where(.naru-side-panel) .transcript-menu__note { margin: 0; font-size: var(--naru-text-caption); color: var(--naru-ink-2); }
 :where(.naru-side-panel) .untranslated { color: var(--naru-ink-3); font-size: var(--naru-text-caption); }
 :where(.naru-side-panel) .unreadable { color: var(--naru-ink-3); text-decoration: line-through; }
 :where(.naru-side-panel) .unreadable-label { color: var(--naru-ink-3); font-size: var(--naru-text-caption); }
@@ -139,7 +159,7 @@
 /* 內建翻譯的剩餘頁數（#92）；剩 5 頁以下用警告色 */
 :where(.naru-side-panel) .quota-row { font-size: var(--naru-text-small); color: var(--naru-ink-2); }
 :where(.naru-side-panel) .quota-row--warn { color: var(--naru-warn); }
-/* Transcript 上方的作品卡（#186）：白底細框（跟灰色的顯示層級切換分開），資訊是灰字，按鈕是 naru-btn；長名稱截斷，不撐出水平捲軸 */
+/* Transcript 上方的作品卡（#186）：白底細框（跟灰色的 Page Mode 切換分開），資訊是灰字，按鈕是 naru-btn；長名稱截斷，不撐出水平捲軸 */
 :where(.naru-side-panel) .series-card {
   display: flex; flex-direction: column; gap: 2px; min-width: 0;
   padding: var(--naru-space-2) var(--naru-space-3); margin: 0 0 var(--naru-space-2);
