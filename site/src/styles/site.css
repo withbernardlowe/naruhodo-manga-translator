@@ -197,6 +197,12 @@ html[data-locale="en"] .lang-toggle [data-set-locale="en"] { background: var(--n
   /* 品牌只留 logo，名字仍留給螢幕閱讀器 */
   .brand-name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   .site-header .wrap, .nav { gap: var(--naru-space-2); }
+  /*
+   * 頁首四樣東西（logo、討論區、語言切換、安裝）在 360px 寬要排得下：邊距與內距各縮一階。
+   * 字寬看平台，Linux／Android 的預設字型比 Windows 寬，英文版不縮會撐出約 20px
+   */
+  .site-header .wrap { padding: 0 var(--naru-space-4); }
+  .nav a.nav-discussions, .nav .lang-toggle a, .nav .btn-small { padding: var(--naru-space-1) var(--naru-space-2); }
   .hero h1 { font-size: var(--naru-text-heading); }
   .legal-page { padding: var(--naru-space-5); }
   .site-footer .copyright { margin-left: 0; }
