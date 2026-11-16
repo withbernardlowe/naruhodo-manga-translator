@@ -15,9 +15,12 @@ a { color: var(--naru-accent); }
 .wrap { max-width: 1040px; margin: 0 auto; padding: 0 var(--naru-space-5); }
 .narrow { max-width: 760px; margin: 0 auto; }
 
-/* 法律文件只有一個網址，頁首頁尾兩種語言都輸出，藏起不是讀者語言的那一份（Base.astro） */
+/*
+ * 法律文件只有一個網址，頁首頁尾兩種語言都輸出，藏起不是讀者語言的那一份（Base.astro）。
+ * !important：連結自己的 display（例如頁首討論區的 inline-flex）選擇器一樣重又寫在後面，會把它蓋掉
+ */
 html[data-locale="en"] [data-l="zh-tw"],
-html[data-locale="zh-tw"] [data-l="en"] { display: none; }
+html[data-locale="zh-tw"] [data-l="en"] { display: none !important; }
 
 /* 未定案的數字（copy.ts 的 [TBD]） */
 .tbd {
@@ -58,6 +61,14 @@ html[data-locale="zh-tw"] [data-l="en"] { display: none; }
 .nav a { white-space: nowrap; }
 .nav a:not(.btn) { color: var(--naru-ink-2); text-decoration: none; }
 .nav a.btn-primary { color: var(--naru-on-accent); }
+/* 討論區：比旁邊的純文字連結顯眼（圖示＋底色），但比「安裝外掛」低一階 */
+.nav a.nav-discussions {
+  display: inline-flex; align-items: center; gap: var(--naru-space-1);
+  padding: var(--naru-space-1) var(--naru-space-3);
+  font-weight: 700; color: var(--naru-ink);
+  background: var(--naru-accent-weak); border-radius: var(--naru-radius-pill);
+}
+.nav a.nav-discussions:hover { background: var(--naru-line); }
 .lang-toggle { display: inline-flex; overflow: hidden; font-size: var(--naru-text-caption); border: 1px solid var(--naru-line-strong); border-radius: var(--naru-radius-pill); }
 .nav .lang-toggle a { padding: var(--naru-space-1) var(--naru-space-3); }
 html[data-locale="zh-tw"] .lang-toggle [data-set-locale="zh-tw"],
@@ -183,6 +194,8 @@ html[data-locale="en"] .lang-toggle [data-set-locale="en"] { background: var(--n
 @media (max-width: 760px) {
   .steps, .plans, .start-steps { grid-template-columns: 1fr; }
   .hide-sm { display: none; }
+  /* 品牌只留 logo，名字仍留給螢幕閱讀器 */
+  .brand-name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   .site-header .wrap, .nav { gap: var(--naru-space-2); }
   .hero h1 { font-size: var(--naru-text-heading); }
   .legal-page { padding: var(--naru-space-5); }

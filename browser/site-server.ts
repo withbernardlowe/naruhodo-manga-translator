@@ -1,6 +1,6 @@
 /**
  * `npm run site:build` 產生的 site/dist 的靜態 server（跟正式部署一樣，目錄的網址回傳裡面的 index.html）。
- * 首頁展示（site-demo.spec.ts）與錄 Practice Spread 的 OCR（record-practice-spread.spec.ts）用。
+ * 首頁展示（site-demo.spec.ts）、頁首（site-header.spec.ts）與錄 Practice Spread 的 OCR（record-practice-spread.spec.ts）用。
  */
 import { readFile } from 'node:fs/promises';
 import { createServer, type Server } from 'node:http';
