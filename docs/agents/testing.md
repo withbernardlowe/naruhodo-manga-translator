@@ -6,12 +6,32 @@
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | unit | Is the rule computed right? | `npm test` | no | — | — | < 15 s | every change |
 | Worker | Does the Worker's HTTP API answer right? | `npm test` (vitest project `worker`) | no | — | Anthropic faked with `vi.spyOn(fetch)` | shares unit's 15 s | every change |
-| browser test | Do the pieces connect? | `npm run test:browser` | real (mock site) | FakeEngine (replayed) | FakeTranslator (in the extension, or in the local Worker) | none: much of the extension can only be checked in a browser | every change that touches the extension's behaviour |
+| browser test | Do the pieces connect? | `npm run test:browser` | real (mock site) | FakeEngine (replayed) | FakeTranslator (in the extension, or in the local Worker) | none: much of the extension can only be checked in a browser | locally: only the specs related to the change (below); CI: all of them on every PR push |
 | e2e | Still right with the real models? | `npm run e2e` | real (mock site) | real models (wasm) | FakeTranslator | none; run only when needed | see below |
 | smoke | Does the real Claude API still work? | `npm run smoke` | real (mock site) | real models | real Claude API (direct, and through the local Worker) | — | only when the Claude integration changes; costs money; the key comes from 1Password (below) |
 | smoke:paddle | Do a real Paddle sandbox checkout (quarterly and yearly) and a refund reach the Worker? | `npm run smoke:paddle` | real (mock site + local product site) | FakeEngine | — (Paddle sandbox: real checkout overlay, test card, webhook through a cloudflared tunnel) | — | only when the Paddle integration changes; needs `~/.config/naruhodo/paddle-sandbox.env`; takes about 15 minutes (the sandbox approves the refund after ~8); a CAPTCHA on the payment screen means stop and ask the developer |
 
 A layer over its budget is a signal that tests have drifted up: find the ones that belong lower.
+
+## Which browser tests to run locally
+
+The full browser suite takes minutes, so it runs only on CI (the `browser` job, split into 4 shards, on every PR push). Locally, run only the spec files that exercise what you changed:
+
+```
+npm run test:browser -- browser/page-turn.spec.ts browser/overlay.spec.ts
+```
+
+`--` hands the files to `playwright test`; the script still builds the e2e extension and the site first. To narrow to one test, add `-g "<part of its title>"`.
+
+Picking the files:
+
+- The spec of the feature you touched. Files are named by feature (`page-turn`, `transcript`, `series`, `sidepanel-layout`, ...).
+- The specs that use what you changed: `grep -rln "<function, message type, CSS class or UI text>" browser/`.
+- A browser test you added or changed: its own file.
+- A shared piece (`browser/fixtures.ts`, `browser/mock-site/`, messages between background and content script, `scripts/build.ts`, the manifest) reaches many specs: run the two or three that lean on it hardest and leave the rest to CI. Don't fall back to the full suite.
+- Docs only, or a change whose behaviour only unit or Worker tests reach: no browser test locally.
+
+Done means the CI `browser` job is green, not only your local picks: before reporting a PR done (or marking an integration branch's draft PR ready), check CI. A failure there in a spec you did not run is yours to fix, the same as a local failure. In implement-spec, ticket sessions run only their related specs; the full suite runs on CI when the integration branch's PR is pushed.
 
 ## The real Claude key (smoke, local Worker)
 
@@ -51,7 +71,7 @@ A bug reproduced on a real manga site ([real-site debugging](real-site-debugging
 - When a change touches `src/offscreen/` (models, OCR pipeline, Spread splitting, cropping).
 - After `npm run record:ocr`.
 
-Ticket sessions and ordinary changes run unit + browser test only.
+Ticket sessions and ordinary changes run unit + their related browser tests only.
 
 ## FakeEngine and the recording
 
@@ -65,10 +85,12 @@ FakeEngine is near-instant. A test that relies on OCR being slow (the side panel
 
 Browser tests have no retries: FakeEngine is deterministic, so a test that fails then passes points at a real race in the extension or the test. Fix it, or mark it `test.fixme(...)` with the reason and open an issue; do not add retries. e2e retries once, because real OCR speed depends on machine load.
 
-Load is the other cause, and it is not a race: when every failure is a timeout and a different set of tests fails each run, the machine is overloaded. Two things keep it from happening:
+Load is the other cause, and it is not a race: when every failure is a timeout and a different set of tests fails each run, the machine is overloaded. These keep it from happening:
 
-- **Four workers locally** (`playwright.config.ts`). With the Playwright default (8 on a 16-thread machine) each test took twice as long, the whole run was no shorter, and 5 to 7 different tests timed out per run; with 4 the same code passed. Don't pass a higher `--workers`. CI keeps the Playwright default.
-- **One Playwright run at a time on this machine** (`scripts/test-lock.ts`): a second run (another worktree's browser test, e2e, smoke or `record:ocr`) prints who it is waiting for and starts when that run ends. So a run that seems stuck at the start is queued, not hung; don't kill the other run. `smoke:paddle` does not take the lock: start it only when nothing else is running.
+- **Only the related specs locally** (above), so a local run is short and rarely overlaps another worktree's.
+- **Four workers locally** (`playwright.config.ts`). With the Playwright default (8 on a 16-thread machine) each test took twice as long, the whole run was no shorter, and 5 to 7 different tests timed out per run; with 4 the same code passed. Don't pass a higher `--workers`. CI keeps the Playwright default per machine and instead splits the run across 4 machines (`--shard`, the `browser` job's matrix in `.github/workflows/ci.yml`).
+
+There is no lock between runs (an interrupted run used to leave it held), so worktrees can run browser tests at the same time. The extension connects to the local Worker at a port baked in at build time: `npm run build:e2e` picks a free one in 8788–8887, starting from a point derived from the worktree's path, and writes it to `dist/e2e-worker-port`, which `browser/worker.ts` reads (`pickE2eWorkerPort` in `scripts/build.ts`). If another run takes that port between the build and the Worker starting, the run fails at once with `已經有東西在跑`; rerun it, and the build picks another port. Every concurrent run still adds load.
 
 A debug Chrome doing real-site work at the same time still adds load; if a full run times out while it is busy, rerun when it is idle before treating the failure as a race.
 

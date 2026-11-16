@@ -16,7 +16,7 @@ Single-context: one `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/ag
 
 ## Testing
 
-Unit and browser tests on every change; e2e (real OCR) only before an integration branch's PR or when `src/offscreen/` changes, not in each implement-spec ticket session. Where a new test goes and how FakeEngine replays the models: `docs/agents/testing.md`.
+Unit tests on every change. Browser tests: locally only the spec files related to the change (`npm run test:browser -- browser/<feature>.spec.ts`), never the full suite; CI runs all of them, and done means CI's `browser` job is green. e2e (real OCR) only before an integration branch's PR or when `src/offscreen/` changes, not in each implement-spec ticket session. Where a new test goes and how FakeEngine replays the models: `docs/agents/testing.md`.
 
 ## Real-site debugging
 

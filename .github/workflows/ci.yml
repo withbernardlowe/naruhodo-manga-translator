@@ -1,4 +1,4 @@
-# 型別檢查＋單元測試＋網站 build；browser test 另一個 job（FakeEngine，不下載模型）。
+# 型別檢查＋單元測試＋網站 build；browser test 另一個 job（FakeEngine，不下載模型），切 4 份平行跑。
 # e2e 不在這裡跑：要下載模型，而且受機器速度影響。
 name: CI
 
@@ -22,8 +22,15 @@ jobs:
       - run: npm test
       - run: npm run site:build
 
+  # 切成 4 台機器各跑一份（Playwright --shard）：fullyParallel 讓切分以單一測試為單位，每份的測試數差不多。
+  # 每份各自 npm ci、裝 Chromium、build、起 wrangler dev，約 45 秒的固定成本，所以份數再多也不會更快多少。
+  # fail-fast: false：一份紅了其他份照跑完，一次看到所有失敗的測試。
   browser:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -34,11 +41,13 @@ jobs:
       # fixtures 用 Playwright 內建的 Chromium（channel: 'chromium'）載入外掛
       - run: npx playwright install --with-deps chromium
       # 會先 build:e2e、site:build；globalSetup 用 wrangler dev 起本機 Worker
-      - run: npm run test:browser
+      # `--` 後面的參數接在 test:browser 最後的 playwright test 上
+      - run: npm run test:browser -- --shard=${{ matrix.shard }}/4
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: browser-test-results
+          # artifact 名稱在同一次 run 裡不能重複
+          name: browser-test-results-${{ matrix.shard }}
           path: test-results/
           retention-days: 7
 

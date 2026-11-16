@@ -7,7 +7,9 @@
  *   - background（SW）、sidepanel、onboarding、account、offscreen：ES module
  *   - content：IIFE。scripting.executeScript({files}) 只能注入傳統 script，不能有 import。
  */
+import { createHash } from 'node:crypto';
 import { copyFile, cp, mkdir, readdir, rm, writeFile } from 'node:fs/promises';
+import { createServer } from 'node:net';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import * as esbuild from 'esbuild';
@@ -58,18 +60,56 @@ const E2E_STATIC_FILES: [string, string][] = [
 /** e2e build 才有：FakeEngine 認頁用的合成圖（src/offscreen/fake-engine.ts）。 */
 const E2E_STATIC_DIRS: [string, string][] = [['testdata/synthetic/out', 'synthetic']];
 
-/** browser test 與 smoke 在這個 port 啟動 wrangler dev（browser/worker.ts），e2e build 連它。 */
-export const E2E_WORKER_PORT = 8788;
-
 /**
- * Hosted Translation 的 Worker 網址（worker/）：e2e build 連測試啟動的 wrangler dev；debug build 連開發者自己跑的
- * `npm run worker:dev`（wrangler dev --env dev，預設 port 8787）；正式 build 連 production 的 Worker（worker/wrangler.jsonc 的 routes）。
+ * browser test 與 smoke 啟動 wrangler dev（browser/worker.ts）的 port，e2e build 寫死連它。
+ * `npm run build:e2e` 在 E2E_WORKER_PORTS 裡挑一個沒人用的（pickE2eWorkerPort），記在 E2E_WORKER_PORT_FILE，
+ * 讓不同 worktree 同時跑 browser test 時各用各的 Worker。
  */
-export function hostedApiUrl({ e2e, debug }: { e2e: boolean; debug: boolean }): string {
-  return e2e ? `http://localhost:${E2E_WORKER_PORT}` : debug ? 'http://localhost:8787' : 'https://api.naruhodo.page';
+export const E2E_WORKER_PORTS = { first: 8788, count: 100 };
+export const E2E_WORKER_PORT_FILE = join(root, 'dist', 'e2e-worker-port');
+
+function isPortFree(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const server = createServer();
+    server.once('error', () => resolve(false));
+    server.listen(port, '127.0.0.1', () => server.close(() => resolve(true)));
+  });
 }
 
-export async function build({ e2e, debug = false, outDir }: { e2e: boolean; debug?: boolean; outDir: string }): Promise<void> {
+/**
+ * 從這個 worktree 自己的起點往後找第一個空的 port：起點由 repo 路徑決定，兩個 worktree 同時 build
+ * （Worker 都還沒起來、port 都還空著）時通常也不會挑到同一個。
+ */
+export async function pickE2eWorkerPort(repoRoot = root, isFree = isPortFree): Promise<number> {
+  const { first, count } = E2E_WORKER_PORTS;
+  const start = createHash('sha1').update(repoRoot).digest().readUInt16BE(0) % count;
+  for (let i = 0; i < count; i++) {
+    const port = first + ((start + i) % count);
+    if (await isFree(port)) return port;
+  }
+  throw new Error(`port ${first}–${first + count - 1} 都有人在用，起不了 browser test 的本機 Worker`);
+}
+
+/**
+ * Hosted Translation 的 Worker 網址（worker/）：e2e build 連測試啟動的 wrangler dev（port 見 E2E_WORKER_PORTS）；debug build 連開發者自己跑的
+ * `npm run worker:dev`（wrangler dev --env dev，預設 port 8787）；正式 build 連 production 的 Worker（worker/wrangler.jsonc 的 routes）。
+ */
+export function hostedApiUrl({ e2e, debug, workerPort }: { e2e: boolean; debug: boolean; workerPort: number }): string {
+  return e2e ? `http://localhost:${workerPort}` : debug ? 'http://localhost:8787' : 'https://api.naruhodo.page';
+}
+
+export async function build({
+  e2e,
+  debug = false,
+  outDir,
+  workerPort = E2E_WORKER_PORTS.first,
+}: {
+  e2e: boolean;
+  debug?: boolean;
+  outDir: string;
+  /** 只有 e2e build 用到 */
+  workerPort?: number;
+}): Promise<void> {
   // 只清空內容、不刪資料夾本身：debug Chrome 載入的就是這個資料夾，整個刪掉再建，
   // 重新載入時 Chrome 曾回報「File path cannot be resolved」並卡在停用（#27 除錯）
   await mkdir(outDir, { recursive: true });
@@ -83,7 +123,7 @@ export async function build({ e2e, debug = false, outDir }: { e2e: boolean; debu
     define: {
       __E2E__: String(e2e),
       __DEBUG__: String(debug),
-      __HOSTED_API_URL__: JSON.stringify(hostedApiUrl({ e2e, debug })),
+      __HOSTED_API_URL__: JSON.stringify(hostedApiUrl({ e2e, debug, workerPort })),
     },
     jsx: 'automatic',
     jsxImportSource: 'preact',
@@ -128,6 +168,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const debug = process.argv.includes('--debug');
   const flavor = e2e ? 'e2e' : debug ? 'debug' : 'prod';
   const outDir = join(root, 'dist', flavor);
-  await build({ e2e, debug, outDir });
-  console.log(`built ${flavor} → ${outDir}`);
+  const workerPort = e2e ? await pickE2eWorkerPort() : undefined;
+  await build({ e2e, debug, outDir, workerPort });
+  if (workerPort) await writeFile(E2E_WORKER_PORT_FILE, String(workerPort));
+  console.log(`built ${flavor} → ${outDir}${workerPort ? `（本機 Worker port ${workerPort}）` : ''}`);
 }
