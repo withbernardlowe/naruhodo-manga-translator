@@ -3,7 +3,7 @@
  * 外掛（src/sidepanel/main.tsx 的 container）與產品網站都 render 這一個。樣式在 side-panel.css，
  * 全部以根元素 .naru-side-panel 為範圍，放進 shadow root（再載入 tokens.css、components.css）就完整。
  */
-import type { ComponentChildren } from 'preact';
+import { Fragment, type ComponentChildren } from 'preact';
 import { useEffect, useId, useState } from 'preact/hooks';
 import { FREE_PAGES, pageCount, type BillingPeriod, type Quota } from '../shared/hosted-api.ts';
 import type { LineRef, ModelStatus, PageView, StripStatus } from '../shared/messages.ts';
@@ -13,7 +13,7 @@ import { loadPunctuationFont } from '../shared/punctuation-face.ts';
 import type { StaleReason } from '../shared/series-notes.ts';
 import { currentDisplay, type Display, type TranscriptDisplay } from '../shared/transcript-display.ts';
 import type { TranslationMode } from '../shared/translation-mode.ts';
-import { Badge, Button, Callout, PageHeader, Progress, SegmentedControl, type SegmentOption } from './components.tsx';
+import { Button, Callout, PageHeader, Progress, SegmentedControl, type SegmentOption } from './components.tsx';
 import type { ConsentState } from '../shared/data-consent.ts';
 import { ConsentDisclosure } from './data-flow.tsx';
 import { PRIVACY_URL } from './links.ts';
@@ -24,6 +24,7 @@ import {
   chargeNote,
   hasUntranslated,
   panelLayout,
+  panelNotices,
   quotaView,
   stripView,
   setupNotices,
@@ -33,36 +34,43 @@ import {
   subscribedNoticeText,
   type EndView,
   type FooterView,
+  type PanelNotice,
   type PanelPage,
   type PageEntry,
   type QuotaLineView,
   type QuotaView,
+  type SeriesAsk,
   type ConsentCard,
   type SetupNotice,
   type TranslationAccess,
 } from './view.ts';
 
-function ModelStatusLine({ status, onRetry }: { status: ModelStatus; onRetry: () => void }) {
-  switch (status.state) {
-    case 'downloading':
-      return (
-        <p role="status">
-          第一次使用，下載辨識模型中：{megabytes(status.loaded)} / {megabytes(status.total)} MB
-          <progress value={status.loaded} max={status.total} />
-        </p>
-      );
-    case 'loading':
-      return <p role="status">載入辨識模型中…</p>;
-    case 'error':
-      return (
-        <Callout tone="danger" role="alert">
-          <p>辨識模型無法使用：{status.message}</p>
-          <Button onClick={onRetry}>重試</Button>
-        </Callout>
-      );
-    default:
-      return null;
-  }
+/** 辨識模型無法使用：提示位置排第一（U14）。下載、載入中的進度在底部固定列（ModelProgress）。 */
+function ModelErrorCallout({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <Callout tone="danger" role="alert">
+      <p>辨識模型無法使用：{message}</p>
+      <Button onClick={onRetry}>重試</Button>
+    </Callout>
+  );
+}
+
+/** 底部固定列裡辨識模型的下載、載入進度（U14：不是要讀者做事的提示，不佔逐字稿上方）。 */
+function ModelProgress({ model }: { model: NonNullable<FooterView['model']> }) {
+  return (
+    <div role="status" aria-label="辨識模型" class="model-row">
+      {model === 'loading' ? (
+        <span>載入辨識模型中…</span>
+      ) : (
+        <>
+          <span>
+            第一次使用，下載辨識模型中：{megabytes(model.loaded)} / {megabytes(model.total)} MB
+          </span>
+          <progress value={model.loaded} max={model.total} />
+        </>
+      )}
+    </div>
+  );
 }
 
 /** 逐字稿的共用狀態：依 Page Mode 的顯示方式（#76）與 hover 同步（#39）。 */
@@ -308,9 +316,10 @@ function QuotaLine({ line, onViewPlans }: { line: QuotaLineView; onViewPlans: ((
  * 放在 main 外面才是 contentinfo landmark。
  */
 function PanelFooter({ footer, onTranslate, onViewPlans }: { footer: FooterView; onTranslate: () => void; onViewPlans: (() => void) | undefined }) {
-  const { quota, plans, row } = footer;
+  const { quota, plans, model, row } = footer;
   return (
     <footer aria-label="狀態列">
+      {model && <ModelProgress model={model} />}
       {quota && (
         // 免費額度用完：primary「查看方案」跟那行同一行，但放在 status 外面，狀態只念剩餘頁數
         <div class="status-row">
@@ -437,6 +446,134 @@ function SettingsButton({ onOpen }: { onOpen: () => void }) {
   );
 }
 
+/** 標題列的作品（U13：原本的作品卡）：作品名稱，日文原名用淺色小字放第二行；整顆按鈕打開作品頁。 */
+export interface SeriesHeader {
+  title: string;
+  subtitle: string | undefined;
+  /** 還沒確認的作品（view.ts 的 seriesActions）：提示位置顯示作品確認。 */
+  ask: SeriesAsk | undefined;
+}
+
+/**
+ * 標題列左邊的作品名稱（U13）。Chrome 自己的側邊面板標題列已經寫了 Naruhodo，所以啟動後這裡換成作品，作品卡不再另外佔一塊。
+ * 包在 h1 裡：作品名稱是這個畫面的標題。
+ */
+function SeriesTitle({ series, onOpen }: { series: SeriesHeader; onOpen: () => void }) {
+  return (
+    <h1 class="panel-header__series">
+      <button type="button" class="series-title" aria-label={`作品：${series.title}`} onClick={onOpen}>
+        <span class="series-card__names">
+          <span class="series-title__name">{series.title}</span>
+          {series.subtitle && (
+            <span class="series-card__original" lang="ja">
+              {series.subtitle}
+            </span>
+          )}
+        </span>
+        <span class="series-card__chevron" aria-hidden="true">
+          ›
+        </span>
+      </button>
+    </h1>
+  );
+}
+
+/**
+ * 作品確認（#186 的問句列，U14 從作品卡搬到提示位置）：猜到原名是［是］［換一部］，猜不出來是［取名字］［選一部］。
+ * 不擋翻譯，所以排在額度用完、已訂閱後面（順序在 view.ts 的 panelNotices）。
+ */
+function SeriesAskCallout({
+  series,
+  ask,
+  onConfirm,
+  onRename,
+  onPick,
+}: {
+  series: SeriesHeader;
+  ask: SeriesAsk;
+  onConfirm: () => void;
+  onRename: () => void;
+  onPick: () => void;
+}) {
+  return (
+    <Callout class="naru-callout--stack" role="group" aria-label="確認作品">
+      <p>
+        <strong>{ask === 'confirm' ? '這是正確的作品嗎？' : '看不出是哪部作品'}</strong>
+      </p>
+      {ask === 'confirm' && (
+        <p>
+          {series.title}
+          {series.subtitle && (
+            <>
+              （<span lang="ja">{series.subtitle}</span>）
+            </>
+          )}
+        </p>
+      )}
+      <div class="naru-row">
+        {ask === 'confirm' ? (
+          <Button variant="primary" onClick={onConfirm}>
+            是
+          </Button>
+        ) : (
+          <Button variant="primary" onClick={onRename}>
+            取名字
+          </Button>
+        )}
+        <Button onClick={onPick}>{ask === 'confirm' ? '換一部' : '選一部'}</Button>
+      </div>
+    </Callout>
+  );
+}
+
+/** 條漫計頁的說明（#282）：按「知道了」之後不再出現（U14），只留逐字稿最下面「本話已計 N 頁」。沒給 onDismiss（網站的展示）就沒有按鈕。 */
+function StripNoticeCallout({ text, onDismiss }: { text: string; onDismiss: (() => void) | undefined }) {
+  return (
+    <Callout class="naru-callout--stack" role="group" aria-label="條漫計頁">
+      <p>{text}</p>
+      {onDismiss && (
+        <div class="naru-row">
+          <Button variant="ghost" onClick={onDismiss}>
+            知道了
+          </Button>
+        </div>
+      )}
+    </Callout>
+  );
+}
+
+/**
+ * 逐字稿上方唯一的提示位置（U14，順序在 view.ts 的 panelNotices）：只顯示最要緊的一張，其他收成「還有 N 則提示」並寫出是哪幾則；
+ * 展開後照順序排在下面。展開狀態不記：換了畫面上的 Page 就收起來（呼叫端用 key 重設）。
+ */
+function NoticeSlot({ notices, render }: { notices: ReturnType<typeof panelNotices>; render: (notice: PanelNotice) => ComponentChildren }) {
+  const [open, setOpen] = useState(false);
+  const { shown, rest, more } = notices;
+  if (!shown) return null;
+  return (
+    <div class="notice-slot">
+      {render(shown)}
+      {open && rest.map((n) => <Fragment key={n}>{render(n)}</Fragment>)}
+      {more && (
+        <button type="button" class="notice-more" aria-expanded={open} onClick={() => setOpen(!open)}>
+          {open ? (
+            <span class="notice-more__text">收起</span>
+          ) : (
+            <>
+              <span class="notice-more__count" aria-hidden="true">
+                {more.count}
+              </span>
+              <span class="notice-more__text">還有 {more.count} 則提示</span>
+              <span class="notice-more__names">{more.names}</span>
+            </>
+          )}
+          <span aria-hidden="true">{open ? '▴' : '▾'}</span>
+        </button>
+      )}
+    </div>
+  );
+}
+
 /** 「停止」：紅色小方塊＋字，跟 ⚙ 並排在標題列。 */
 function StopButton({ onStop }: { onStop: () => void }) {
   return (
@@ -507,9 +644,19 @@ export interface SidePanelProps {
    * 沒給就不顯示按鈕（網站上的展示）。
    */
   reportProblem?: { copy: () => Promise<void>; open: () => void };
+  /** 條漫計頁的說明按過「知道了」（U14）：不再顯示。 */
+  stripNoticeSeen?: boolean;
+  onDismissStripNotice?: () => void;
+  /**
+   * 這個 tab 的作品（U13：標題列的作品名稱，原本的作品卡，#186）；undefined＝還在讀、沒啟動或沒有作品（網站的展示），
+   * 標題列改回 logo＋Naruhodo。
+   */
+  series?: SeriesHeader;
+  /** 作品確認的「是」。 */
+  onConfirmSeries?: () => void;
+  /** 打開作品頁之前（#191）；rename＝作品確認的「取名字」，作品頁一打開就顯示取名字表單。 */
+  onOpenSeries?: (opts: { rename: boolean }) => void;
   /** 以下是只有外掛 container 才有的區塊（會讀寫 store、送 chrome 訊息）；沒給就不顯示（沒有設定頁就沒有 ⚙）。 */
-  /** Transcript 上方的作品卡（#186）；open 打開作品頁或換一部作品（#191）。 */
-  renderSeriesCard?: (open: (page: SeriesPage) => void) => ComponentChildren;
   /** 「設定」頁的內容（標題列由 SidePanel 畫）。 */
   renderSettings?: (close: () => void) => ComponentChildren;
   /**
@@ -519,7 +666,7 @@ export interface SidePanelProps {
   renderSeries?: (page: SeriesPage, navigate: (page: SeriesPage | undefined) => void) => ComponentChildren;
 }
 
-/** 從作品卡打得開的頁（#191）。 */
+/** 從標題列的作品名稱與作品確認打得開的頁（#191）。 */
 export type SeriesPage = Extract<PanelPage, 'series' | 'seriesPick'>;
 
 /** 沒做完 onboarding（#93 畫面定案）：只有置中的大 logo、名稱、「設定還沒完成」與「完成設定」，沒有頂部的狀態與 ⚙。 */
@@ -639,11 +786,16 @@ export function SidePanel(props: SidePanelProps) {
       </PanelPageView>
     );
   }
-  // 頂部只有 logo、名稱、狀態、停止、⚙（#77）。停止也可以點外掛圖示（側邊欄開著時，ADR 0003）；⚙ 直接打開設定頁
+  // 頂部（#77、U13）：作品名稱（沒有作品時是 logo＋Naruhodo）、停止、⚙。「已啟動」不再另外標：有停止就代表在翻（U16）。
+  // 停止也可以點外掛圖示（側邊欄開著時，ADR 0003）；⚙ 直接打開設定頁
+  const series = running ? props.series : undefined;
+  const openSeries = (target: SeriesPage, rename = false) => {
+    props.onOpenSeries?.({ rename });
+    setPage(target);
+  };
   const header = (
     <div class="panel-header">
-      <Title logoSrc={props.logoSrc} />
-      {running && <Badge tone="ok">已啟動</Badge>}
+      {series ? <SeriesTitle series={series} onOpen={() => openSeries('series')} /> : <Title logoSrc={props.logoSrc} />}
       <span class="panel-header__spacer" />
       {running && props.onStop && <StopButton onStop={props.onStop} />}
       {props.renderSettings && <SettingsButton onOpen={() => setPage('settings')} />}
@@ -651,30 +803,74 @@ export function SidePanel(props: SidePanelProps) {
   );
   const done = pages.filter((p) => p.transcript.state === 'done');
   const untranslated = hasUntranslated(pages);
-  const notices = setupNotices({ access, consent, untranslated, hostedHint: props.hostedHint });
-  const consentCard = notices.consentCard && <DataConsentCard mode={access.mode} card={notices.consentCard} onAccept={props.onAcceptConsent} />;
+  const setup = setupNotices({ access, consent, untranslated, hostedHint: props.hostedHint });
   const useOwnKey = () => {
     props.onUseOwnKey();
     setPage('settings');
   };
-  // 付款確認後讀者被帶回來時，side panel 不一定已經啟動，兩種畫面都顯示
-  const subscribedNotice = props.subscribedNotice && (
-    <Callout tone="info" class="naru-callout--stack" role="group" aria-label="已訂閱">
-      <p>{subscribedNoticeText(props.subscribedNotice)}</p>
-      <div class="naru-row">
-        <Button variant="ghost" onClick={() => props.onDismissSubscribedNotice?.()}>
-          知道了
-        </Button>
-      </div>
-    </Callout>
-  );
+  const quota = quotaView(access, props.quota);
+  const strip = stripView(access, props.strip);
+  // 沒啟動的畫面只有說明卡與「已訂閱」（付款確認後讀者被帶回來時，side panel 不一定已經啟動）
+  const notices = panelNotices({
+    modelError: running && modelStatus.state === 'error',
+    consent: setup.consentCard !== undefined,
+    setup: running ? setup.notice : undefined,
+    quotaExhausted: running && quota.exhausted !== undefined,
+    seriesAsk: series?.ask !== undefined,
+    subscribed: props.subscribedNotice !== undefined,
+    strip: running && strip !== undefined && !props.stripNoticeSeen,
+  });
+  const renderNotice = (notice: PanelNotice): ComponentChildren => {
+    switch (notice) {
+      case 'modelError':
+        return modelStatus.state === 'error' && <ModelErrorCallout message={modelStatus.message} onRetry={onScan} />;
+      case 'consent':
+        return setup.consentCard && <DataConsentCard mode={access.mode} card={setup.consentCard} onAccept={props.onAcceptConsent} />;
+      case 'signedOut':
+      case 'noKey':
+      case 'hostedHint':
+        return (
+          <SetupNoticeCallout notice={notice} onSignIn={props.onSignIn} onUseOwnKey={useOwnKey} onDismissHostedHint={() => props.onDismissHostedHint?.()} />
+        );
+      case 'quotaExhausted':
+        return quota.exhausted && <QuotaExhaustedCallout exhausted={quota.exhausted} onViewPlans={props.onViewPlans} onUseOwnKey={useOwnKey} />;
+      case 'seriesAsk':
+        return (
+          series?.ask && (
+            <SeriesAskCallout
+              series={series}
+              ask={series.ask}
+              onConfirm={() => props.onConfirmSeries?.()}
+              onRename={() => openSeries('series', true)}
+              onPick={() => openSeries('seriesPick')}
+            />
+          )
+        );
+      case 'subscribed':
+        return (
+          props.subscribedNotice && (
+            <Callout tone="info" class="naru-callout--stack" role="group" aria-label="已訂閱">
+              <p>{subscribedNoticeText(props.subscribedNotice)}</p>
+              <div class="naru-row">
+                <Button variant="ghost" onClick={() => props.onDismissSubscribedNotice?.()}>
+                  知道了
+                </Button>
+              </div>
+            </Callout>
+          )
+        );
+      case 'strip':
+        return strip && <StripNoticeCallout text={strip.notice} onDismiss={props.onDismissStripNotice} />;
+    }
+  };
+  // 翻頁（第一個 Page 換掉）就重設：「還有 N 則提示」回到收起。只看第一個：剛啟動時 Page 陸續偵測到、條漫往下捲多出 Page 都不算
+  const noticeSlot = <NoticeSlot key={pages[0]?.pageHash ?? ''} notices={notices} render={renderNotice} />;
   if (!running)
     return (
       <div class="naru-side-panel">
         <main>
           {header}
-          {consentCard}
-          {subscribedNotice}
+          {noticeSlot}
           {props.seriesDeleted ? (
             <Callout role="status">這部作品已刪除。重新啟動外掛會當成新的作品開始翻譯。</Callout>
           ) : (
@@ -685,28 +881,16 @@ export function SidePanel(props: SidePanelProps) {
     );
   const translate = () => onTranslate();
   const view = sidePanelView(pages, access.mode);
-  const quota = quotaView(access, props.quota);
-  const strip = stripView(access, props.strip);
   // 沒登入、沒 key、還沒同意時按了也送不出去：不放「翻譯此頁」，由上面的設定提示帶路
-  const layout = panelLayout({ pages, access, translatable: canTranslate(access, consent === 'agreed'), quota: props.quota, strip });
+  const layout = panelLayout({ pages, access, translatable: canTranslate(access, consent === 'agreed'), quota: props.quota, strip, modelStatus });
   const staleCharge = chargeNote(access, props.quota, strip !== undefined, 1);
   const sync: TranscriptSync = { display, hovered, onLineHover: props.onLineHover };
   return (
     <div class="naru-side-panel">
       <main>
         {header}
-        {consentCard}
         <PageModeSwitch mode={pageMode} choose={props.onPageModeChange} />
-        <ModelStatusLine status={modelStatus} onRetry={onScan} />
-        <SetupNoticeCallout
-          notice={notices.notice}
-          onSignIn={props.onSignIn}
-          onUseOwnKey={useOwnKey}
-          onDismissHostedHint={() => props.onDismissHostedHint?.()}
-        />
-        {quota.exhausted && <QuotaExhaustedCallout exhausted={quota.exhausted} onViewPlans={props.onViewPlans} onUseOwnKey={useOwnKey} />}
-        {subscribedNotice}
-        {props.renderSeriesCard?.(setPage)}
+        {noticeSlot}
         {done.length > 0 && (
           <TranscriptHeading
             display={display}
@@ -716,7 +900,6 @@ export function SidePanel(props: SidePanelProps) {
         )}
         {/* 不是錯誤：首頁、目錄頁本來就沒有 Page（縮圖太小不算），讓讀者知道外掛是刻意沒翻 */}
         {pages.length === 0 && <Callout role="status">這個畫面沒有找到漫畫頁</Callout>}
-        {strip && <Callout role="status">{strip.notice}</Callout>}
         <ul aria-label="Page">
           {view.pages.map((entry) => (
             // 同一個 anchor 可能有兩個 Page（Spread），key 要帶 Page 身分

@@ -30,7 +30,7 @@ test('mock site 的 canvas 是 tainted（getImageData 會丟錯）', async ({ co
   expect(error).toBe('SecurityError');
 });
 
-test('透過測試入口啟動後 side panel 顯示「已啟動」，content script 已注入', async ({
+test('透過測試入口啟動後 side panel 標題列有「停止」，content script 已注入', async ({
   context,
   sw,
   extensionId,
@@ -43,7 +43,7 @@ test('透過測試入口啟動後 side panel 顯示「已啟動」，content scr
 
   await testActivate(panel, tabId);
 
-  await expect(panel.getByText('已啟動')).toBeVisible();
+  await expect(panel.getByRole('button', { name: '停止翻譯這個分頁' })).toBeVisible();
   expect(await isContentScriptInjected(sw, tabId)).toBe(true);
 });
 
@@ -53,7 +53,7 @@ test('同 origin 重新整理後 content script 自動重新注入', async ({ co
   await page.reload();
 
   await expect.poll(() => isContentScriptInjected(sw, tabId)).toBe(true);
-  await expect(panel.getByText('已啟動')).toBeVisible();
+  await expect(panel.getByRole('button', { name: '停止翻譯這個分頁' })).toBeVisible();
 });
 
 test('停止（再點一次圖示）後清掉 content script，重新整理也不再注入', async ({ context, sw, extensionId, mockSite }) => {

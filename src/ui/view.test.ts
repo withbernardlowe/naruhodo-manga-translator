@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { Quota, RefundInfo } from '../shared/hosted-api.ts';
-import type { PageView } from '../shared/messages.ts';
+import type { ModelStatus, PageView } from '../shared/messages.ts';
 import type { RatioRect } from '../shared/page-text.ts';
 import type { TranslationMode } from '../shared/translation-mode.ts';
 import type { SeriesOption } from '../shared/series.ts';
-import { accountPageView, accountPlanView, canTranslate, panelLayout, parentPage, quotaView, refundDialogView, seriesActions, setupNotices, sidePanelScreen, sidePanelView, stripView, subscribedNoticeText, translateAction, type SubscribedQuota } from './view.ts';
+import { accountPageView, accountPlanView, canTranslate, panelLayout, panelNotices, parentPage, quotaView, refundDialogView, seriesActions, setupNotices, sidePanelScreen, sidePanelView, stripView, subscribedNoticeText, translateAction, type SubscribedQuota } from './view.ts';
 
 type Transcript = PageView['transcript'];
 type Done = Extract<Transcript, { state: 'done' }>;
@@ -786,6 +786,38 @@ describe('申請退款的確認對話框（#260）', () => {
   });
 });
 
+describe('逐字稿上方的提示位置（U14）：只顯示最要緊的一張', () => {
+  const none = { modelError: false, consent: false, setup: undefined, quotaExhausted: false, seriesAsk: false, subscribed: false, strip: false } as const;
+
+  it('說明改版、額度用完、作品還沒確認同時發生：先顯示說明卡，其他兩則收起來並寫出是哪兩則', () => {
+    expect(panelNotices({ ...none, consent: true, quotaExhausted: true, seriesAsk: true })).toEqual({
+      shown: 'consent',
+      rest: ['quotaExhausted', 'seriesAsk'],
+      more: { count: 2, names: '額度用完、確認作品' },
+    });
+  });
+
+  it('辨識模型壞了排最前：連原文都抓不到，其他提示都沒意義', () => {
+    expect(panelNotices({ ...none, modelError: true, consent: true, setup: 'noKey' })).toMatchObject({ shown: 'modelError', rest: ['consent', 'noKey'] });
+  });
+
+  it('作品確認排在額度用完後面、看過就好的提示前面', () => {
+    expect(panelNotices({ ...none, setup: 'hostedHint', strip: true, seriesAsk: true, quotaExhausted: true })).toMatchObject({
+      shown: 'quotaExhausted',
+      rest: ['seriesAsk', 'strip', 'hostedHint'],
+    });
+  });
+
+  it('剛付完款的「已訂閱」排在作品確認前面：是讀者剛做完的事的回應，不能被藏起來', () => {
+    expect(panelNotices({ ...none, seriesAsk: true, subscribed: true, strip: true })).toMatchObject({ shown: 'subscribed', rest: ['seriesAsk', 'strip'] });
+  });
+
+  it('只有一則：直接顯示，沒有「還有 N 則」；沒有提示時位置是空的', () => {
+    expect(panelNotices({ ...none, strip: true })).toEqual({ shown: 'strip', rest: [], more: undefined });
+    expect(panelNotices(none)).toEqual({ shown: undefined, rest: [], more: undefined });
+  });
+});
+
 describe('Strip（條漫）改照句數計頁的說明（#282）', () => {
   it('內建翻譯、已登入、正在讀 Strip：逐字稿上方一則說明，底部多一行這一話計了幾頁', () => {
     expect(stripView(signedIn, { lines: 21, pages: 3 })).toEqual({
@@ -807,8 +839,26 @@ describe('Strip（條漫）改照句數計頁的說明（#282）', () => {
 
 describe('底部固定列與逐字稿最下面的「這個畫面」（按鈕放置方案）', () => {
   const hosted = { mode: 'hosted', signedIn: true } as const;
-  const layout = (transcripts: Transcript[], quota: Quota | undefined = free(80), access: Parameters<typeof panelLayout>[0]['access'] = hosted) =>
-    panelLayout({ pages: transcripts.map((t, i) => page(`p${i}`, `a${i}`, { transcript: t })), access, translatable: true, quota, strip: undefined });
+  const layout = (
+    transcripts: Transcript[],
+    quota: Quota | undefined = free(80),
+    access: Parameters<typeof panelLayout>[0]['access'] = hosted,
+    modelStatus: ModelStatus = { state: 'ready', executionProvider: 'wasm', threads: 4 },
+  ) => panelLayout({ pages: transcripts.map((t, i) => page(`p${i}`, `a${i}`, { transcript: t })), access, translatable: true, quota, strip: undefined, modelStatus });
+
+  it('第一次下載辨識模型：進度在固定列（U14：不是要讀者做事的提示，不佔逐字稿上方）', () => {
+    expect(layout([{ state: 'analyzing' }], free(80), hosted, { state: 'downloading', loaded: 12_000_000, total: 38_000_000 }).footer).toEqual({
+      quota: undefined,
+      plans: false,
+      model: { loaded: 12_000_000, total: 38_000_000 },
+      row: { kind: 'analyzing' },
+    });
+  });
+
+  it('載入模型中也在固定列；模型好了就沒有那一行', () => {
+    expect(layout([], free(80), hosted, { state: 'loading' }).footer).toMatchObject({ model: 'loading' });
+    expect(layout([])).toMatchObject({ footer: undefined });
+  });
 
   it('全部翻好、額度還夠：固定列不顯示；秒數、額度、重新翻譯都在最下面', () => {
     expect(layout([translated({ latencyMs: 3000 }), translated({ latencyMs: 3500 })])).toEqual({
@@ -895,7 +945,7 @@ describe('底部固定列與逐字稿最下面的「這個畫面」（按鈕放�
   it('條漫：本話計頁放最下面，重新翻譯說依句數重新計頁', () => {
     const strip = stripView(hosted, { lines: 21, pages: 3 });
     const pages = [page('p0', 'a0', { transcript: translated() })];
-    expect(panelLayout({ pages, access: hosted, translatable: true, quota: free(80), strip }).end).toMatchObject({
+    expect(panelLayout({ pages, access: hosted, translatable: true, quota: free(80), strip, modelStatus: { state: 'idle' } }).end).toMatchObject({
       strip: '本話已計 3 頁（21 句）',
       retranslate: { note: '從辨識開始重來、不用快取；條漫依句數重新計頁' },
     });

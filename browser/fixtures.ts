@@ -256,7 +256,7 @@ export async function activateOnMockSite(
   await beforeActivate?.(panel, page);
   await page.bringToFront();
   await testActivate(panel, tabId);
-  await expect(panel.getByText('已啟動')).toBeVisible();
+  await expect(panel.getByRole('button', { name: '停止翻譯這個分頁' })).toBeVisible();
   return { page, panel, tabId };
 }
 
