@@ -10,7 +10,8 @@ import { FREE_PAGES_EPISODES, monthlyPriceUsd, SUBSCRIPTION_OFFERS, subscription
 export interface SiteCopy {
   /** 頁面 <title> 開頭的產品全名（跟外掛的 manifest name 一致）；頁首與內文仍寫 Naruhodo */
   brand: string;
-  nav: { pricing: string; faq: string; install: string; languageLabel: string };
+  /** `discussions` 是頁首的討論區連結（每一頁都有，手機上也不藏） */
+  nav: { pricing: string; faq: string; discussions: string; install: string; languageLabel: string };
   hero: { title: string; lead: string; install: string; pricing: string };
   /** 首頁互動展示（#109）外框上的文字；展示裡面的外掛介面只有繁體中文 */
   demo: { caption: string; hint: string };
@@ -131,7 +132,7 @@ const EN_PLANS: readonly PlanCard[] = SUBSCRIPTION_OFFERS.map(({ billingPeriod, 
 export const copy: Record<Locale, SiteCopy> = {
   'zh-tw': {
     brand: 'Naruhodo 日文漫畫翻譯',
-    nav: { pricing: '價格', faq: '常見問題', install: '安裝外掛', languageLabel: '語言' },
+    nav: { pricing: '價格', faq: '常見問題', discussions: '討論區', install: '安裝外掛', languageLabel: '語言' },
     hero: {
       title: '新番日漫，不再苦等翻譯！',
       lead: 'Naruhodo 是一個 Chrome 外掛。點一下圖示，對話框裡的日文就會變成繁體中文，還附上讀音，邊看邊學日文。',
@@ -243,7 +244,7 @@ export const copy: Record<Locale, SiteCopy> = {
   },
   en: {
     brand: 'Naruhodo: Japanese Manga Translator',
-    nav: { pricing: 'Pricing', faq: 'FAQ', install: 'Install', languageLabel: 'Language' },
+    nav: { pricing: 'Pricing', faq: 'FAQ', discussions: 'Community', install: 'Install', languageLabel: 'Language' },
     hero: {
       title: 'New Japanese manga, no more waiting for translations!',
       lead: 'Naruhodo is a Chrome extension. Click its icon and the Japanese in each speech balloon turns into Traditional Chinese, with furigana so you learn Japanese as you read.',

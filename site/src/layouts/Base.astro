@@ -1,11 +1,12 @@
 ---
 /**
- * 每一頁的外框：頁首（語言切換）與頁尾（三份法律文件連結、聯絡 email 與公司名稱，Paddle 網域審核的要求）。
+ * 每一頁的外框：頁首（討論區、語言切換）與頁尾（三份法律文件連結、聯絡 email 與公司名稱，Paddle 網域審核的要求）。
  * `locale` 是 'auto' 的是法律文件：只有一個網址，頁首頁尾的語言由那一頁的 script 在瀏覽器決定（設定 `<html data-locale>`）。
  */
 import '../../../src/shared/tokens.css';
 import '../styles/site.css';
 import logo from '../../../src/icons/naruhodo-small.svg';
+import ChatIcon from '../components/ChatIcon.astro';
 import L from '../components/L.astro';
 import { copy } from '../copy.ts';
 import { CONTACT_EMAIL, DISCUSSIONS_URL, LEGAL_DOCS, INSTALL_URL, REPO_URL, legalHref } from '../links.ts';
@@ -40,14 +41,17 @@ const home = locale === 'auto' ? '/' : `/${locale}/`;
   <body>
     <header class="site-header">
       <div class="wrap">
+        {/* 有導覽時，窄螢幕的品牌只留 logo（.brand-name 只給螢幕閱讀器），把位置讓給「討論區」 */}
         {bare ? (
           <span class="brand"><img src={logo.src} alt="" width="30" height="30" />Naruhodo</span>
         ) : (
-          <a class="brand" href={home}><img src={logo.src} alt="" width="30" height="30" />Naruhodo</a>
+          <a class="brand" href={home}><img src={logo.src} alt="" width="30" height="30" /><span class="brand-name">Naruhodo</span></a>
         )}
         {!bare && <nav class="nav">
           <L locale={locale} class="hide-sm" text={text('pricing')} href={byLocale((l) => `/${l}/#pricing`)} />
           <L locale={locale} class="hide-sm" text={text('faq')} href={byLocale((l) => `/${l}/#faq`)} />
+          {/* 討論區放在頁首、手機上也不藏：讀者有問題或想法時，第一眼就知道去哪裡說 */}
+          <L locale={locale} class="nav-discussions" text={text('discussions')} href={byLocale(() => DISCUSSIONS_URL)}><ChatIcon /></L>
           <span class="lang-toggle" role="group" aria-label={copy[initial].nav.languageLabel}>
             {LOCALES.map((l) => (
               <a href={alternates[l]} data-set-locale={l} lang={languageTag(l)}>{l === 'zh-tw' ? '中文' : 'EN'}</a>
