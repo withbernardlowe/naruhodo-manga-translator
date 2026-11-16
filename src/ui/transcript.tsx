@@ -10,16 +10,6 @@ import { displaySummary, LEVEL_LABELS, LEVELS, type Display, type DisplayLevel }
 import { Badge, RevealChip, SegmentedControl, Switch } from './components.tsx';
 import { transcriptRows } from './transcript-rows.ts';
 
-/** 側邊欄的小圖示：跟「漫畫頁面」的頁面圖示成對，標出這一行管的是側邊欄（U15）。 */
-function PanelIcon() {
-  return (
-    <svg width="14" height="12" viewBox="0 0 14 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-      <rect x="0.75" y="0.75" width="12.5" height="10.5" rx="1.5" />
-      <path d="M9 1v10" />
-    </svg>
-  );
-}
-
 function ChevronIcon() {
   return (
     <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">
@@ -71,13 +61,12 @@ export function TranscriptHeading({
   };
   return (
     <div class="transcript-head" ref={root} onKeyDown={onKeyDown}>
-      <PanelIcon />
       <span class="transcript-head__label">逐字稿</span>
       <span class="transcript-head__spacer" />
       <button
         ref={button}
         type="button"
-        class="naru-btn naru-btn--secondary transcript-head__menu"
+        class="naru-btn transcript-head__menu"
         aria-label={`逐字稿顯示：${summary}`}
         aria-expanded={open}
         aria-controls={menuId}

@@ -10,12 +10,13 @@
   color: var(--naru-ink); background: var(--naru-surface);
 }
 :where(.naru-side-panel) [lang='ja'] { font-family: var(--naru-font-ja); }
-/* 頂部（#77、U13）：作品名稱（沒啟動時是 logo＋名稱）、（空白）、停止、⚙。窄的時候名稱可以縮，按鈕不縮 */
-:where(.naru-side-panel) .panel-header { display: flex; align-items: center; gap: var(--naru-space-2); min-width: 0; margin: var(--naru-space-3) 0; }
+/*
+ * 頂部（#77、U13）：作品名稱（沒啟動時是 logo＋名稱）、（空白）、停止、⚙。窄的時候名稱可以縮，按鈕不縮。
+ * 名稱可能有兩行：按鈕對齊第一行，不浮在兩行中間。停止（ADR 0003）跟其他按鈕一樣是墨色：紅色留給錯誤與危險動作
+ */
+:where(.naru-side-panel) .panel-header { display: flex; align-items: flex-start; gap: var(--naru-space-2); min-width: 0; margin: var(--naru-space-3) 0 var(--naru-space-2); }
 :where(.naru-side-panel) .panel-header__spacer { flex: 1 1 0; }
 :where(.naru-side-panel) .panel-header > .naru-btn, :where(.naru-side-panel) .panel-header > .naru-badge { flex: none; }
-/* 停止（ADR 0003）：方塊是紅的，字跟其他按鈕一樣 */
-:where(.naru-side-panel) .panel-header__stop svg { color: var(--naru-danger); }
 /* 標題：logo＋名稱（#72） */
 :where(.naru-side-panel) .title {
   display: flex; align-items: center; gap: var(--naru-space-2); min-width: 0; margin: 0;
@@ -23,8 +24,8 @@
 }
 :where(.naru-side-panel) .title img { flex: none; }
 /*
- * 啟動後標題列左邊是作品（U13：原本的作品卡）：作品名稱一行、日文原名用淺色小字放第二行（.series-card__original），
- * 整顆按鈕打開作品頁。長名稱換行、原名截斷，不撐出水平捲軸；按鈕往左延伸，文字跟下面的內容對齊
+ * 啟動後標題列左邊是作品（U13：原本的作品卡）：作品名稱最多兩行（後面緊接 ›）、日文原名用淺色小字放下一行（.series-card__original），
+ * 整顆按鈕打開作品頁。長名稱截斷，不撐出水平捲軸；按鈕往左延伸，文字跟下面的內容對齊
  */
 :where(.naru-side-panel) .panel-header__series { flex: 1 1 auto; min-width: 0; margin: 0; font-size: inherit; font-weight: inherit; }
 :where(.naru-side-panel) .series-title {
@@ -34,7 +35,14 @@
 }
 :where(.naru-side-panel) .series-title:hover { background: var(--naru-surface-2); }
 :where(.naru-side-panel) .series-title:focus-visible { outline: 2px solid var(--naru-accent); outline-offset: -2px; }
-:where(.naru-side-panel) .series-title__name { font-size: var(--naru-text-body); font-weight: 700; line-height: 1.35; color: var(--naru-ink); overflow-wrap: anywhere; }
+:where(.naru-side-panel) .series-title__name {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+  font-size: var(--naru-text-body); font-weight: 700; line-height: 1.35; color: var(--naru-ink); overflow-wrap: anywhere;
+}
+/* 名稱與 › 一行：名稱只佔需要的寬度，› 就跟在後面；兩行時 › 對齊最後一行 */
+:where(.naru-side-panel) .series-title__line { display: flex; align-items: flex-end; gap: var(--naru-space-1); min-width: 0; }
+:where(.naru-side-panel) .series-title__line > .series-title__name { flex: 0 1 auto; min-width: 0; }
+:where(.naru-side-panel) .series-title__chevron { flex: none; font-size: var(--naru-text-body); line-height: 1.35; color: var(--naru-ink-3); }
 :where(.naru-side-panel) .series-title .series-card__original { font-size: var(--naru-text-caption); line-height: 1.4; }
 
 /* 逐字稿上方唯一的提示位置（U14）：一張提示＋「還有 N 則提示」；展開的其他提示排在中間 */
@@ -53,6 +61,11 @@
 }
 :where(.naru-side-panel) .notice-more__text { flex: none; }
 :where(.naru-side-panel) .notice-more__names { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--naru-ink-3); }
+/* 作品確認：標題列下面一條窄的問句列（名稱就在上面，不重複）；按鈕小一號，窄的時候換到下一行 */
+:where(.naru-side-panel) .series-ask { padding: 6px 6px 6px var(--naru-space-3); }
+:where(.naru-side-panel) .series-ask__question { flex: 1 1 8em; min-width: 0; color: var(--naru-ink); }
+:where(.naru-side-panel) .series-ask .naru-row { gap: var(--naru-space-1); }
+:where(.naru-side-panel) .series-ask .naru-btn { min-height: 28px; padding: 0 10px; font-size: var(--naru-text-caption); }
 
 /* 沒做完 onboarding（#93）：置中的大 logo、名稱、說明與「完成設定」 */
 :where(.naru-side-panel) .finish-setup { display: flex; flex-direction: column; align-items: center; gap: var(--naru-space-2); padding: 96px var(--naru-space-4); text-align: center; }
@@ -71,56 +84,66 @@
 :where(.naru-side-panel) [aria-label='Page'] > li { margin: var(--naru-space-3) 0 var(--naru-space-5); }
 :where(.naru-side-panel) .transcript ol { padding-left: 0; margin: 0; list-style: none; }
 /*
- * 每句（原文＋譯文）一組，左邊是閱讀順序編號，讓組與組之間有明確的開頭。
+ * 每句（原文＋譯文）一組，左邊是閱讀順序編號，讓組與組之間有明確的開頭。句與句之間只留一點空隙（緊湊），
+ * 同樣高度放得下更多句；分組靠編號與原文、譯文的字級差，不靠留白。
  * 內距平常就留著（不只高亮時才加），高亮出現時文字不會跳；左右往外延伸 space-2，文字位置跟原本對齊。
  */
 :where(.naru-side-panel) .transcript li {
   position: relative; display: flex; flex-direction: column;
-  margin: 0 calc(-1 * var(--naru-space-2)) 6px; padding: 6px var(--naru-space-3) 10px 38px;
+  margin: 0 calc(-1 * var(--naru-space-2)) 2px; padding: 3px 10px 6px 34px;
   border-radius: var(--naru-radius-md);
 }
+/* 編號：淡底、不加框，原文才是視線的起點；10.5px 這種半像素在 Windows 會糊，用整數 */
 :where(.naru-side-panel) .transcript li::before {
-  content: attr(data-order); position: absolute; left: 10px; top: 10px;
-  display: grid; place-items: center; width: 18px; height: 18px; border-radius: var(--naru-radius-pill);
-  font-size: 10.5px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums;
-  color: var(--naru-ink-3); box-shadow: inset 0 0 0 1px var(--naru-line-strong);
+  content: attr(data-order); position: absolute; left: 10px; top: 9px;
+  display: grid; place-items: center; width: 16px; height: 16px; border-radius: var(--naru-radius-pill);
+  font-size: 10px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums;
+  color: var(--naru-ink-3); background: var(--naru-surface-2);
 }
-/* 第一行是帶ルビ的原文（行高 2.2）：編號往下對齊那一行的中間 */
-:where(.naru-side-panel) .transcript li:has(> .original.with-ruby:first-child)::before { top: 16px; }
+/* 第一行是帶ルビ的原文（行高 2）：編號往下對齊那一行的中間 */
+:where(.naru-side-panel) .transcript li:has(> .original.with-ruby:first-child)::before { top: 13px; }
 :where(.naru-side-panel) .transcript li.hl { background: var(--naru-accent-weak); }
-:where(.naru-side-panel) .transcript li.hl::before { background: var(--naru-brand); color: var(--naru-ink); box-shadow: none; }
+:where(.naru-side-panel) .transcript li.hl::before { background: var(--naru-brand); color: var(--naru-ink); }
 :where(.naru-side-panel) .original { font-size: var(--naru-text-ja); line-height: 1.6; }
 /* 加上讀音時行高放大，ルビ才不會壓到上一行 */
-:where(.naru-side-panel) .original.with-ruby { line-height: 2.2; }
+:where(.naru-side-panel) .original.with-ruby { line-height: 2; }
 /* 譯文退一階（深灰、小一號），原文和譯文才分得出主從。
    標點用打包的 Noto Sans TC（src/shared/punctuation-face.ts 的 PUNCTUATION_FAMILY，SidePanel 載入）：微軟正黑體的 ―、。， 不在格子中間 */
 :where(.naru-side-panel) .translation { font-size: var(--naru-text-label); line-height: 1.5; color: var(--naru-ink-2);
   font-family: 'Naruhodo Punctuation TC', var(--naru-font-sans); }
 :where(.naru-side-panel) .badges { display: flex; flex-wrap: wrap; gap: var(--naru-space-1); margin: 2px 0; }
-/* 振り仮名用朱色（白底與高亮底都過 WCAG AA） */
+/* 振り仮名用朱色（白底與高亮底都過 WCAG AA）；大小是原文的 0.6 倍（瀏覽器預設 50% 在 Windows 上太小、會糊） */
 :where(.naru-side-panel) rt, :where(.naru-side-panel) .reading { color: var(--naru-ruby); }
+:where(.naru-side-panel) rt { font-size: 0.6em; }
 :where(.naru-side-panel) .reading { display: block; font-size: 0.6em; line-height: 1.4; }
 /*
- * 兩個切換各自標出管哪裡（U15）：「漫畫頁面」一行（頁面圖示＋名稱＋閱讀／學習），
- * 「逐字稿」標題列（側邊欄圖示＋名稱＋顯示選單）。兩行同樣的排法，名稱就是範圍。
+ * 兩個切換各自標出管哪裡（U15）：「漫畫頁面」一行（名稱＋閱讀／學習），「逐字稿」標題列（名稱＋顯示選單）。
+ * 兩行同樣的排法，名稱就是範圍；名稱用小標的樣式（跟設定頁的小標同一款），不加圖示：空心方框的圖示會被看成 checkbox。
+ * 逐字稿標題列上面一條線，把上面的控制項跟逐字稿分開。
  */
 :where(.naru-side-panel) .page-mode, :where(.naru-side-panel) .transcript-head {
   display: flex; align-items: center; gap: var(--naru-space-2); min-width: 0;
-  font-size: var(--naru-text-small); font-weight: 700; color: var(--naru-ink-2);
+  font-size: var(--naru-text-caption); font-weight: 700; letter-spacing: 0.06em; color: var(--naru-ink-3);
 }
-:where(.naru-side-panel) .page-mode { margin: 0 0 var(--naru-space-3); }
-:where(.naru-side-panel) .page-mode > svg, :where(.naru-side-panel) .transcript-head > svg { flex: none; }
+:where(.naru-side-panel) .page-mode { margin: var(--naru-space-2) 0 var(--naru-space-3); }
 :where(.naru-side-panel) .page-mode__label { flex: 1 1 auto; min-width: 0; }
-:where(.naru-side-panel) .page-mode > .naru-seg { flex: none; width: 128px; }
-:where(.naru-side-panel) .transcript-head { position: relative; margin: var(--naru-space-3) 0 var(--naru-space-1); }
+:where(.naru-side-panel) .page-mode > .naru-seg { flex: none; width: 128px; letter-spacing: normal; }
+:where(.naru-side-panel) .transcript-head {
+  position: relative; margin: 0 0 var(--naru-space-2); padding-top: var(--naru-space-3); border-top: 1px solid var(--naru-line);
+}
 :where(.naru-side-panel) .transcript-head__spacer { flex: 1 1 0; }
-:where(.naru-side-panel) .transcript-head__menu { flex: none; gap: var(--naru-space-1); font-weight: 500; }
+/* 顯示選單的按鈕：不加框，字比小標深一階（它是可以按的） */
+:where(.naru-side-panel) .transcript-head__menu {
+  flex: none; gap: var(--naru-space-1); min-height: 28px; padding: 0 var(--naru-space-2);
+  font-size: var(--naru-text-caption); font-weight: 500; letter-spacing: normal; color: var(--naru-ink-2);
+}
+:where(.naru-side-panel) .transcript-head__menu:hover, :where(.naru-side-panel) .transcript-head__menu[aria-expanded='true'] { background: var(--naru-surface-2); }
 /* 顯示選單：從標題列下面長出來，寬度跟標題列一樣，不會超出 panel */
 :where(.naru-side-panel) .transcript-menu {
   position: absolute; left: 0; right: 0; top: calc(100% + var(--naru-space-1)); z-index: 2;
   display: flex; flex-direction: column; gap: var(--naru-space-2); padding: var(--naru-space-3);
   background: var(--naru-surface); border: 1px solid var(--naru-line-strong); border-radius: var(--naru-radius-md);
-  box-shadow: var(--naru-shadow-2); font-weight: 400; color: var(--naru-ink);
+  box-shadow: var(--naru-shadow-2); font-size: var(--naru-text-small); font-weight: 400; letter-spacing: normal; color: var(--naru-ink);
 }
 :where(.naru-side-panel) .transcript-menu__note { margin: 0; font-size: var(--naru-text-caption); color: var(--naru-ink-2); }
 :where(.naru-side-panel) .untranslated { color: var(--naru-ink-3); font-size: var(--naru-text-caption); }
@@ -150,6 +173,24 @@
 :where(.naru-side-panel) .transcript-fold ol:not(:empty) { padding: 0 var(--naru-space-2) var(--naru-space-1); }
 :where(.naru-side-panel) .transcript-fold__hint { margin: 0; padding: 0 var(--naru-space-3) var(--naru-space-2); font-size: var(--naru-text-caption); color: var(--naru-ink-2); }
 :where(.naru-side-panel) .translation-status { margin: 0; color: var(--naru-ink-3); font-size: var(--naru-text-caption); }
+/* 頁首右側的進度（辨識中、翻譯中）：三個點依序閃，跟翻好後的「快取・2.4 秒」同一個位置 */
+:where(.naru-side-panel) .page-progress { display: flex; align-items: center; gap: 6px; margin: 0; color: var(--naru-ink-2); font-size: var(--naru-text-caption); }
+:where(.naru-side-panel) .page-progress__dots { display: inline-flex; gap: 3px; }
+:where(.naru-side-panel) .page-progress__dots > span {
+  width: 4px; height: 4px; border-radius: var(--naru-radius-pill); background: var(--naru-ink-3);
+  animation: naru-progress-pulse 1.2s ease-in-out infinite;
+}
+:where(.naru-side-panel) .page-progress__dots > span:nth-child(2) { animation-delay: 0.2s; }
+:where(.naru-side-panel) .page-progress__dots > span:nth-child(3) { animation-delay: 0.4s; }
+/* 還在辨識：灰色骨架行，跟逐字稿一列的排法一樣（編號＋原文＋譯文），句子出來時版面不跳太多 */
+:where(.naru-side-panel) .transcript-skeleton { display: flex; flex-direction: column; gap: var(--naru-space-3); padding: var(--naru-space-2) 0 var(--naru-space-1); }
+:where(.naru-side-panel) .transcript-skeleton__row { display: flex; gap: 10px; }
+:where(.naru-side-panel) .transcript-skeleton__num { flex: none; width: 16px; height: 16px; margin-top: 2px; border-radius: var(--naru-radius-pill); background: var(--naru-surface-2); }
+:where(.naru-side-panel) .transcript-skeleton__lines { flex: 1 1 auto; display: flex; flex-direction: column; gap: var(--naru-space-2); }
+:where(.naru-side-panel) .transcript-skeleton__lines > span { display: block; height: 12px; border-radius: 4px; background: var(--naru-surface-2); }
+@media (prefers-reduced-motion: reduce) {
+  :where(.naru-side-panel) .page-progress__dots > span { animation: none; }
+}
 :where(.naru-side-panel) .hint { color: var(--naru-ink-3); font-size: var(--naru-text-caption); }
 
 /* 設定、Series Notes 頁（#93：從 ⚙、作品卡打開，整個取代 side panel） */
@@ -180,22 +221,35 @@
 :where(.naru-side-panel) .backup { display: flex; flex-wrap: wrap; gap: var(--naru-space-2); align-items: center; margin: var(--naru-space-2) 0; }
 :where(.naru-side-panel) .backup p { margin: 0; }
 
-/* 逐字稿最下面的「這個畫面」（按鈕放置方案）：秒數、平常的剩餘頁數、條漫計頁、回報翻譯問題、重新翻譯 */
+/*
+ * 逐字稿最下面的「這個畫面」（按鈕放置方案）：秒數、平常的剩餘頁數、條漫計頁合成一塊淺底的資訊；
+ * 下面「回報翻譯問題」「重新翻譯」並排、一樣寬，扣多少的小字在按鈕列下面
+ */
 :where(.naru-side-panel) .screen-end {
-  display: flex; flex-direction: column; align-items: flex-start; gap: var(--naru-space-2);
-  margin: var(--naru-space-3) 0; padding-top: var(--naru-space-3); border-top: 1px solid var(--naru-line);
+  display: flex; flex-direction: column; gap: 10px;
+  margin: var(--naru-space-4) 0 var(--naru-space-3); padding-top: 14px; border-top: 1px solid var(--naru-line);
   font-size: var(--naru-text-small); color: var(--naru-ink-2);
 }
 :where(.naru-side-panel) .screen-end > * { margin: 0; }
-:where(.naru-side-panel) .screen-end > .status-row { align-self: stretch; }
 :where(.naru-side-panel) .screen-end__title { font-size: var(--naru-text-label); font-weight: 700; color: var(--naru-ink); }
-:where(.naru-side-panel) .screen-end__retranslate { display: flex; flex-direction: column; align-items: flex-start; gap: var(--naru-space-1); }
+:where(.naru-side-panel) .screen-end__info {
+  display: flex; flex-direction: column; gap: 2px; padding: var(--naru-space-2) var(--naru-space-3);
+  border-radius: var(--naru-radius-md); background: var(--naru-surface-2); font-variant-numeric: tabular-nums;
+}
+:where(.naru-side-panel) .screen-end__info > p { margin: 0; color: var(--naru-ink); }
+:where(.naru-side-panel) .screen-end__actions { display: flex; flex-wrap: wrap; gap: var(--naru-space-2); }
+:where(.naru-side-panel) .screen-end__actions > * { flex: 1 1 0; min-width: 0; }
+:where(.naru-side-panel) .screen-end__actions .naru-btn { width: 100%; }
+/* 「報告已複製」的說明展開時佔滿一整行，「重新翻譯」換到下一行 */
+:where(.naru-side-panel) .screen-end__actions > .report-problem:has(.naru-callout) { flex-basis: 100%; }
+:where(.naru-side-panel) .screen-end__actions .naru-callout .naru-btn { width: auto; }
 /* 重翻要扣多少：按鈕下面的小字（不另外確認） */
-:where(.naru-side-panel) .charge-note { flex-basis: 100%; font-size: var(--naru-text-caption); color: var(--naru-ink-3); }
+:where(.naru-side-panel) .charge-note { flex-basis: 100%; font-size: var(--naru-text-caption); line-height: 1.5; color: var(--naru-ink-3); }
 :where(.naru-side-panel) .naru-callout--warn .charge-note { color: inherit; }
 
 /* 「回報翻譯問題」（Problem Report），在「這個畫面」區塊裡 */
 :where(.naru-side-panel) .report-problem p { margin: 0; }
+:where(.naru-side-panel) .report-problem .naru-callout { margin: 0; }
 
 /* 底部固定列（#77；按鈕放置方案）：有事才出現。任何寬度都不撐出水平捲軸——每個彈性子項都要 min-width: 0 才縮得下去 */
 :where(.naru-side-panel) footer {
@@ -206,7 +260,6 @@
 }
 :where(.naru-side-panel) .status-row { display: flex; align-items: center; gap: var(--naru-space-2); min-width: 0; }
 :where(.naru-side-panel) .status-row > span, :where(.naru-side-panel) .status-row > .status-row { flex: 1 1 auto; min-width: 0; }
-:where(.naru-side-panel) .status-row > .naru-progress { margin: 0; }
 :where(.naru-side-panel) .status-row > .naru-btn { flex: none; }
 /* 辨識模型的下載進度（U14：從逐字稿上方搬到固定列） */
 :where(.naru-side-panel) .model-row { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
@@ -215,7 +268,6 @@
 :where(.naru-side-panel) .quota-row { font-size: var(--naru-text-small); color: var(--naru-ink-2); }
 :where(.naru-side-panel) .quota-row--warn { color: var(--naru-warn); }
 /* 作品名稱與原名（標題列的作品、作品頁、換一部作品共用；#186、#191）：資訊是灰字；長名稱截斷，不撐出水平捲軸 */
-:where(.naru-side-panel) .series-card__chevron { flex: none; font-size: var(--naru-text-body); color: var(--naru-ink-3); }
 :where(.naru-side-panel) .series-card__names, :where(.naru-side-panel) .series-item__text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
 :where(.naru-side-panel) .series-card__original, :where(.naru-side-panel) .series-item__original {
   font-family: var(--naru-font-ja); font-size: var(--naru-text-small); color: var(--naru-ink-3);

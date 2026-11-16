@@ -118,7 +118,7 @@ test.describe('FakeTranslator', () => {
     const first = await activateOnMockSite({ context, sw, extensionId, mockSite });
     await expect(title(first.panel)).toContainText('（譯名）');
     await showMoreNotices(first.panel);
-    await expect(ask(first.panel)).toContainText('這是正確的作品嗎？');
+    await expect(ask(first.panel)).toContainText('上面的作品對嗎？');
     const seriesId = await currentSeries(first.panel, first.tabId);
 
     const second = await activateOnMockSite({ context, sw, extensionId, mockSite, url: new URL('episode-2/', mockSite.canvasSiteUrl).href });

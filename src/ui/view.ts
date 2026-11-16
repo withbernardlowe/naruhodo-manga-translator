@@ -23,6 +23,8 @@ export interface PageEntry {
   heading: PageHeading;
   /** 頁首右側的翻譯狀態；undefined＝不顯示。 */
   translationStatus: string | undefined;
+  /** 頁首右側的進度（跟翻譯狀態同一個位置）：同一件事只在這裡說一次，固定列不再重複；undefined＝沒在跑。 */
+  progress: '辨識中' | '翻譯中' | undefined;
 }
 
 /** 底部狀態列：翻譯中、或已翻譯的摘要；undefined＝沒有譯文，不顯示。 */
@@ -79,6 +81,11 @@ function translationStatus({ transcript }: PageView, mode: TranslationMode): str
   return `${label}・${model}・${seconds(latencyMs)}・$${usage.costUsd.toFixed(4)}`;
 }
 
+function progress({ transcript }: PageView): PageEntry['progress'] {
+  if (transcript.state === 'analyzing') return '辨識中';
+  return transcript.state === 'done' && transcript.translating ? '翻譯中' : undefined;
+}
+
 const dollars = (usd: number) => (Number.isNaN(usd) ? '費用未知' : `$${usd.toFixed(5)}`);
 
 /** 底部狀態列（spec #27 第 8 節）：已翻譯・模型・秒數・費用。多個 Page 時加總。內建翻譯不顯示模型與費用。 */
@@ -104,6 +111,7 @@ export function sidePanelView(pages: PageView[], mode: TranslationMode): SidePan
       side,
       heading: heading(side, i + 1),
       translationStatus: translationStatus(page, mode),
+      progress: progress(page),
     })),
     status: overallStatus(pages, mode),
   };
@@ -370,14 +378,15 @@ export type QuotaLineView = NonNullable<QuotaView['line']>;
 
 /**
  * 底部固定列（按鈕放置方案）：有事才出現，最多一顆按鈕（額度那行的「查看方案」小字連結不算）。
- * quota 只在快用完、用完（warn）時上來，plans＝同一行右邊的 primary「查看方案」；row＝進度，或「N 頁還沒翻譯」＋「翻譯此頁」。
+ * quota 只在快用完、用完（warn）時上來，plans＝同一行右邊的 primary「查看方案」；row＝「N 頁還沒翻譯」＋「翻譯此頁」。
+ * 辨識中、翻譯中不在這裡：各頁的頁首已經說了（PageEntry 的 progress），這裡再說一次看起來像多了一頁。
  */
 export interface FooterView {
   quota: QuotaLineView | undefined;
   plans: boolean;
   /** 辨識模型的下載進度（bytes），loading＝下載好了、正在載入（U14：進度不是提示，不佔逐字稿上方）。 */
   model: { loaded: number; total: number } | 'loading' | undefined;
-  row: { kind: 'translating' | 'analyzing' } | { kind: 'translate'; untranslated: number } | undefined;
+  row: { kind: 'translate'; untranslated: number } | undefined;
 }
 
 /** 逐字稿最下面的「這個畫面」區塊：秒數、平常的剩餘額度、條漫計頁、回報翻譯問題、重新翻譯。 */
@@ -392,7 +401,8 @@ export interface EndView {
 }
 
 /**
- * 側邊欄的按鈕放哪裡（按鈕放置方案）：固定列只放當下唯一要做的事與進度，其他收到最下面。end 是 undefined＝最下面沒有東西可放。
+ * 側邊欄的按鈕放哪裡（按鈕放置方案）：固定列只放當下唯一要做的事，其他收到最下面。
+ * end 是 undefined＝最下面沒有東西可放；畫面上還沒有辨識好的頁時也不放，等有結果再一起出現。
  */
 export function panelLayout({
   pages,
@@ -415,13 +425,7 @@ export function panelLayout({
   const action = q.footerButton === 'translate' ? translateAction(pages, translatable) : undefined;
   // 翻譯中不放「翻譯此頁」，免得連按重複扣頁；辨識中別的頁已經可以翻時照樣放
   const row: FooterView['row'] =
-    status?.kind === 'translating'
-      ? { kind: 'translating' }
-      : action === 'translate'
-        ? { kind: 'translate', untranslated: pages.filter(isUntranslated).length }
-        : pages.some((p) => p.transcript.state === 'analyzing')
-          ? { kind: 'analyzing' }
-          : undefined;
+    status?.kind !== 'translating' && action === 'translate' ? { kind: 'translate', untranslated: pages.filter(isUntranslated).length } : undefined;
   const footerQuota = q.line?.warn ? q.line : undefined;
   const plans = q.footerButton === 'plans';
   const model: FooterView['model'] =
@@ -444,7 +448,8 @@ export function panelLayout({
           { note: charge && (charge.enough ? `從辨識開始重來、不用快取；${charge.text}` : charge.text), disabled: charge?.enough === false }
         : undefined,
   };
-  const empty = !end.summary && !end.quota && !end.strip && !end.report && !end.retranslate;
+  const nothingYet = !pages.some((p) => p.transcript.state === 'done');
+  const empty = nothingYet || (!end.summary && !end.quota && !end.strip && !end.report && !end.retranslate);
   return { footer, end: empty ? undefined : end };
 }
 

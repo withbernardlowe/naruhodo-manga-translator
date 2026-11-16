@@ -62,13 +62,16 @@
    *   - 不混列另一個語言的字型：日文排到繁中字型會變成中文字形，缺的字再被別的字型補，同一行字形不一（#205 前的 side panel）
    *   - 語言字型排在 system-ui 前面：system-ui 跟著作業系統語系走（繁中 Windows 是微軟正黑體），日文也會被它接走
    * Windows 用微軟正黑體／Yu Gothic，macOS 用 PingFang TC／Hiragino Sans：不列使用者可能另外裝的字型（例如 Noto Sans TC），大家看到的一樣
+   *   - 繁中 Windows 內建的日文黑體只有游ゴシック（BIZ UD、教科書體要另裝日文補充字型）。用一般版的 Medium、不用 UI 版：
+   *     UI 版的假名排得緊，長句不好讀；一般版的 Regular 在 Windows 又太細
    */
   --naru-font-sans: 'PingFang TC', 'Microsoft JhengHei UI', 'Microsoft JhengHei', system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --naru-font-ja: 'Hiragino Sans', 'Yu Gothic UI', 'Yu Gothic', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --naru-font-ja: 'Hiragino Sans', 'Yu Gothic Medium', 'Yu Gothic', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --naru-font-mono: ui-monospace, 'Cascadia Mono', Consolas, monospace;
 
   /* 字級 */
-  --naru-text-ja: 17px;
+  /* 日文比譯文大一級；游ゴシック的字面比正黑體小，18px 看起來才跟中文等重 */
+  --naru-text-ja: 18px;
   --naru-text-body: 15px;
   --naru-text-label: 14px;
   --naru-text-small: 13px;

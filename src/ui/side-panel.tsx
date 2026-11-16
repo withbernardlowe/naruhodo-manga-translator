@@ -13,7 +13,7 @@ import { loadPunctuationFont } from '../shared/punctuation-face.ts';
 import type { StaleReason } from '../shared/series-notes.ts';
 import { currentDisplay, type Display, type TranscriptDisplay } from '../shared/transcript-display.ts';
 import type { TranslationMode } from '../shared/translation-mode.ts';
-import { Button, Callout, PageHeader, Progress, SegmentedControl, type SegmentOption } from './components.tsx';
+import { Button, Callout, PageHeader, SegmentedControl, type SegmentOption } from './components.tsx';
 import type { ConsentState } from '../shared/data-consent.ts';
 import { ConsentDisclosure } from './data-flow.tsx';
 import { PRIVACY_URL } from './links.ts';
@@ -91,21 +91,11 @@ const STALE_TEXT: Record<StaleReason, string> = {
 type Charge = ReturnType<typeof chargeNote>;
 
 /** 「重新翻譯」＋按鈕下面扣多少的小字（不另外確認，按鈕放置方案）；disabled＝額度不夠。 */
-function RetranslateButton({
-  variant,
-  note,
-  disabled,
-  onClick,
-}: {
-  variant: 'secondary' | 'ghost';
-  note: string | undefined;
-  disabled: boolean;
-  onClick: () => void;
-}) {
+function RetranslateButton({ note, disabled, onClick }: { note: string | undefined; disabled: boolean; onClick: () => void }) {
   const noteId = useId();
   return (
     <>
-      <Button variant={variant} onClick={onClick} disabled={disabled} aria-describedby={note && noteId}>
+      <Button variant="secondary" onClick={onClick} disabled={disabled} aria-describedby={note && noteId}>
         重新翻譯
       </Button>
       {note && (
@@ -122,13 +112,48 @@ function StaleHint({ reason, charge, onRetranslate }: { reason: StaleReason; cha
   return (
     <Callout tone="warn" role="group" aria-label="過時提示">
       <span>{STALE_TEXT[reason]}</span>
-      <RetranslateButton variant="secondary" note={charge?.text} disabled={charge?.enough === false} onClick={onRetranslate} />
+      <RetranslateButton note={charge?.text} disabled={charge?.enough === false} onClick={onRetranslate} />
     </Callout>
   );
 }
 
+/** 還在辨識：幾條灰色的骨架行，暗示句子等一下出現在這裡（進度的字在頁首）。 */
+function TranscriptSkeleton() {
+  return (
+    <div class="transcript-skeleton" aria-hidden="true">
+      {[
+        [72, 48],
+        [58, 36],
+        [80, 52],
+      ].map(([original, translation]) => (
+        <div key={original} class="transcript-skeleton__row">
+          <span class="transcript-skeleton__num" />
+          <span class="transcript-skeleton__lines">
+            <span style={{ width: `${original}%` }} />
+            <span style={{ width: `${translation}%` }} />
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** 頁首右側的進度（辨識中、翻譯中）：跟翻好後的「快取・2.4 秒」同一個位置，同一件事只在這裡說一次。 */
+function PageProgress({ text }: { text: string }) {
+  return (
+    <p class="page-progress" role="status" aria-label="進度">
+      <span class="page-progress__dots" aria-hidden="true">
+        <span />
+        <span />
+        <span />
+      </span>
+      {text}
+    </p>
+  );
+}
+
 function PageItem({
-  entry: { page, side, heading, translationStatus },
+  entry: { page, side, heading, translationStatus, progress },
   onRetry,
   onRetranslate,
   staleCharge,
@@ -150,19 +175,22 @@ function PageItem({
         side={side}
         heading={heading}
         status={
-          translationStatus && (
-            <p class="translation-status" role="status" aria-label="翻譯狀態">
-              {translationStatus}
-            </p>
+          progress ? (
+            <PageProgress text={progress} />
+          ) : (
+            translationStatus && (
+              <p class="translation-status" role="status" aria-label="翻譯狀態">
+                {translationStatus}
+              </p>
+            )
           )
         }
       />
-      {transcript.state === 'analyzing' && <Progress>辨識中…</Progress>}
+      {transcript.state === 'analyzing' && <TranscriptSkeleton />}
       {transcript.state === 'error' && <Callout tone="danger">辨識失敗：{transcript.message}</Callout>}
       {transcript.state === 'done' && transcript.stale && !transcript.translating && (
         <StaleHint reason={transcript.stale} charge={staleCharge} onRetranslate={onRetranslate} />
       )}
-      {transcript.state === 'done' && transcript.translating && <Progress>翻譯中…</Progress>}
       {transcript.state === 'done' && transcript.translateError && (
         <Callout tone="danger" role="alert">
           <p>翻譯失敗，改顯示 kuromoji 讀音：{transcript.translateError}</p>
@@ -314,7 +342,8 @@ function QuotaLine({ line, onViewPlans }: { line: QuotaLineView; onViewPlans: ((
 }
 
 /**
- * 底部固定列（#77、#92；按鈕放置方案）：有事才出現，最多一顆按鈕——進度、「N 頁還沒翻譯」＋「翻譯此頁」、快用完或用完的額度。
+ * 底部固定列（#77、#92；按鈕放置方案）：有事才出現，最多一顆按鈕——模型下載進度、「N 頁還沒翻譯」＋「翻譯此頁」、快用完或用完的額度。
+ * 辨識中、翻譯中不在這裡：各頁的頁首已經說了。
  * 放在 main 外面才是 contentinfo landmark。
  */
 function PanelFooter({ footer, onTranslate, onViewPlans }: { footer: FooterView; onTranslate: () => void; onViewPlans: (() => void) | undefined }) {
@@ -331,17 +360,11 @@ function PanelFooter({ footer, onTranslate, onViewPlans }: { footer: FooterView;
       )}
       {row && (
         <div class="status-row">
-          {row.kind === 'translate' ? (
-            <>
-              <span>{pageCount(row.untranslated)} 頁還沒翻譯</span>
-              {/* 只翻辨識好、還沒翻的頁，不重新擷取（規則在 translateAction） */}
-              <Button variant="primary" onClick={onTranslate}>
-                翻譯此頁
-              </Button>
-            </>
-          ) : (
-            <Progress>{row.kind === 'translating' ? '翻譯中…' : '辨識中…'}</Progress>
-          )}
+          <span>{pageCount(row.untranslated)} 頁還沒翻譯</span>
+          {/* 只翻辨識好、還沒翻的頁，不重新擷取（規則在 translateAction） */}
+          <Button variant="primary" onClick={onTranslate}>
+            翻譯此頁
+          </Button>
         </div>
       )}
     </footer>
@@ -349,8 +372,9 @@ function PanelFooter({ footer, onTranslate, onViewPlans }: { footer: FooterView;
 }
 
 /**
- * 逐字稿最下面的「這個畫面」（按鈕放置方案）：秒數（自備金鑰加模型、費用）、平常的剩餘頁數、條漫計頁、回報翻譯問題、重新翻譯。
- * 「重新翻譯」會從辨識整個重來、扣頁，平常很少用，所以不放固定列；扣多少寫在按鈕下面的小字，不另外確認。
+ * 逐字稿最下面的「這個畫面」（按鈕放置方案）：秒數（自備金鑰加模型、費用）、平常的剩餘頁數、條漫計頁合成一塊資訊，
+ * 下面「回報翻譯問題」「重新翻譯」並排。「重新翻譯」會從辨識整個重來、扣頁，平常很少用，所以不放固定列；
+ * 扣多少寫在按鈕列下面的小字，不另外確認。
  */
 function ScreenEnd({
   end,
@@ -364,25 +388,40 @@ function ScreenEnd({
   onViewPlans: (() => void) | undefined;
 }) {
   const { retranslate } = end;
+  const noteId = useId();
+  const info = end.summary || end.quota || end.strip;
   return (
     <section class="screen-end" aria-label="這個畫面">
       <h2 class="screen-end__title">這個畫面</h2>
-      {end.summary && (
-        <p role="status" aria-label="翻譯摘要">
-          {end.summary}
-        </p>
-      )}
-      {end.quota && <QuotaLine line={end.quota} onViewPlans={onViewPlans} />}
-      {end.strip && (
-        <div role="status" aria-label="條漫計費" class="status-row quota-row">
-          <span>{end.strip}</span>
+      {info && (
+        <div class="screen-end__info">
+          {end.summary && (
+            <p role="status" aria-label="翻譯摘要">
+              {end.summary}
+            </p>
+          )}
+          {end.quota && <QuotaLine line={end.quota} onViewPlans={onViewPlans} />}
+          {end.strip && (
+            <div role="status" aria-label="條漫計費" class="status-row quota-row">
+              <span>{end.strip}</span>
+            </div>
+          )}
         </div>
       )}
-      {end.report && report}
-      {retranslate && (
-        <div class="screen-end__retranslate">
-          <RetranslateButton variant="ghost" note={retranslate.note} disabled={retranslate.disabled} onClick={onRetranslate} />
+      {(end.report || retranslate) && (
+        <div class="screen-end__actions">
+          {end.report && report}
+          {retranslate && (
+            <Button variant="secondary" onClick={onRetranslate} disabled={retranslate.disabled} aria-describedby={retranslate.note && noteId}>
+              重新翻譯
+            </Button>
+          )}
         </div>
+      )}
+      {retranslate?.note && (
+        <small id={noteId} class="charge-note">
+          {retranslate.note}
+        </small>
       )}
     </section>
   );
@@ -393,24 +432,14 @@ const PAGE_MODES: readonly SegmentOption<PageMode>[] = [
   { value: 'learn', label: '學習', description: '漫畫頁面保留日文，滑過看讀音；逐字稿的譯文也先收起來' },
 ];
 
-/** 漫畫頁面的小圖示：跟逐字稿標題列的側邊欄圖示成對（U15）。 */
-function PageIcon() {
-  return (
-    <svg width="12" height="14" viewBox="0 0 12 14" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-      <rect x="0.75" y="0.75" width="10.5" height="12.5" rx="1.5" />
-    </svg>
-  );
-}
-
 /**
  * Page Mode 切換（spec #70、#73）：全域設定，外掛存在 chrome.storage.local；頁面上的 content script 自己聽變更。
  * 學習時頁面不擦字、不畫譯文，翻譯照常進行。一行寫著「漫畫頁面」，跟逐字稿標題列的顯示選單分開，各自標出管哪裡（U15）；
- * 兩種模式的說明在按鈕的 hover 提示裡。
+ * 名稱用小標的樣式、不加圖示（空心方框的圖示會被看成 checkbox）。兩種模式的說明在按鈕的 hover 提示裡。
  */
 function PageModeSwitch({ mode, choose }: { mode: PageMode; choose: (mode: PageMode) => void }) {
   return (
     <div class="page-mode">
-      <PageIcon />
       <span class="page-mode__label" aria-hidden="true">
         漫畫頁面
       </span>
@@ -465,15 +494,18 @@ function SeriesTitle({ series, onOpen }: { series: SeriesHeader; onOpen: () => v
     <h1 class="panel-header__series">
       <button type="button" class="series-title" aria-label={`作品：${series.title}`} onClick={onOpen}>
         <span class="series-card__names">
-          <span class="series-title__name">{series.title}</span>
+          {/* 名稱最多兩行；› 緊接在名稱後面（放在截斷的元素外面，長名稱截掉的是名稱，› 還在），看得出整個名稱是一顆按鈕 */}
+          <span class="series-title__line">
+            <span class="series-title__name">{series.title}</span>
+            <span class="series-title__chevron" aria-hidden="true">
+              ›
+            </span>
+          </span>
           {series.subtitle && (
             <span class="series-card__original" lang="ja">
               {series.subtitle}
             </span>
           )}
-        </span>
-        <span class="series-card__chevron" aria-hidden="true">
-          ›
         </span>
       </button>
     </h1>
@@ -482,36 +514,23 @@ function SeriesTitle({ series, onOpen }: { series: SeriesHeader; onOpen: () => v
 
 /**
  * 作品確認（#186 的問句列，U14 從作品卡搬到提示位置）：猜到原名是［是］［換一部］，猜不出來是［取名字］［選一部］。
+ * 名稱就在正上方的標題列，這裡不再重複，只是一條窄的問句列。
  * 不擋翻譯，所以排在額度用完、已訂閱後面（順序在 view.ts 的 panelNotices）。
  */
 function SeriesAskCallout({
-  series,
   ask,
   onConfirm,
   onRename,
   onPick,
 }: {
-  series: SeriesHeader;
   ask: SeriesAsk;
   onConfirm: () => void;
   onRename: () => void;
   onPick: () => void;
 }) {
   return (
-    <Callout class="naru-callout--stack" role="group" aria-label="確認作品">
-      <p>
-        <strong>{ask === 'confirm' ? '這是正確的作品嗎？' : '看不出是哪部作品'}</strong>
-      </p>
-      {ask === 'confirm' && (
-        <p>
-          {series.title}
-          {series.subtitle && (
-            <>
-              （<span lang="ja">{series.subtitle}</span>）
-            </>
-          )}
-        </p>
-      )}
+    <Callout class="series-ask" role="group" aria-label="確認作品">
+      <span class="series-ask__question">{ask === 'confirm' ? '上面的作品對嗎？' : '看不出是哪部作品'}</span>
       <div class="naru-row">
         {ask === 'confirm' ? (
           <Button variant="primary" onClick={onConfirm}>
@@ -576,12 +595,12 @@ function NoticeSlot({ notices, render }: { notices: ReturnType<typeof panelNotic
   );
 }
 
-/** 「停止」：紅色小方塊＋字，跟 ⚙ 並排在標題列。 */
+/** 「停止」：墨色小方塊＋字，跟 ⚙ 並排在標題列。只是停止翻譯這個分頁、不是危險動作，所以不用紅色。 */
 function StopButton({ onStop }: { onStop: () => void }) {
   return (
     <Button variant="ghost" class="panel-header__stop" aria-label="停止翻譯這個分頁" onClick={onStop}>
-      <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
-        <rect width="10" height="10" rx="2" fill="currentColor" />
+      <svg width="9" height="9" viewBox="0 0 9 9" aria-hidden="true">
+        <rect width="9" height="9" rx="1.5" fill="currentColor" />
       </svg>
       停止
     </Button>
@@ -727,7 +746,7 @@ function ReportProblem({ copy, open }: NonNullable<SidePanelProps['reportProblem
   return (
     <section class="report-problem" aria-label="回報翻譯問題">
       {copied === undefined && (
-        <Button variant="ghost" onClick={copyThenOpen}>
+        <Button variant="secondary" onClick={copyThenOpen}>
           回報翻譯問題
         </Button>
       )}
@@ -840,7 +859,6 @@ export function SidePanel(props: SidePanelProps) {
         return (
           series?.ask && (
             <SeriesAskCallout
-              series={series}
               ask={series.ask}
               onConfirm={() => props.onConfirmSeries?.()}
               onRename={() => openSeries('series', true)}
@@ -891,8 +909,9 @@ export function SidePanel(props: SidePanelProps) {
     <div class="naru-side-panel">
       <main>
         {header}
-        <PageModeSwitch mode={pageMode} choose={props.onPageModeChange} />
+        {/* 提示（含作品確認）緊接在標題列下面：作品確認問的就是上面那個名稱 */}
         {noticeSlot}
+        <PageModeSwitch mode={pageMode} choose={props.onPageModeChange} />
         {done.length > 0 && (
           <TranscriptHeading
             display={display}

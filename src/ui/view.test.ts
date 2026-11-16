@@ -96,6 +96,21 @@ describe('單頁的翻譯狀態列', () => {
   });
 });
 
+const pageProgress = (transcript: Transcript) => sidePanelView([page('p1', 'a1', { transcript })], 'hosted').pages[0]!.progress;
+
+describe('單頁的進度（頁首右側，跟翻譯狀態同一個位置；固定列不再重複）', () => {
+  it('辨識中、翻譯中（含重新翻譯）', () => {
+    expect(pageProgress({ state: 'analyzing' })).toBe('辨識中');
+    expect(pageProgress({ ...translated(), translating: true })).toBe('翻譯中');
+  });
+
+  it('翻好、翻譯失敗、辨識失敗時沒有進度', () => {
+    expect(pageProgress(translated())).toBeUndefined();
+    expect(pageProgress({ ...translated(), translateError: 'boom' })).toBeUndefined();
+    expect(pageProgress({ state: 'error', message: 'x' })).toBeUndefined();
+  });
+});
+
 const overall = (transcripts: Transcript[], mode: TranslationMode = 'ownKey') =>
   sidePanelView(transcripts.map((transcript, i) => page(`p${i}`, `a${i}`, { transcript })), mode).status;
 
@@ -851,7 +866,7 @@ describe('底部固定列與逐字稿最下面的「這個畫面」（按鈕放�
       quota: undefined,
       plans: false,
       model: { loaded: 12_000_000, total: 38_000_000 },
-      row: { kind: 'analyzing' },
+      row: undefined,
     });
   });
 
@@ -882,24 +897,28 @@ describe('底部固定列與逐字稿最下面的「這個畫面」（按鈕放�
     });
   });
 
-  it('翻譯中：固定列只有進度，不放「翻譯此頁」（避免連按重複扣頁）', () => {
-    expect(layout([{ ...translated(), translating: true }, untranslatedPage]).footer).toEqual({ quota: undefined, plans: false, row: { kind: 'translating' } });
+  it('翻譯中：不放「翻譯此頁」（避免連按重複扣頁）；進度只在那一頁的頁首，固定列不重複', () => {
+    expect(layout([{ ...translated(), translating: true }, untranslatedPage]).footer).toBeUndefined();
   });
 
-  it('辨識中：沒有別的事時顯示進度；另一頁已經可以翻時照樣放「翻譯此頁」', () => {
-    expect(layout([{ state: 'analyzing' }, translated()]).footer).toEqual({ quota: undefined, plans: false, row: { kind: 'analyzing' } });
-    expect(layout([{ state: 'analyzing' }, untranslatedPage]).footer).toEqual({ quota: undefined, plans: false, row: { kind: 'translate', untranslated: 1 } });
+  it('辨識中：進度只在那一頁的頁首，固定列不重複；另一頁已經可以翻時照樣放「翻譯此頁」', () => {
+    expect(layout([{ state: 'analyzing' }, translated()]).footer).toBeUndefined();
+    expect(layout([{ state: 'analyzing' }, untranslatedPage]).footer).toEqual({ quota: undefined, plans: false, model: undefined, row: { kind: 'translate', untranslated: 1 } });
   });
 
-  it('還沒有翻好的頁：最下面只有剩餘額度，沒有回報與重新翻譯', () => {
-    expect(layout([{ state: 'analyzing' }]).end).toEqual({
+  it('畫面上還沒有辨識好的頁：沒有「這個畫面」，剩餘額度也等有結果再出現', () => {
+    expect(layout([{ state: 'analyzing' }]).end).toBeUndefined();
+    expect(layout([]).end).toBeUndefined();
+  });
+
+  it('辨識好、還沒翻：「這個畫面」只有剩餘額度，沒有回報與重新翻譯', () => {
+    expect(layout([untranslatedPage]).end).toEqual({
       summary: undefined,
       quota: { text: '免費額度剩 80 頁', warn: false, plansLink: true },
       strip: undefined,
       report: false,
       retranslate: undefined,
     });
-    expect(layout([{ state: 'analyzing' }], undefined, { mode: 'ownKey', hasKey: true }).end).toBeUndefined();
   });
 
   it('額度快用完：剩餘頁數回到固定列，最下面不再重複', () => {

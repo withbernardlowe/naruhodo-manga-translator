@@ -110,15 +110,7 @@ a.naru-btn { text-decoration: none; }
   flex: none; padding: 0 6px; border-radius: 4px;
   font-size: 11px; font-weight: 700; line-height: 1.6; color: var(--naru-on-accent); background: var(--naru-accent);
 }
-/* Progress：還在跑的一行（辨識中、翻譯中），圓點閃爍表示進行中 */
-.naru-progress {
-  display: flex; align-items: center; gap: var(--naru-space-2); margin: var(--naru-space-2) 0;
-  font-size: var(--naru-text-small); color: var(--naru-ink-3);
-}
-.naru-progress::before {
-  content: ''; flex: none; width: 6px; height: 6px; border-radius: var(--naru-radius-pill); background: var(--naru-accent);
-  animation: naru-progress-pulse 1.2s ease-in-out infinite;
-}
+/* 進行中的圓點閃爍（side panel 頁首的「辨識中」「翻譯中」） */
 @keyframes naru-progress-pulse { 50% { opacity: 0.25; } }
 
 .naru-reveal__hint { font-size: var(--naru-text-caption); color: var(--naru-ink-3); }
