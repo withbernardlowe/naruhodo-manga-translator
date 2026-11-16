@@ -4,10 +4,11 @@
  * 原文標 lang="ja"、譯文標 lang="zh-Hant"：字型跟著語言走，測試也靠它找元素。
  */
 import { useEffect, useId, useRef, useState } from 'preact/hooks';
-import type { PageText } from '../shared/page-text.ts';
+import { unreadableLabel, type PageText } from '../shared/page-text.ts';
 import { rubyDisplay, type RubyDisplay } from '../shared/ruby.ts';
 import { displaySummary, LEVEL_LABELS, LEVELS, type Display, type DisplayLevel } from '../shared/transcript-display.ts';
 import { Badge, RevealChip, SegmentedControl, Switch } from './components.tsx';
+import { transcriptRows } from './transcript-rows.ts';
 
 /** 側邊欄的小圖示：跟「漫畫頁面」的頁面圖示成對，標出這一行管的是側邊欄（U15）。 */
 function PanelIcon() {
@@ -141,62 +142,100 @@ export interface TranscriptProps {
   onHover: (lineId: string | null) => void;
 }
 
-/** 逐字稿：Balloon 與 Loose Text 依閱讀順序混在同一串；Loose Text 標「框外文字」。 */
+/**
+ * 逐字稿：Balloon 與 Loose Text 依閱讀順序混在同一串；Loose Text 標「框外文字」。
+ * 框外文字裡無法辨識的段收到這頁最後的收合列（U17，規則在 transcript-rows.ts）；每頁從收起開始。
+ * 編號直接顯示閱讀順序（order），行被收走也不會重編，跟頁面上的編號一致（U10）。
+ */
 export function Transcript({ text, translated, display, hoveredId, onHover }: TranscriptProps) {
   const learn = display.mode === 'learn';
   const showRuby = learn ? display.furigana : display.level === 'withReading';
   const translationOnly = !learn && display.level === 'translationOnly';
-  const lines = [
-    ...text.balloons.map((b) => ({ ...b, loose: false })),
-    ...text.looseText.map((l) => ({ ...l, loose: true })),
-  ].sort((a, b) => a.order - b.order);
-  const list = useRef<HTMLOListElement>(null);
+  const [expanded, setExpanded] = useState(false);
+  const foldedId = useId();
+  const lines = [...text.balloons.map((b) => ({ ...b, loose: false })), ...text.looseText.map((l) => ({ ...l, loose: true }))];
+  const rows = transcriptRows(lines, { translated, expanded, hoveredId });
+  const root = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (hoveredId === undefined) return;
-    list.current?.querySelector('li.hl')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    root.current?.querySelector('li.hl')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }, [hoveredId]);
 
-  return (
-    <ol aria-label="逐字稿" ref={list}>
-      {lines.map((line) => {
-        // unreadable：OCR 原文（灰、刪除線）＋「無法辨識 · 未覆蓋」，每個層級都一樣
-        const unreadable = translated && line.unreadable;
-        const hasTranslation = translated && line.譯文 !== '';
-        const showOriginal = unreadable || !translationOnly || !hasTranslation;
-        // 要畫ルビ的句子才對齊讀音（讀音全是 LLM 推測，不另外標示）
-        const ruby = showRuby && !unreadable ? rubyDisplay(line.原文, line.讀音) : undefined;
-        const shownTranslation = (
-          <span lang="zh-Hant" class="translation">
-            {line.譯文}
+  const renderLine = (line: (typeof lines)[number]) => {
+    const unreadable = translated && line.unreadable;
+    const hasTranslation = translated && line.譯文 !== '';
+    const showOriginal = unreadable || !translationOnly || !hasTranslation;
+    // 要畫ルビ的句子才對齊讀音（讀音全是 LLM 推測，不另外標示）
+    const ruby = showRuby && !unreadable ? rubyDisplay(line.原文, line.讀音) : undefined;
+    // 框外的雜訊：灰、刪除線；Balloon 讀不出來：原文不劃掉，警告色標籤，看起來跟雜訊不一樣（U17）
+    const originalClass = unreadable ? (line.loose ? 'original unreadable' : 'original unreadable-balloon') : ruby ? 'original with-ruby' : 'original';
+    const shownTranslation = (
+      <span lang="zh-Hant" class="translation">
+        {line.譯文}
+      </span>
+    );
+    return (
+      <li
+        key={line.id}
+        data-order={line.order}
+        class={line.id === hoveredId ? 'hl' : undefined}
+        onMouseEnter={() => onHover(line.id)}
+        onMouseLeave={() => onHover(null)}
+      >
+        {showOriginal && (
+          <span lang="ja" class={originalClass}>
+            {ruby ? <Ruby ja={line.原文} display={ruby} /> : line.原文}
           </span>
-        );
-        return (
-          <li
-            key={line.id}
-            class={line.id === hoveredId ? 'hl' : undefined}
-            onMouseEnter={() => onHover(line.id)}
-            onMouseLeave={() => onHover(null)}
+        )}
+        {line.loose && !unreadable && (
+          <span class="badges">
+            <Badge tone="loose">框外文字</Badge>
+          </span>
+        )}
+        {unreadable && <span class={line.loose ? 'unreadable-label' : 'unreadable-label unreadable-label--balloon'}>{unreadableLabel(line.loose)}</span>}
+        {!unreadable &&
+          (hasTranslation ? (
+            learn ? <RevealChip>{shownTranslation}</RevealChip> : shownTranslation
+          ) : (
+            <span class="untranslated">未翻譯</span>
+          ))}
+      </li>
+    );
+  };
+
+  return (
+    <div class="transcript" ref={root}>
+      <ol aria-label="逐字稿">{rows.inline.map(renderLine)}</ol>
+      {rows.folded.length > 0 && (
+        <div class={rows.revealed.length > 0 ? 'transcript-fold open' : 'transcript-fold'}>
+          <button
+            type="button"
+            class={rows.folded.some((l) => l.id === hoveredId) ? 'transcript-fold__toggle hl' : 'transcript-fold__toggle'}
+            aria-expanded={expanded}
+            aria-controls={foldedId}
+            onClick={() => setExpanded(!expanded)}
           >
-            {showOriginal && (
-              <span lang="ja" class={unreadable ? 'original unreadable' : ruby ? 'original with-ruby' : 'original'}>
-                {ruby ? <Ruby ja={line.原文} display={ruby} /> : line.原文}
-              </span>
-            )}
-            {line.loose && (
-              <span class="badges">
-                <Badge tone="loose">框外文字</Badge>
-              </span>
-            )}
-            {unreadable && <span class="unreadable-label">無法辨識 · 未覆蓋</span>}
-            {!unreadable &&
-              (hasTranslation ? (
-                learn ? <RevealChip>{shownTranslation}</RevealChip> : shownTranslation
-              ) : (
-                <span class="untranslated">未翻譯</span>
-              ))}
-          </li>
-        );
-      })}
-    </ol>
+            <FoldIcon expanded={expanded} />
+            <span>
+              {expanded ? '' : '另有 '}
+              <b>{rows.folded.length} 段</b>框外文字無法辨識
+            </span>
+            <span class="transcript-fold__orders">{expanded ? '收起' : rows.folded.map((l) => l.order).join('・')}</span>
+          </button>
+          <ol id={foldedId} aria-label="無法辨識的框外文字">
+            {rows.revealed.map(renderLine)}
+          </ol>
+          {expanded && <p class="transcript-fold__hint">這裡面有該翻的字？可以用最下面的「回報翻譯問題」告訴我們。</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FoldIcon({ expanded }: { expanded: boolean }) {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d={expanded ? 'M2.5 4 L6 7.5 L9.5 4' : 'M4 2.5 L7.5 6 L4 9.5'} />
+    </svg>
   );
 }

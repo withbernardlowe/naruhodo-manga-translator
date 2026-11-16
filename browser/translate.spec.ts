@@ -114,14 +114,15 @@ test('設定 API key、同意資料使用後，已啟動的分頁直接翻譯：
   await expect(transcript.getByText('早安！今天好早喔')).toBeVisible();
   await expect(screenEnd.getByRole('button', { name: '重新翻譯' })).toBeVisible();
 
-  // unreadable：OCR 原文（灰、刪除線）＋「無法辨識 · 未覆蓋」
-  const unreadable = transcript.getByRole('listitem').filter({ hasText: '無法辨識' });
+  // Balloon 讀不出來（U17）：留在原位，原文不劃掉，警告色標籤（框外文字收到頁尾，見 ebook-reader.spec.ts）
+  const unreadable = transcript.getByRole('listitem').filter({ hasText: '這句讀不出來' });
   await expect(unreadable).toHaveCount(1);
   await expect(unreadable).toContainText('もちろん');
   const original = unreadable.locator('[lang="ja"]');
-  await expect(original).toHaveCSS('text-decoration-line', 'line-through');
-  // 灰＝design token --naru-ink-3（#75706A）
-  await expect(original).toHaveCSS('color', 'rgb(117, 112, 106)');
+  await expect(original).toHaveCSS('text-decoration-line', 'none');
+  // 深灰＝design token --naru-ink-2（#5B5750）；標籤是 --naru-warn（#6E5000）
+  await expect(original).toHaveCSS('color', 'rgb(91, 87, 80)');
+  await expect(unreadable.getByText('這句讀不出來・頁面保留日文')).toHaveCSS('color', 'rgb(110, 80, 0)');
   await expect(unreadable.locator('[lang="zh-Hant"]')).toHaveCount(0);
   await expect(unreadable.getByText('未翻譯')).toHaveCount(0);
 

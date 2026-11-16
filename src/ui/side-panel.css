@@ -69,26 +69,26 @@
 /* 逐字稿 */
 :where(.naru-side-panel) [aria-label='Page'] { list-style: none; margin: 0; padding: 0; }
 :where(.naru-side-panel) [aria-label='Page'] > li { margin: var(--naru-space-3) 0 var(--naru-space-5); }
-:where(.naru-side-panel) [aria-label='逐字稿'] { padding-left: 0; counter-reset: line; }
+:where(.naru-side-panel) .transcript ol { padding-left: 0; margin: 0; list-style: none; }
 /*
  * 每句（原文＋譯文）一組，左邊是閱讀順序編號，讓組與組之間有明確的開頭。
  * 內距平常就留著（不只高亮時才加），高亮出現時文字不會跳；左右往外延伸 space-2，文字位置跟原本對齊。
  */
-:where(.naru-side-panel) [aria-label='逐字稿'] li {
-  position: relative; display: flex; flex-direction: column; counter-increment: line;
+:where(.naru-side-panel) .transcript li {
+  position: relative; display: flex; flex-direction: column;
   margin: 0 calc(-1 * var(--naru-space-2)) 6px; padding: 6px var(--naru-space-3) 10px 38px;
   border-radius: var(--naru-radius-md);
 }
-:where(.naru-side-panel) [aria-label='逐字稿'] li::before {
-  content: counter(line); position: absolute; left: 10px; top: 10px;
+:where(.naru-side-panel) .transcript li::before {
+  content: attr(data-order); position: absolute; left: 10px; top: 10px;
   display: grid; place-items: center; width: 18px; height: 18px; border-radius: var(--naru-radius-pill);
   font-size: 10.5px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums;
   color: var(--naru-ink-3); box-shadow: inset 0 0 0 1px var(--naru-line-strong);
 }
 /* 第一行是帶ルビ的原文（行高 2.2）：編號往下對齊那一行的中間 */
-:where(.naru-side-panel) [aria-label='逐字稿'] li:has(> .original.with-ruby:first-child)::before { top: 16px; }
-:where(.naru-side-panel) [aria-label='逐字稿'] li.hl { background: var(--naru-accent-weak); }
-:where(.naru-side-panel) [aria-label='逐字稿'] li.hl::before { background: var(--naru-brand); color: var(--naru-ink); box-shadow: none; }
+:where(.naru-side-panel) .transcript li:has(> .original.with-ruby:first-child)::before { top: 16px; }
+:where(.naru-side-panel) .transcript li.hl { background: var(--naru-accent-weak); }
+:where(.naru-side-panel) .transcript li.hl::before { background: var(--naru-brand); color: var(--naru-ink); box-shadow: none; }
 :where(.naru-side-panel) .original { font-size: var(--naru-text-ja); line-height: 1.6; }
 /* 加上讀音時行高放大，ルビ才不會壓到上一行 */
 :where(.naru-side-panel) .original.with-ruby { line-height: 2.2; }
@@ -127,7 +127,28 @@
 :where(.naru-side-panel) .unreadable { color: var(--naru-ink-3); text-decoration: line-through; }
 :where(.naru-side-panel) .unreadable-label { color: var(--naru-ink-3); font-size: var(--naru-text-caption); }
 /* 選取列的底（--naru-accent-weak）上 ink-3 只有 3.9:1，不到 AA；改用 ink-2（5.8:1） */
-:where(.naru-side-panel) [aria-label='逐字稿'] li.hl :is(.untranslated, .unreadable, .unreadable-label) { color: var(--naru-ink-2); }
+:where(.naru-side-panel) .transcript li.hl :is(.untranslated, .unreadable, .unreadable-label) { color: var(--naru-ink-2); }
+/* Balloon 讀不出來（U17）：多半是真的對白被擋下，原文不劃掉，標籤用警告色，跟框外的雜訊分得開 */
+:where(.naru-side-panel) .unreadable-balloon { color: var(--naru-ink-2); }
+/* 跟上一條「選取列改 ink-2」一樣具體、寫在後面：高亮時也維持警告色（warn 在 warn-bg 上本來就過 AA） */
+:where(.naru-side-panel) .transcript li .unreadable-label.unreadable-label--balloon {
+  align-self: flex-start; padding: 0 var(--naru-space-1); border-radius: 4px;
+  background: var(--naru-warn-bg); color: var(--naru-warn);
+}
+/* 框外文字的無法辨識收在這頁最後（U17）：一列說有幾段、哪幾號；點了就地展開 */
+:where(.naru-side-panel) .transcript-fold { margin: var(--naru-space-2) 0 0; border: 1px dashed var(--naru-line-strong); border-radius: var(--naru-radius-md); background: var(--naru-surface-2); }
+:where(.naru-side-panel) .transcript-fold.open { border-style: solid; border-color: var(--naru-line); background: var(--naru-surface); }
+:where(.naru-side-panel) .transcript-fold__toggle {
+  display: flex; align-items: center; gap: var(--naru-space-2); width: 100%; box-sizing: border-box; min-height: 36px;
+  padding: var(--naru-space-2) var(--naru-space-3); border: 0; border-radius: var(--naru-radius-md); background: transparent;
+  font: inherit; font-size: var(--naru-text-small); color: var(--naru-ink-2); text-align: left; cursor: pointer;
+}
+:where(.naru-side-panel) .transcript-fold__toggle b { color: var(--naru-ink); }
+:where(.naru-side-panel) .transcript-fold__toggle.hl { background: var(--naru-accent-weak); }
+:where(.naru-side-panel) .transcript-fold__toggle > svg { flex: none; }
+:where(.naru-side-panel) .transcript-fold__orders { margin-left: auto; color: var(--naru-ink-2); font-variant-numeric: tabular-nums; }
+:where(.naru-side-panel) .transcript-fold ol:not(:empty) { padding: 0 var(--naru-space-2) var(--naru-space-1); }
+:where(.naru-side-panel) .transcript-fold__hint { margin: 0; padding: 0 var(--naru-space-3) var(--naru-space-2); font-size: var(--naru-text-caption); color: var(--naru-ink-2); }
 :where(.naru-side-panel) .translation-status { margin: 0; color: var(--naru-ink-3); font-size: var(--naru-text-caption); }
 :where(.naru-side-panel) .hint { color: var(--naru-ink-3); font-size: var(--naru-text-caption); }
 

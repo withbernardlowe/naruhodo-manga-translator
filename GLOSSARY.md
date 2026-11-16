@@ -53,7 +53,7 @@ The kana pronunciation of a whole Line, shown as furigana over each run of kanji
 _Avoid_: furigana (that is how a Reading is shown), ruby, pronunciation
 
 **Unreadable** (無法辨識)
-A Line whose original cannot be trusted or cannot be read: OCR turned it into garble, or the Page draws it to be illegible even to a Japanese reader (a scrawled letter, an invented script). Listed in the side panel with its original but never covered or translated, so the reader sees the Japanese instead of a plausible wrong translation. Stylized Spelling in a Balloon is not Unreadable.
+A Line whose original cannot be trusted or cannot be read: OCR turned it into garble, or the Page draws it to be illegible even to a Japanese reader (a scrawled letter, an invented script). Listed in the side panel with its original but never covered or translated, so the reader sees the Japanese instead of a plausible wrong translation. An Unreadable Balloon stays in reading order (it is almost always dialogue the reader is missing); Unreadable Loose Text is mostly signs, ads and lettering, so the transcript folds it into one row at the end of its Page. Stylized Spelling in a Balloon is not Unreadable.
 _Avoid_: garbled, OCR error (only one cause), low confidence (only one cause)
 
 **Stylized Spelling** (變體表記)
@@ -65,7 +65,7 @@ A reading-page URL reduced to origin + path (query and hash ignored), remembered
 _Avoid_: site rule, domain mapping
 
 **Page Mode** (頁面模式)
-A global setting, remembered across tabs and browser restarts, that decides what the manga page itself shows: 閱讀 (the default) covers each Balloon with its translation; 學習 leaves the Japanese original untouched and reveals readings, then the translation, step by step through the hover tooltip. Hover sync and the tooltip work in both. 學習 also hides the side panel transcript's translations (see Display Level). In the side panel it sits on a row labelled 漫畫頁面, apart from the transcript's own Display Level menu, so each control names what it changes.
+A global setting, remembered across tabs and browser restarts, that decides what the manga page itself shows: 閱讀 (the default) covers each Balloon with its translation; 學習 leaves the Japanese original untouched and reveals readings, then the translation, step by step through the hover tooltip. Hover sync works in both. Under 閱讀 the tooltip only shows while the side panel is closed: with it open, the hovered Line is already highlighted there, so the page marks the Line with its number instead. Under 學習 the tooltip always shows, and carries the same number while the side panel is open. 學習 also hides the side panel transcript's translations (see Display Level). In the side panel it sits on a row labelled 漫畫頁面, apart from the transcript's own Display Level menu, so each control names what it changes.
 _Avoid_: learning mode (that is the whole feature), overlay toggle
 
 **Display Level** (顯示層級)

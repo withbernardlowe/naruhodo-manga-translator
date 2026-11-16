@@ -409,7 +409,8 @@ test.describe('覆蓋渲染（ground truth）', () => {
     const unreadable = pages[0]!.text.balloons.find((b) => b.id === 't1')!;
     const unreadableCenter = centerOf(unreadable.balloonBbox);
     await page.mouse.move(unreadableCenter.x, unreadableCenter.y);
-    await expect(tooltip).toContainText('無法辨識');
+    // t1 是 Balloon：跟側邊欄同一句說明（unreadableLabel）
+    await expect(tooltip).toContainText('這句讀不出來・頁面保留日文');
     await expect(tooltip.getByText('譯', { exact: true })).toHaveCount(0);
     await expect(tooltip).not.toContainText('滑過這裡看譯文');
   });

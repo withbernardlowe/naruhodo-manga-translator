@@ -8,6 +8,7 @@ import type {
   ProblemReportView,
   Rect,
 } from '../shared/messages.ts';
+import { PANEL_PORT } from '../shared/messages.ts';
 import { loadPageMode, onPageModeChange } from '../shared/page-mode.ts';
 import { createTrace } from '../shared/trace.ts';
 import { createCapturePrep } from './capture.ts';
@@ -283,9 +284,26 @@ if (!globalThis.__naruhodo) {
   };
   chrome.runtime.onMessage.addListener(onMessage);
 
+  // 這個分頁的側邊欄開著沒（U10）：side panel 接上 PANEL_PORT 就是開著，port 斷了就是關了。
+  // 同一個分頁可能有兩條（側邊欄重新載入時新的先接上、舊的才斷），所以數條數
+  const panelPorts = new Set<chrome.runtime.Port>();
+  const onConnect = (port: chrome.runtime.Port) => {
+    if (port.name !== PANEL_PORT) return;
+    panelPorts.add(port);
+    overlay.setPanelOpen(true);
+    port.onDisconnect.addListener(() => {
+      panelPorts.delete(port);
+      overlay.setPanelOpen(panelPorts.size > 0);
+    });
+  };
+  chrome.runtime.onConnect.addListener(onConnect);
+
   /** 停止後頁面要跟沒裝外掛時一樣（#40 驗收 I1）。 */
   function stop() {
     chrome.runtime.onMessage.removeListener(onMessage);
+    chrome.runtime.onConnect.removeListener(onConnect);
+    for (const port of panelPorts) port.disconnect();
+    panelPorts.clear();
     stopWatching();
     stopWatchingPageMode();
     stopRepaint();

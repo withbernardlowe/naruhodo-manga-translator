@@ -153,36 +153,44 @@ async function greetingOnPage(page: Page): Promise<{ x: number; y: number }> {
   return center!;
 }
 
-test('滑過頁面 Balloon：頁面出 tooltip、panel 對應行高亮；滑過 panel 那行：頁面 Balloon 高亮；覆蓋層不擋點擊', async ({
+// side panel 開著（U10）：頁面 hover 不出 tooltip，高亮框標上跟 panel 那行同號的編號；關掉 panel 才出 tooltip。
+// unit（hover-aid.test.ts）測了什麼情況出什麼；這裡測 unit 看不到的串接：panel 接上 port → content script 知道開著，
+// panel 關掉 → port 斷 → 回到 tooltip。
+test('panel 開著時滑過頁面 Balloon：只畫高亮框＋編號、panel 對應行高亮；滑過 panel 那行：頁面也標編號；關掉 panel 才出 tooltip；覆蓋層不擋點擊', async ({
   context,
   sw,
   extensionId,
   mockSite,
 }) => {
-  const { page, panel } = await activateOnMockSite({ context, sw, extensionId, mockSite });
+  const { page, panel, tabId } = await activateOnMockSite({ context, sw, extensionId, mockSite });
   const center = await greetingOnPage(page);
   const line = firstTranscript(panel).getByRole('listitem').filter({ hasText: GREETING_ZH });
   await expect(line).toBeVisible();
+  const order = await line.getAttribute('data-order');
+  expect(order).toMatch(/^\d+$/);
   const tooltip = page.locator('[data-naruhodo-overlay] .tip.on');
+  const highlight = page.locator('[data-naruhodo-overlay] .hl.on');
+  const number = page.locator('[data-naruhodo-overlay] .num.on');
 
   // 頁面 → panel
   await page.mouse.move(1, 1);
-  await expect(tooltip).toHaveCount(0);
+  await expect(highlight).toHaveCount(0);
   await page.mouse.move(center.x, center.y);
-  await expect(tooltip).toHaveCount(1);
-  await expect(tooltip).toContainText(GREETING_ZH);
-  await expect(tooltip.locator('rt')).toHaveText(['きょう', 'はや']);
+  await expect(highlight).toHaveCount(1);
+  await expect(number).toHaveText(order!);
   await expect(line).toHaveClass(/\bhl\b/);
   await expect(panel.locator('[aria-label="逐字稿"] li.hl')).toHaveCount(1);
-  await page.mouse.move(1, 1);
+  // 不出 tooltip 是要斷言「沒發生」：高亮框已經出來了，tooltip 跟它同一次 hover 畫，這時還沒有就是不會有
   await expect(tooltip).toHaveCount(0);
+  await page.mouse.move(1, 1);
+  await expect(highlight).toHaveCount(0);
+  await expect(number).toHaveCount(0);
   await expect(line).not.toHaveClass(/\bhl\b/);
 
-  // panel → 頁面：高亮框蓋住那個 Balloon
-  const highlight = page.locator('[data-naruhodo-overlay] .hl.on');
-  await expect(highlight).toHaveCount(0);
+  // panel → 頁面：高亮框蓋住那個 Balloon，一樣標編號
   await line.hover();
   await expect(highlight).toHaveCount(1);
+  await expect(number).toHaveText(order!);
   const box = (await highlight.boundingBox())!;
   expect(center.x).toBeGreaterThan(box.x);
   expect(center.x).toBeLessThan(box.x + box.width);
@@ -191,6 +199,26 @@ test('滑過頁面 Balloon：頁面出 tooltip、panel 對應行高亮；滑過 
   await panel.mouse.move(1, 1);
   await expect(highlight).toHaveCount(0);
 
+  // 關掉 panel：port 斷了，頁面 hover 回到完整 tooltip（原文、振り仮名、譯文），不標編號。
+  // 啟動時 Chrome 也在這個分頁的視窗裡打開了真的側邊欄（一樣接上 port），兩個都要關
+  await panel.close();
+  await sw.evaluate((tabId) => chrome.sidePanel.close({ tabId }), tabId);
+  await page.bringToFront();
+  // 真的側邊欄關掉後漫畫分頁變寬、重新排版，Balloon 換了位置：每次都重新量、移過去，直到 tooltip 出來
+  let after = center;
+  await expect
+    .poll(async () => {
+      after = await greetingOnPage(page);
+      await page.mouse.move(after.x, after.y);
+      return tooltip.count();
+    })
+    .toBe(1);
+  await expect(tooltip).toContainText(GREETING_ZH);
+  await expect(tooltip.locator('rt')).toHaveText(['きょう', 'はや']);
+  await expect(number).toHaveCount(0);
+  await page.mouse.move(1, 1);
+  await expect(tooltip).toHaveCount(0);
+
   // 覆蓋層 pointer-events:none：點在譯文上，點擊落到主頁面的 canvas（canvas 網站靠它翻頁）
   await page.evaluate(() => {
     const g = globalThis as unknown as { __clicked: number[] };
@@ -198,9 +226,9 @@ test('滑過頁面 Balloon：頁面出 tooltip、panel 對應行高亮；滑過 
     const canvases = [...document.querySelectorAll('.viewer canvas')];
     document.addEventListener('click', (e) => g.__clicked.push(canvases.indexOf(e.target as Element)));
   });
-  await page.mouse.click(center.x, center.y);
+  await page.mouse.click(after.x, after.y);
   expect(await page.evaluate(() => (globalThis as unknown as { __clicked: number[] }).__clicked)).toEqual([0]);
-  expect(await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.tagName, center)).toBe('CANVAS');
+  expect(await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.tagName, after)).toBe('CANVAS');
 });
 
 test('Page Mode 學習：頁面保留日文；滑過 Balloon 的 tooltip 有原文與振り仮名、沒有譯文；hover 雙向同步；不擋點擊', async ({

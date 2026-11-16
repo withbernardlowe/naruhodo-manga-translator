@@ -150,6 +150,12 @@ export type Message =
   | { type: 'test:stop'; tabId: number };
 
 /**
+ * side panel 接到 content script 的 port 名稱（U10）：接著＝這個分頁的側邊欄開著。側邊欄關掉、文件卸載時 port 自動斷，
+ * 不用靠 Chrome 142 的 sidePanel.onClosed。content script 收到它時，閱讀模式 hover 不出 tooltip、高亮框改標編號。
+ */
+export const PANEL_PORT = 'naruhodo-side-panel';
+
+/**
  * 一個 Page 上的一句（line：一個 Balloon 或 Loose Text 項目）。lineId（b1、l1…）每個 Page 各自編號，
  * 所以要連同 Page 身分（PageView.pageHash）一起才認得出是哪一句。
  */
