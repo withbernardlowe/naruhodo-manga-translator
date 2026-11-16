@@ -31,9 +31,9 @@ const statusLine = (panel: Page) => panel.getByRole('status', { name: '翻譯狀
 const staleHint = (panel: Page) => panel.getByRole('group', { name: '過時提示' });
 const notesSection = (panel: Page) => panel.getByRole('region', { name: '角色與用語' });
 
-/** 角色與用語在作品頁裡（#191）：點作品卡打開。 */
+/** 角色與用語在作品頁裡（#191）：點標題列的作品名稱打開（U13）。 */
 async function openNotes(panel: Page): Promise<void> {
-  await panel.getByRole('region', { name: '作品' }).getByRole('button', { name: /^作品：/ }).click();
+  await panel.getByRole('button', { name: /^作品：/ }).click();
   await expect(notesSection(panel)).toBeVisible();
 }
 

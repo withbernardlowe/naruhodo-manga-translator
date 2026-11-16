@@ -10,7 +10,7 @@
   color: var(--naru-ink); background: var(--naru-surface);
 }
 :where(.naru-side-panel) [lang='ja'] { font-family: var(--naru-font-ja); }
-/* 頂部（#77）：logo＋名稱、狀態、（空白）、停止、⚙。窄的時候名稱與狀態可以縮，按鈕不縮 */
+/* 頂部（#77、U13）：作品名稱（沒啟動時是 logo＋名稱）、（空白）、停止、⚙。窄的時候名稱可以縮，按鈕不縮 */
 :where(.naru-side-panel) .panel-header { display: flex; align-items: center; gap: var(--naru-space-2); min-width: 0; margin: var(--naru-space-3) 0; }
 :where(.naru-side-panel) .panel-header__spacer { flex: 1 1 0; }
 :where(.naru-side-panel) .panel-header > .naru-btn, :where(.naru-side-panel) .panel-header > .naru-badge { flex: none; }
@@ -22,6 +22,37 @@
   font-size: var(--naru-text-body); font-weight: 700; color: var(--naru-ink);
 }
 :where(.naru-side-panel) .title img { flex: none; }
+/*
+ * 啟動後標題列左邊是作品（U13：原本的作品卡）：作品名稱一行、日文原名用淺色小字放第二行（.series-card__original），
+ * 整顆按鈕打開作品頁。長名稱換行、原名截斷，不撐出水平捲軸；按鈕往左延伸，文字跟下面的內容對齊
+ */
+:where(.naru-side-panel) .panel-header__series { flex: 1 1 auto; min-width: 0; margin: 0; font-size: inherit; font-weight: inherit; }
+:where(.naru-side-panel) .series-title {
+  display: flex; align-items: center; gap: var(--naru-space-1); min-width: 0; width: 100%; box-sizing: border-box;
+  margin: 0 0 0 calc(-1 * var(--naru-space-2)); padding: var(--naru-space-1) var(--naru-space-2);
+  border: 0; border-radius: var(--naru-radius-sm); background: transparent; font: inherit; color: inherit; text-align: left; cursor: pointer;
+}
+:where(.naru-side-panel) .series-title:hover { background: var(--naru-surface-2); }
+:where(.naru-side-panel) .series-title:focus-visible { outline: 2px solid var(--naru-accent); outline-offset: -2px; }
+:where(.naru-side-panel) .series-title__name { font-size: var(--naru-text-body); font-weight: 700; line-height: 1.35; color: var(--naru-ink); overflow-wrap: anywhere; }
+:where(.naru-side-panel) .series-title .series-card__original { font-size: var(--naru-text-caption); line-height: 1.4; }
+
+/* 逐字稿上方唯一的提示位置（U14）：一張提示＋「還有 N 則提示」；展開的其他提示排在中間 */
+:where(.naru-side-panel) .notice-slot { display: flex; flex-direction: column; margin: 0 0 var(--naru-space-3); }
+:where(.naru-side-panel) .notice-slot > .naru-callout, :where(.naru-side-panel) .notice-slot > section > .naru-callout { margin: 0 0 var(--naru-space-2); }
+:where(.naru-side-panel) .notice-more {
+  display: flex; align-items: center; gap: var(--naru-space-2); min-width: 0; min-height: 32px; box-sizing: border-box;
+  padding: 0 var(--naru-space-3); border: 1px solid var(--naru-line); border-radius: var(--naru-radius-sm);
+  background: var(--naru-surface); font: inherit; font-size: var(--naru-text-small); color: var(--naru-ink-2); text-align: left; cursor: pointer;
+}
+:where(.naru-side-panel) .notice-more:hover { background: var(--naru-surface-2); }
+:where(.naru-side-panel) .notice-more:focus-visible { outline: 2px solid var(--naru-accent); outline-offset: 1px; }
+:where(.naru-side-panel) .notice-more__count {
+  flex: none; display: grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; box-sizing: border-box;
+  border-radius: var(--naru-radius-pill); background: var(--naru-warn); color: var(--naru-on-accent); font-size: 11px; font-weight: 700;
+}
+:where(.naru-side-panel) .notice-more__text { flex: none; }
+:where(.naru-side-panel) .notice-more__names { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--naru-ink-3); }
 
 /* 沒做完 onboarding（#93）：置中的大 logo、名稱、說明與「完成設定」 */
 :where(.naru-side-panel) .finish-setup { display: flex; flex-direction: column; align-items: center; gap: var(--naru-space-2); padding: 96px var(--naru-space-4); text-align: center; }
@@ -156,27 +187,15 @@
 :where(.naru-side-panel) .status-row > span, :where(.naru-side-panel) .status-row > .status-row { flex: 1 1 auto; min-width: 0; }
 :where(.naru-side-panel) .status-row > .naru-progress { margin: 0; }
 :where(.naru-side-panel) .status-row > .naru-btn { flex: none; }
+/* 辨識模型的下載進度（U14：從逐字稿上方搬到固定列） */
+:where(.naru-side-panel) .model-row { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+:where(.naru-side-panel) .model-row progress { width: 100%; height: 6px; }
 /* 內建翻譯的剩餘頁數（#92）；剩 5 頁以下用警告色 */
 :where(.naru-side-panel) .quota-row { font-size: var(--naru-text-small); color: var(--naru-ink-2); }
 :where(.naru-side-panel) .quota-row--warn { color: var(--naru-warn); }
-/* Transcript 上方的作品卡（#186）：白底細框（跟灰色的 Page Mode 切換分開），資訊是灰字，按鈕是 naru-btn；長名稱截斷，不撐出水平捲軸 */
-:where(.naru-side-panel) .series-card {
-  display: flex; flex-direction: column; gap: 2px; min-width: 0;
-  padding: var(--naru-space-2) var(--naru-space-3); margin: 0 0 var(--naru-space-2);
-  border: 1px solid var(--naru-line); border-radius: var(--naru-radius-md); background: var(--naru-surface);
-}
-/* #191：整張卡（問句列以外）是一顆按鈕，打開作品頁；只有標題＋原名兩行，右邊是 › */
-:where(.naru-side-panel) .series-card__open {
-  display: flex; align-items: center; gap: var(--naru-space-2); min-width: 0;
-  margin: calc(-1 * var(--naru-space-2)) calc(-1 * var(--naru-space-3)); padding: var(--naru-space-2) var(--naru-space-3);
-  width: calc(100% + 2 * var(--naru-space-3)); box-sizing: border-box;
-  border: 0; border-radius: var(--naru-radius-md); background: transparent; font: inherit; color: inherit; text-align: left; cursor: pointer;
-}
-:where(.naru-side-panel) .series-card__open:hover { background: var(--naru-surface-2); }
-:where(.naru-side-panel) .series-card__open:focus-visible { outline: 2px solid var(--naru-accent); outline-offset: -2px; }
+/* 作品名稱與原名（標題列的作品、作品頁、換一部作品共用；#186、#191）：資訊是灰字；長名稱截斷，不撐出水平捲軸 */
 :where(.naru-side-panel) .series-card__chevron { flex: none; font-size: var(--naru-text-body); color: var(--naru-ink-3); }
 :where(.naru-side-panel) .series-card__names, :where(.naru-side-panel) .series-item__text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
-:where(.naru-side-panel) .series-card__title { font-size: var(--naru-text-body); font-weight: 700; color: var(--naru-ink); overflow-wrap: anywhere; }
 :where(.naru-side-panel) .series-card__original, :where(.naru-side-panel) .series-item__original {
   font-family: var(--naru-font-ja); font-size: var(--naru-text-small); color: var(--naru-ink-3);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;

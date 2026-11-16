@@ -25,6 +25,7 @@ import { dismissHostedHint, onboardingUrl, watchHostedHint, watchOnboarding, typ
 import { DEFAULT_PAGE_MODE, savePageMode, watchPageMode, type PageMode } from '../shared/page-mode.ts';
 import { dismissSubscribedNotice, watchSubscribedNotice } from '../shared/payment-return.ts';
 import { DEFAULT_SIDE_PANEL_ON_ACTIVATION, saveSidePanelOnActivation, watchSidePanelOnActivation } from '../shared/side-panel-setting.ts';
+import { dismissStripNotice, watchStripNoticeSeen } from '../shared/strip-notice.ts';
 import {
   DEFAULT_TRANSCRIPT_DISPLAY,
   saveTranscriptDisplay,
@@ -35,8 +36,8 @@ import { saveTranslationMode, type TranslationMode } from '../shared/translation
 import { Badge, Button, RadioCard, Switch } from '../ui/components.tsx';
 import { problemReport, type ProblemReportContext } from '../shared/problem-report.ts';
 import { CONTACT_EMAIL, DISCUSSIONS_URL, PROBLEM_REPORT_URL } from '../ui/links.ts';
-import { SidePanel, type SeriesPage } from '../ui/side-panel.tsx';
-import { accountPlanView, seriesActions } from '../ui/view.ts';
+import { SidePanel, type SeriesHeader, type SeriesPage } from '../ui/side-panel.tsx';
+import { accountPlanView, seriesActions, type SeriesAsk } from '../ui/view.ts';
 import { ClearCache, DeleteSeries, SeriesNotesSection } from './series-notes.tsx';
 
 /**
@@ -379,7 +380,7 @@ function NameForm({ label, submit, initial = '', onDone }: { label: string; subm
   );
 }
 
-/** 作品卡的「為什麼歸到這部」（#186）。 */
+/** 作品頁的「為什麼歸到這部」（#186）。 */
 function assignmentReason(assignment: SeriesResponse['assignment']): string | undefined {
   const title = assignment?.originalTitle;
   switch (assignment?.by) {
@@ -404,10 +405,14 @@ const matchesQuery = (option: SeriesOption, query: string) => {
   return q === '' || [option.label, option.title, ...(option.originalTitles ?? [])].some((t) => t.normalize('NFKC').toLowerCase().includes(q));
 };
 
-/** 這個 tab 目前的 Series 與作品清單；作品歸類、狀態或條目數變了就重讀。作品卡與作品頁各自訂閱。 */
-function useSeries(tabId: number): SeriesResponse | undefined {
+/** 這個 tab 目前的 Series 與作品清單；作品歸類、狀態或條目數變了就重讀。標題列與作品頁各自訂閱；tabId 是 undefined＝沒啟動，不讀。 */
+function useSeries(tabId: number | undefined): SeriesResponse | undefined {
   const [series, setSeries] = useState<SeriesResponse | undefined>(undefined);
   useEffect(() => {
+    if (tabId === undefined) {
+      setSeries(undefined);
+      return;
+    }
     const refresh = () => void send<SeriesResponse>({ type: 'panel:getSeries', tabId }).then(setSeries);
     const onMessage = (message: Message) => {
       if ((message.type === 'series:changed' || message.type === 'status:changed') && message.tabId === tabId) refresh();
@@ -423,11 +428,8 @@ function useSeries(tabId: number): SeriesResponse | undefined {
 
 const currentOption = (series: SeriesResponse | undefined) => series?.options.find((o) => o.id === series.current);
 
-/** 從作品卡打開作品頁或換一部作品；rename＝打開作品頁時直接顯示改名（取名字）表單。 */
-type OpenSeries = (page: SeriesPage, opts?: { rename?: boolean }) => void;
-
-/** Provisional Series 的問句列（#186），作品卡與作品頁都有：猜到原名是［是］［換一部］，猜不出來是［取名字］［選一部］。 */
-function AskRow({ tabId, ask, onRename, onPick }: { tabId: number; ask: 'confirm' | 'name'; onRename: () => void; onPick: () => void }) {
+/** Provisional Series 的問句列（#186），作品頁上的那一個（側邊欄主畫面的在提示位置，U14）：猜到原名是［是］［換一部］，猜不出來是［取名字］［選一部］。 */
+function AskRow({ tabId, ask, onRename, onPick }: { tabId: number; ask: SeriesAsk; onRename: () => void; onPick: () => void }) {
   return (
     <div class="series-card__ask" role="group" aria-label="確認作品">
       <span class="series-card__question">{ask === 'confirm' ? '這是正確的作品嗎？' : '看不出是哪部作品'}</span>
@@ -445,38 +447,23 @@ function AskRow({ tabId, ask, onRename, onPick }: { tabId: number; ask: 'confirm
   );
 }
 
-/**
- * Transcript 上方的作品卡（#186；#191 定案為 prototype C3）：只有中文譯名（大）＋原名（小）兩行，整張可以點、打開作品頁。
- * 讀者還沒確認的作品下面有問句列（不在可點的範圍裡）。
- */
-function SeriesCard({ tabId, onOpen }: { tabId: number; onOpen: OpenSeries }) {
-  const series = useSeries(tabId);
+/** 標題列的作品名稱與作品確認（U13、U14；原本的作品卡，#186）：中文譯名、原名，還沒確認時要問什麼。 */
+function seriesHeader(series: SeriesResponse | undefined): SeriesHeader | undefined {
   const current = currentOption(series);
-  if (!series || !current) return null;
-  const { ask } = seriesActions(current, series.options);
-  return (
-    <section aria-label="作品" class="series-card">
-      <button type="button" class="series-card__open" aria-label={`作品：${current.title}`} onClick={() => onOpen('series')}>
-        <span class="series-card__names">
-          <span class="series-card__title">{current.title}</span>
-          {current.subtitle && (
-            <span class="series-card__original" lang="ja">
-              {current.subtitle}
-            </span>
-          )}
-        </span>
-        <span class="series-card__chevron" aria-hidden="true">
-          ›
-        </span>
-      </button>
-      {ask && <AskRow tabId={tabId} ask={ask} onRename={() => onOpen('series', { rename: true })} onPick={() => onOpen('seriesPick')} />}
-    </section>
-  );
+  if (!series || !current) return undefined;
+  return { title: current.title, subtitle: current.subtitle, ask: seriesActions(current, series.options).ask };
+}
+
+/** 條漫計頁的說明按過「知道了」沒（U14）。讀到之前當作看過：看過的讀者打開側邊欄時說明不會閃一下。 */
+function useStripNoticeSeen(): boolean {
+  const [seen, setSeen] = useState(true);
+  useEffect(() => watchStripNoticeSeen(setSeen), []);
+  return seen;
 }
 
 /**
  * 作品頁（#191）：作品身分（名稱與改名、原名、問句列或「不是這部作品？」）→ 角色與用語 → 最底部清除快取。
- * 從作品卡打開，整個取代 side panel。
+ * 從標題列的作品名稱打開，整個取代 side panel。
  */
 function SeriesPageView({
   tabId,
@@ -486,7 +473,7 @@ function SeriesPageView({
 }: {
   tabId: number;
   navigate: (page: SeriesPage | undefined) => void;
-  /** 作品卡的「取名字」：一打開就顯示取名字表單。 */
+  /** 作品確認的「取名字」：一打開就顯示取名字表單。 */
   renameOnOpen: boolean;
   /** 表單顯示過了：container 清掉 renameOnOpen，之後不管從哪裡回到作品頁都不會再自動打開。 */
   onRenameOpened: () => void;
@@ -633,7 +620,7 @@ function SeriesPickView({ tabId, navigate }: { tabId: number; navigate: (page: S
 
 /**
  * 外掛的 container（#108）：接 chrome 訊息、API key、同意狀態與 Page Mode 的 store，把資料交給純畫面的 SidePanel。
- * 會讀寫 store 的區塊（設定頁、作品卡、作品頁與換一部作品）也在這裡，以 slot／render prop 交給 SidePanel。
+ * 會讀寫 store 的區塊（設定頁、作品頁與換一部作品）也在這裡，以 slot／render prop 交給 SidePanel。
  * 沒做完 onboarding（#93）時 SidePanel 只顯示「完成設定」；「登入」「完成設定」用新分頁打開 onboarding。
  */
 function App({ tabId }: { tabId: number | undefined }) {
@@ -653,7 +640,9 @@ function App({ tabId }: { tabId: number | undefined }) {
   const onboarding = useOnboarding();
   const hostedHint = useHostedHint();
   const subscribedNotice = useSubscribedNotice();
-  /** 作品卡的「取名字」：打開作品頁時直接顯示取名字表單（#191）。 */
+  const stripNoticeSeen = useStripNoticeSeen();
+  const series = useSeries(active ? tabId : undefined);
+  /** 作品確認的「取名字」：打開作品頁時直接顯示取名字表單（#191）。 */
   const [renameOnOpen, setRenameOnOpen] = useState(false);
   /** 這個 tab 的作品剛被刪掉（#214，不管是在哪個 side panel 刪的）：停用的畫面顯示「這部作品已刪除」，再啟動就不再顯示。 */
   const [seriesDeleted, setSeriesDeleted] = useState(false);
@@ -747,17 +736,11 @@ function App({ tabId }: { tabId: number | undefined }) {
               open: () => void chrome.tabs.create({ url: PROBLEM_REPORT_URL }),
             }
       }
-      renderSeriesCard={(open) =>
-        running && (
-          <SeriesCard
-            tabId={tabId}
-            onOpen={(page, opts) => {
-              setRenameOnOpen(opts?.rename ?? false);
-              open(page);
-            }}
-          />
-        )
-      }
+      stripNoticeSeen={stripNoticeSeen}
+      onDismissStripNotice={() => void dismissStripNotice()}
+      series={seriesHeader(series)}
+      onConfirmSeries={() => void send({ type: 'panel:confirmSeries', tabId: tabId! })}
+      onOpenSeries={({ rename }) => setRenameOnOpen(rename)}
       renderSettings={() => <Settings mode={translationMode} session={session} quota={quota} onKeyChanged={setHasKey} />}
       renderSeries={(page, navigate) => {
         if (tabId === undefined) return null;

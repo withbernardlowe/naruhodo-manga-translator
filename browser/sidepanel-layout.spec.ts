@@ -25,7 +25,8 @@ test('窄寬度下 side panel 沒有水平捲軸', async ({ context, sw, extensi
   const { panel } = await activateOnMockSite({ context, sw, extensionId, mockSite });
   await expect(panel.getByRole('status', { name: '翻譯狀態' }).filter({ hasText: /^已翻譯・/ })).toHaveCount(2);
   // mock 網站的作品名很短；真實網站的作品名與網域長得多，舊版的下拉選單縮不到比最長選項窄
-  const card = panel.getByRole('region', { name: '作品' });
+  // 作品在標題列（U13：原本的作品卡）
+  const card = panel.getByRole('heading', { level: 1 });
   const identity = panel.getByRole('region', { name: '作品身分' });
   const picker = panel.getByRole('region', { name: '換一部作品' });
   const back = () => panel.getByRole('button', { name: '返回' }).click();
@@ -43,7 +44,7 @@ test('窄寬度下 side panel 沒有水平捲軸', async ({ context, sw, extensi
   await expectNoHorizontalScroll(panel);
   await back();
   await back();
-  // 平常：作品卡的長名稱換行或截斷，不撐開
+  // 平常：標題列的長名稱換行或截斷，不撐開
   await expect(card).toContainText(LONG_NAME);
   await expectNoHorizontalScroll(panel);
   // ⚙ 打開的設定頁也一樣
@@ -89,19 +90,31 @@ test.describe('逐字稿出來之前', () => {
   // 顯示層級的按鈕要等逐字稿出來才有；FakeEngine 幾乎不花時間，讓它慢到測試結束都還沒出來
   test.use({ fakeOcrDelayMs: 60_000 });
 
-  test('頂部只有 logo、名稱、狀態、停止、⚙ 與 Page Mode 切換', async ({ context, sw, extensionId, mockSite }) => {
+  // 哪則提示排前面是 view.test.ts 的 panelNotices；這裡確認真的畫面上只出現一張、其他收起來，處理完下一張補上
+  test('頂部只有作品名稱、停止、⚙ 與 Page Mode 切換；提示一次只顯示一張', async ({ context, sw, extensionId, mockSite }) => {
     const { panel } = await activateOnMockSite({ context, sw, extensionId, mockSite });
     const main = panel.getByRole('main');
 
-    await expect(main.getByRole('heading', { level: 1 })).toHaveText('Naruhodo');
-    await expect(main.getByText('已啟動')).toBeVisible();
-    // 還沒同意資料使用時，說明卡片固定在最上面（translate.spec.ts 測它）；同意後才是平常的版面
+    // 標題列是作品名稱（U13：Chrome 的側邊面板標題列已經寫了 Naruhodo），沒有「已啟動」（有停止就代表在翻）
+    await expect(main.getByRole('heading', { level: 1 }).getByRole('button', { name: /^作品：/ })).toBeVisible();
+    await expect(main.getByText('已啟動')).toHaveCount(0);
+    // 還沒同意資料使用時，說明卡片排第一（translate.spec.ts 測它），作品確認收在「還有 1 則提示」裡（U14）
     const consent = main.getByRole('region', { name: '資料使用說明' });
+    const ask = main.getByRole('group', { name: '確認作品' });
+    const more = main.getByRole('button', { name: '還有 1 則提示 確認作品' });
+    await expect(more).toHaveAttribute('aria-expanded', 'false');
+    await expect(ask).toHaveCount(0);
+    await more.click();
+    await expect(ask).toBeVisible();
+    await main.getByRole('button', { name: '收起' }).click();
+    await expect(ask).toHaveCount(0);
     await consent.getByRole('button', { name: '同意並啟用翻譯' }).click();
     await expect(consent).toHaveCount(0);
-    // Page 列表與逐字稿之前的控制項：停止（ADR 0003）、⚙（只有圖示）、Page Mode 兩格、作品卡的問句列（#186）。逐字稿標題列的顯示選單要等逐字稿出來，不在這裡
-    // 作品卡本身是一顆按鈕（打開作品頁，#191），問句列在它下面
-    await expect(main.getByRole('button').filter({ visible: true })).toHaveText(['停止', '', '閱讀', '學習', /›$/, '是', '換一部']);
+    await expect(ask).toBeVisible();
+    await expect(main.getByRole('button', { name: /^還有/ })).toHaveCount(0);
+    // Page 列表與逐字稿之前的控制項：作品名稱（打開作品頁，#191）、停止（ADR 0003）、⚙（只有圖示）、Page Mode 兩格、作品確認（#186）。
+    // 逐字稿標題列的顯示選單要等逐字稿出來，不在這裡
+    await expect(main.getByRole('button').filter({ visible: true })).toHaveText([/›$/, '停止', '', '閱讀', '學習', '是', '換一部']);
     await expect(main.getByRole('switch')).toHaveCount(0);
     // Page Mode 那一行寫明管的是漫畫頁面（U15）；兩種模式的說明在 hover 提示，學習的說明也講到逐字稿
     await expect(main.getByText('漫畫頁面', { exact: true })).toBeVisible();

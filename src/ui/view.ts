@@ -1,6 +1,6 @@
 import { FREE_PAGES, MONTHLY_PAGES, REFUND_WINDOW_DAYS, STRIP_LINES_PER_PAGE, lowQuota, pageCount, type BillingPeriod, type Quota, type RefundInfo } from '../shared/hosted-api.ts';
 import type { ConsentState } from '../shared/data-consent.ts';
-import type { PageView } from '../shared/messages.ts';
+import type { ModelStatus, PageView } from '../shared/messages.ts';
 import type { SeriesOption } from '../shared/series.ts';
 import type { TranslationMode } from '../shared/translation-mode.ts';
 import type { BadgeTone } from './components.tsx';
@@ -171,9 +171,50 @@ export function setupNotices({
   return { consentCard, notice };
 }
 
+/** 逐字稿上方提示位置裡的一則（U14）。 */
+export type PanelNotice = 'modelError' | 'consent' | 'signedOut' | 'noKey' | 'quotaExhausted' | 'seriesAsk' | 'subscribed' | 'strip' | 'hostedHint';
+
+/**
+ * 由要緊到不要緊：什麼都翻不了（辨識模型壞了、還沒同意、沒登入或沒 key）→ 新的頁翻不了（額度用完）
+ * →「已訂閱」（讀者剛付完款，是那個動作的回應，不能被藏起來）→ 要回答但不擋翻譯（作品確認）→ 看過就好（條漫說明、改用內建翻譯）。
+ */
+const NOTICE_ORDER: readonly PanelNotice[] = ['modelError', 'consent', 'signedOut', 'noKey', 'quotaExhausted', 'subscribed', 'seriesAsk', 'strip', 'hostedHint'];
+
+/** 「還有 N 則提示」後面寫的名稱。 */
+const NOTICE_NAMES: Record<PanelNotice, string> = {
+  modelError: '辨識模型',
+  consent: '資料使用說明',
+  signedOut: '尚未登入',
+  noKey: '尚未設定 API key',
+  quotaExhausted: '額度用完',
+  seriesAsk: '確認作品',
+  subscribed: '已訂閱',
+  strip: '條漫計頁',
+  hostedHint: '內建翻譯',
+};
+
+/**
+ * 逐字稿上方只留一個提示位置（U14）：只顯示最要緊的一張（shown），其他照順序收成「還有 N 則提示」（more），展開才看得到（rest）。
+ * 處理掉一張，下一張自動補上。下載模型是進度不是提示，在底部固定列（panelLayout）；每一頁自己的提示（過時、翻譯失敗）留在那一頁。
+ */
+export function panelNotices(present: {
+  modelError: boolean;
+  consent: boolean;
+  /** setupNotices 的 notice。 */
+  setup: SetupNotice;
+  quotaExhausted: boolean;
+  seriesAsk: boolean;
+  subscribed: boolean;
+  strip: boolean;
+}): { shown: PanelNotice | undefined; rest: PanelNotice[]; more: { count: number; names: string } | undefined } {
+  const on = (n: PanelNotice) => (n === 'signedOut' || n === 'noKey' || n === 'hostedHint' ? present.setup === n : present[n]);
+  const [shown, ...rest] = NOTICE_ORDER.filter(on);
+  return { shown, rest, more: rest.length > 0 ? { count: rest.length, names: rest.map((n) => NOTICE_NAMES[n]).join('、') } : undefined };
+}
+
 /**
  * 整個取代 side panel 內容的一頁（頂部是「← 返回」＋標題，#93）：設定按 ⚙ 打開；
- * 作品頁（作品身分＋Series Notes，#191）從作品卡打開，換一部作品從作品頁（或作品卡的「換一部」）打開；
+ * 作品頁（作品身分＋Series Notes，#191）從標題列的作品名稱打開，換一部作品從作品頁（或作品確認的「換一部」）打開；
  * 刪除帳號在帳號與訂閱頁（#213），不在 side panel。
  */
 export type PanelPage = 'settings' | 'series' | 'seriesPick';
@@ -189,13 +230,16 @@ export function sidePanelScreen({ setupComplete, page }: { setupComplete: boolea
   return page ?? 'transcript';
 }
 
-/** 作品頁與作品卡上，目前這部作品可以做的事（#191）。 */
+/** Provisional Series 要問什麼：confirm＝猜到原名，問「這是正確的作品嗎？」；name＝猜不出來，請讀者取名字。 */
+export type SeriesAsk = 'confirm' | 'name';
+
+/** 作品頁與側邊欄的作品確認上，目前這部作品可以做的事（#191）。 */
 export interface SeriesActions {
   /**
-   * Provisional Series 的問句列（作品卡與作品頁都有）：confirm＝猜到原名，「這是正確的作品嗎？［是］［換一部］」；
+   * Provisional Series 的問句列（側邊欄的提示位置與作品頁都有，U14）：confirm＝猜到原名，「這是正確的作品嗎？［是］［換一部］」；
    * name＝猜不出來，「看不出是哪部作品［取名字］［選一部］」；undefined＝確認過了，沒有問句列，作品頁改由「不是這部作品？」進換一部作品。
    */
-  ask: 'confirm' | 'name' | undefined;
+  ask: SeriesAsk | undefined;
   /** 名稱旁的按鈕：未命名的 Provisional Series 是「取名字」。 */
   rename: '改名' | '取名字';
   /** 「合併進…」的目標：只有 Provisional Series 能當合併的來源，目標是其他確認過的作品。 */
@@ -331,6 +375,8 @@ export type QuotaLineView = NonNullable<QuotaView['line']>;
 export interface FooterView {
   quota: QuotaLineView | undefined;
   plans: boolean;
+  /** 辨識模型的下載進度（bytes），loading＝下載好了、正在載入（U14：進度不是提示，不佔逐字稿上方）。 */
+  model: { loaded: number; total: number } | 'loading' | undefined;
   row: { kind: 'translating' | 'analyzing' } | { kind: 'translate'; untranslated: number } | undefined;
 }
 
@@ -354,6 +400,7 @@ export function panelLayout({
   translatable,
   quota,
   strip,
+  modelStatus,
 }: {
   pages: PageView[];
   access: TranslationAccess;
@@ -361,6 +408,7 @@ export function panelLayout({
   translatable: boolean;
   quota: Quota | undefined;
   strip: StripView | undefined;
+  modelStatus: ModelStatus;
 }): { footer: FooterView | undefined; end: EndView | undefined } {
   const q = quotaView(access, quota);
   const status = overallStatus(pages, access.mode);
@@ -376,7 +424,13 @@ export function panelLayout({
           : undefined;
   const footerQuota = q.line?.warn ? q.line : undefined;
   const plans = q.footerButton === 'plans';
-  const footer = footerQuota || plans || row ? { quota: footerQuota, plans, row } : undefined;
+  const model: FooterView['model'] =
+    modelStatus.state === 'downloading'
+      ? { loaded: modelStatus.loaded, total: modelStatus.total }
+      : modelStatus.state === 'loading'
+        ? 'loading'
+        : undefined;
+  const footer = footerQuota || plans || model || row ? { quota: footerQuota, plans, model, row } : undefined;
 
   const charge = action === 'retranslate' ? chargeNote(access, quota, strip !== undefined, pages.length) : undefined;
   const end: EndView = {
