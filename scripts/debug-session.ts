@@ -3,6 +3,8 @@
  * 以及時間軸摘要（scripts/debug-summary.ts）。
  */
 
+import { hammingDistance, SAME_PAGE_MAX_DISTANCE } from '../src/shared/page-hash.ts';
+
 const SESSION_NAME = /^\d{8}-\d{6}$/;
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -127,4 +129,23 @@ export function summarize(records: readonly SessionRecord[], { since = 0 }: { si
     lines.push(`${String(i + 1).padStart(5)} ${((record.at - start) / 1000).toFixed(1).padStart(7)} ${record.ctx} ${record.event} ${detail}`);
   }
   return lines;
+}
+
+/** trace 裡最新一筆 crop 裁出的 Page（debug:find 用）；line 是它在 trace.jsonl 的行號。還沒有 crop 就是 undefined。 */
+export function latestCrop(records: readonly SessionRecord[]): { line: number; hashes: string[] } | undefined {
+  const at = records.findLastIndex((r) => r.event === 'crop');
+  if (at === -1) return undefined;
+  const pages = (records[at]!.data?.pages ?? []) as { pageHash: string }[];
+  return { line: at + 1, hashes: pages.map((p) => p.pageHash) };
+}
+
+/**
+ * 畫面上的 Page 跟要找的 Page（Problem Report 的 pageHash）對上了哪些：每個要找的 hash 配上最近的那一頁與 Hamming 距離，
+ * found＝距離在「同一個 Page」的門檻內（src/shared/page-hash.ts）。視窗大小不同，同一頁的 hash 會差幾個 bit。
+ */
+export function matchPages(shown: readonly string[], wanted: readonly string[]): { wanted: string; distance: number; found: boolean }[] {
+  return wanted.map((hash) => {
+    const distance = Math.min(Infinity, ...shown.map((s) => hammingDistance(s, hash)));
+    return { wanted: hash, distance, found: distance <= SAME_PAGE_MAX_DISTANCE };
+  });
 }

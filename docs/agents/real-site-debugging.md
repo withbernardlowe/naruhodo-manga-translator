@@ -23,6 +23,21 @@ The debug build declares `<all_urls>` and accepts `test:activate`, like the e2e 
 
 Run both build commands in the Terminal panel: files the Bash and PowerShell tools write under `%LOCALAPPDATA%` stay invisible to the Terminal and to the Chrome it opened, while the Terminal's writes are visible to the tools. Reading traces, `debug:summary` and `debug:eval` all work from Bash.
 
+## Finding the page a Problem Report is about
+
+A Problem Report ([issue-tracker.md](issue-tracker.md)) gives `pageUrl` and each Page's `pageHash`, but no page number, and the reader often cannot say which page it was. `npm run debug:find` turns pages for you until the extension crops a Page whose hash matches:
+
+1. Open `pageUrl` in the debug Chrome and run `npm run debug:activate`. A reader usually opens where the account last stopped reading, which is often near the reported page.
+2. `npm run debug:find -- <pageHash> [<pageHash>...] --key ArrowRight`. It presses the key once, waits for the next `crop` in the trace, and prints the Hamming distance to each hash: a different page is around 100 or more, the same page at another window size is under 20. It stops on the page when a distance is within `SAME_PAGE_MAX_DISTANCE`. `--key` is the page-turn key: in a right-to-left reader `ArrowRight` goes back and `ArrowLeft` forward. `--max` (default 100) caps the turns; `--url` picks the tab when several are open.
+3. It gives up after three presses that change nothing: the end of the book in that direction, so run it again with the other key.
+
+What to know before running it:
+
+- **The window must be on screen.** A debug Chrome window fully covered by another window (or minimised) makes the tab `hidden`: captures fail with `capture:notPainted` and nothing is cropped. `debug:find` refuses to start then; ask the user to move the window where it is visible and to leave it alone while pages turn.
+- **It spends translations.** The extension is active, so every Page on the way that is not in the cache is translated and counted. The extension stays active across a refresh of the tab, so there is no free way to turn pages in an activated tab.
+- **One debug Chrome, one driver.** Every session on this machine shares the debug Chrome on port 9222. Before `debug:reload`, `debug:find` or any CDP input, check with the user that no other session is using it.
+- **A cached Page is not analysed again.** Landing on the page gives `cache:hit` and no `analyze` record if the profile translated it before. To re-run detection and OCR on it, press 重新翻譯 in the side panel window once the scan has settled.
+
 ## Reading the trace
 
 Each recording is a session folder `%LOCALAPPDATA%\naruhodo\debug\<YYYYMMDD-HHmmss>\` holding `trace.jsonl` (one record per line) and `images/`. The latest 10 sessions are kept.

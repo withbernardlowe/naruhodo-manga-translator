@@ -15,6 +15,7 @@
     "debug:eval": "node scripts/debug-eval.ts",
     "debug:panel": "node scripts/debug-drive.ts panel",
     "debug:activate": "node scripts/debug-drive.ts activate",
+    "debug:find": "node scripts/debug-find.ts",
     "site:dev": "astro dev --root site",
     "site:build": "astro build --root site",
     "site:preview": "astro preview --root site",

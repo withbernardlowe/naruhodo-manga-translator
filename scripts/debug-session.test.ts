@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { extractImages, latestSession, sessionName, sessionsToPrune, summarize } from './debug-session.ts';
+import { extractImages, latestCrop, latestSession, matchPages, sessionName, sessionsToPrune, summarize } from './debug-session.ts';
 
 describe('sessionName', () => {
   it('用本地時間命名，字典序就是時間順序', () => {
@@ -120,5 +120,35 @@ describe('summarize', () => {
 
     expect(lines).toHaveLength(1);
     expect(lines[0]).toMatch(/^ {4}4 {5}3\.0 content candidates/);
+  });
+});
+
+describe('debug:find 的比對', () => {
+  const hash = (fill: string) => fill.repeat(64);
+  const record = (event: string, data: Record<string, unknown>) => ({ ctx: 'sw', event, at: 0, data });
+
+  it('latestCrop：最新一筆 crop 的行號與每頁的 hash；沒有 crop 是 undefined', () => {
+    const records = [
+      record('crop', { pages: [{ pageHash: hash('a') }] }),
+      record('scan', {}),
+      record('crop', { pages: [{ pageHash: hash('b') }, { pageHash: hash('c') }] }),
+      record('capture', {}),
+    ];
+
+    expect(latestCrop(records)).toEqual({ line: 3, hashes: [hash('b'), hash('c')] });
+    expect(latestCrop([record('scan', {})])).toBeUndefined();
+  });
+
+  it('matchPages：差幾個 bit 的算同一頁（視窗大小不同），差很多的不算', () => {
+    // 真實網站：同一頁在不同視窗大小下距離 0～14，不同頁 100 以上
+    const near = '3' + hash('0').slice(1); // 跟全 0 差 2 bits
+    const far = hash('f'); // 差 256 bits
+
+    expect(matchPages([far, near], [hash('0')])).toEqual([{ wanted: hash('0'), distance: 2, found: true }]);
+    expect(matchPages([far], [hash('0')])).toEqual([{ wanted: hash('0'), distance: 256, found: false }]);
+  });
+
+  it('matchPages：畫面上沒有頁時都沒找到', () => {
+    expect(matchPages([], [hash('0')])).toEqual([{ wanted: hash('0'), distance: Infinity, found: false }]);
   });
 });
