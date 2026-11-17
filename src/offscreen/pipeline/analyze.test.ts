@@ -104,7 +104,7 @@ describe('analyzePage：偵測結果 → Balloon／Loose Text', () => {
     expect(page.looseText).toEqual([]);
   });
 
-  it('同類別重疊太多的框只留分數高的；分數低於門檻的不算', async () => {
+  it('同一種重疊太多的框只留分數高的；分數低於門檻的不算', async () => {
     const engine = fakeEngine(
       [
         det('text_bubble', [500, 100, 100, 300], 0.9),
@@ -117,6 +117,32 @@ describe('analyzePage：偵測結果 → Balloon／Loose Text', () => {
     const page = await analyzePage(engine, whitePage(), (ja) => ja);
 
     expect(page.balloons.map((b) => b.原文)).toEqual(['ひとつ']);
+  });
+
+  it('同一段字被同時標成框內文字與框外文字：只留分數高的那個，不變成兩句', async () => {
+    const engine = fakeEngine(
+      [
+        det('text_free', [500, 100, 100, 300], 0.8),
+        det('text_bubble', [500, 100, 100, 300], 0.6),
+        det('text_bubble', [100, 100, 100, 300], 0.9),
+        det('text_free', [102, 104, 96, 290], 0.5),
+      ],
+      { 500: 'そとの字', 100: 'なかの字' },
+    );
+
+    const page = await analyzePage(engine, whitePage(), (ja) => ja);
+
+    expect(page.looseText.map((l) => l.原文)).toEqual(['そとの字']);
+    expect(page.balloons.map((b) => b.原文)).toEqual(['なかの字']);
+  });
+
+  it('Balloon 外框跟它裡面的文字框幾乎一樣大：兩個都留，文字照樣歸給 Balloon', async () => {
+    const engine = fakeEngine([det('bubble', [500, 100, 100, 300], 0.9), det('text_bubble', [505, 105, 90, 290], 0.8)], { 505: 'せりふ' });
+
+    const page = await analyzePage(engine, whitePage(), (ja) => ja);
+
+    expect(page.balloons).toHaveLength(1);
+    expect(page.balloons[0]).toMatchObject({ 原文: 'せりふ', balloonBbox: { x: 0.5, y: 0.05, w: 0.1, h: 0.15 } });
   });
 
   it('OCR 的裁切範圍是文字框往外擴（短邊的 8%＋2 px），不超出 Page', async () => {

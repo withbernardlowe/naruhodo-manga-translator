@@ -222,6 +222,94 @@ describe('Claude 翻譯：structured output 回應解析', () => {
   });
 });
 
+describe('Claude 翻譯：回答有問題的句子再問一次', () => {
+  const reply =
+    (items: unknown[], stop_reason = 'end_turn') =>
+    () =>
+      response({ model: CLAUDE_MODEL, stop_reason, content: [{ type: 'text', text: JSON.stringify({ items }) }], usage });
+  const page: TranslateInput = {
+    seriesNotes: [],
+    priorPages: [],
+    items: [
+      { id: 'b1', kind: 'balloon', 原文: 'おはよう', orientation: 'vertical' },
+      { id: 'b2', kind: 'balloon', 原文: 'ミナトさんからだ', orientation: 'vertical' },
+    ],
+  };
+  const flawed = reply([
+    { id: 'b1', zh: '早安', unreadable: false, sfx: false },
+    { id: 'b2', zh: '是ミナト姐打來的。', unreadable: false, sfx: false },
+  ]);
+
+  it('回答沒問題：只呼叫一次，沒有 recheck', async () => {
+    const { translator, calls } = setup([ok]);
+
+    const output = await translator.translatePage(input);
+
+    expect(calls).toHaveLength(1);
+    expect(output.recheck).toBeUndefined();
+  });
+
+  it('有一句留著假名：只把那一句再問一次、併回去；用量與延遲是兩次的總和', async () => {
+    const { translator, calls } = setup([flawed, reply([{ id: 'b2', zh: '是湊姐打來的。', unreadable: false, sfx: false }])]);
+
+    const output = await translator.translatePage(page);
+
+    expect(calls).toHaveLength(2);
+    expect(body(calls[1]!).system).toEqual(body(calls[0]!).system);
+    const again = JSON.parse(body(calls[1]!).messages[0].content.at(-1).text.split('\n')[1]);
+    expect(again.map((a: { id: string }) => a.id)).toEqual(['b2']);
+    expect(output.items).toEqual([
+      { id: 'b1', 譯文: '早安', unreadable: false, sfx: false },
+      { id: 'b2', 譯文: '是湊姐打來的。', unreadable: false, sfx: false },
+    ]);
+    expect(output.recheck).toEqual({ asked: 1, replaced: 1 });
+    expect(output.latencyMs).toBe(4600);
+    expect(output.usage).toEqual({ inputTokens: 2000, outputTokens: 400, cacheReadTokens: 1400, cacheWriteTokens: 0, costUsd: 0.000274 });
+  });
+
+  it('只問一次：補翻的答案還是留著假名也照收，不再問第三次', async () => {
+    const { translator, calls } = setup([flawed, reply([{ id: 'b2', zh: '是ミナト打來的。', unreadable: false, sfx: false }])]);
+
+    const output = await translator.translatePage(page);
+
+    expect(calls).toHaveLength(2);
+    expect(output.items[1]?.譯文).toBe('是ミナト打來的。');
+  });
+
+  it('補翻的呼叫失敗（HTTP 錯誤）：不讓整頁失敗，回第一次的譯文，用量只算第一次', async () => {
+    const { translator } = setup([flawed, () => response({ error: { message: 'bad request' } }, { status: 400 })]);
+
+    const output = await translator.translatePage(page);
+
+    expect(output.items[1]?.譯文).toBe('是ミナト姐打來的。');
+    expect(output.recheck).toEqual({ asked: 1, replaced: 0 });
+    expect(output.usage.costUsd).toBe(0.000137);
+  });
+
+  it('補翻回了答案卻不能用（被截斷）：回第一次的譯文，這次花的錢照樣算進用量', async () => {
+    const { translator } = setup([flawed, reply([], 'max_tokens')]);
+
+    const output = await translator.translatePage(page);
+
+    expect(output.items[1]?.譯文).toBe('是ミナト姐打來的。');
+    expect(output.recheck).toEqual({ asked: 1, replaced: 0 });
+    expect(output.usage.costUsd).toBe(0.000274);
+  });
+
+  it('補翻途中被中止：照樣丟出中止的錯誤', async () => {
+    const controller = new AbortController();
+    const { translator } = setup([
+      flawed,
+      () => {
+        controller.abort();
+        throw new DOMException('aborted', 'AbortError');
+      },
+    ]);
+
+    await expect(translator.translatePage(page, controller.signal)).rejects.toThrow(/aborted/);
+  });
+});
+
 describe('Claude 整理 Notes（②）', () => {
   it('不關 thinking、effort high（仔細比對既有條目，#64）；只回 notes_changes；送這頁的原文與 ① 的譯文，Series Notes 在 system 第二段', async () => {
     const { translator, calls } = setup([okNotes]);

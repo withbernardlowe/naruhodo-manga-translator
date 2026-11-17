@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CLAUDE_MODEL, COMPATIBLE_PROMPT_VERSIONS, notesRequest, PROMPT_VERSION, parseNotesResponse, parseSeriesGuessResponse, parseTranslateResponse, seriesGuessRequest, translateRequest } from './claude-request.ts';
+import { addUsage, CLAUDE_MODEL, COMPATIBLE_PROMPT_VERSIONS, mergeRetranslated, notesRequest, retranslateRequest, suspectLines, PROMPT_VERSION, parseNotesResponse, parseSeriesGuessResponse, parseTranslateResponse, seriesGuessRequest, translateRequest } from './claude-request.ts';
 import type { NotesInput, TitleSignals, TranslateInput } from './translator.ts';
 
 const input: TranslateInput = {
@@ -245,5 +245,96 @@ describe('從頁面標題猜作品原名（#186）', () => {
 
   it('status 不是 work／unknown 時丟錯', () => {
     expect(() => parseSeriesGuessResponse(apiResponse({ status: 'maybe', original_title: '', zh_title: '' }))).toThrow('schema');
+  });
+});
+
+describe('譯文檢查與補翻（Discussion #296、#297、#309）', () => {
+  const line = (id: string, 原文: string) => ({ id, kind: 'balloon' as const, 原文, orientation: 'vertical' as const });
+  const got = (id: string, 譯文: string, unreadable = false) => ({ id, 譯文, unreadable, sfx: false });
+  const page: TranslateInput = {
+    seriesNotes: [],
+    priorPages: [],
+    items: [line('b1', 'おはよう'), line('b2', 'ミナトさんからだ'), line('b3', 'リアルに想像できない'), line('b4', 'あるんか？')],
+  };
+
+  it('譯文是空的卻沒標 unreadable、或這一項沒回：要再問；標了 unreadable 的空譯文不用', () => {
+    const lines = [line('b1', 'あるんか？'), line('b2', '※●▲'), line('b3', 'みてえ…')];
+
+    expect(suspectLines(lines, [got('b1', ''), got('b2', '', true)])).toEqual([
+      { id: 'b1', reasons: ['empty'] },
+      { id: 'b3', reasons: ['empty'] },
+    ]);
+  });
+
+  it('譯文裡留著平假名或片假名：要再問；長音「ー」與中點「・」不算', () => {
+    const lines = [line('b1', 'ミナトさんからだ'), line('b2', '別に…嫌じゃないし'), line('b3', 'ロン・バルドだー')];
+
+    expect(suspectLines(lines, [got('b1', '是ミナト姐打來的。'), got('b2', '別に……嫌じゃないし。'), got('b3', '是羅恩・巴爾德ー')])).toEqual([
+      { id: 'b1', reasons: ['kana'] },
+      { id: 'b2', reasons: ['kana'] },
+    ]);
+  });
+
+  it('譯文裡有原文沒有的英文字母（半形、全形）：要再問；原文本來就有英文的不用', () => {
+    const lines = [line('b1', 'リアルに想像できない'), line('b2', 'Tシャツ買った'), line('b3', 'オーケー'), line('b4', 'ＯＫ！')];
+
+    expect(suspectLines(lines, [got('b1', '我 real 的想像不出來'), got('b2', '買了 T 恤'), got('b3', 'ＯＫ'), got('b4', 'OK！')])).toEqual([
+      { id: 'b1', reasons: ['latin'] },
+      { id: 'b3', reasons: ['latin'] },
+    ]);
+  });
+
+  it('同一句同時留著假名又多出英文：兩個原因都列；沒問題的頁是空陣列', () => {
+    expect(suspectLines([line('b1', 'マジでリアル')], [got('b1', 'マジ real')])).toEqual([{ id: 'b1', reasons: ['kana', 'latin'] }]);
+    expect(suspectLines(page.items, [got('b1', '早安'), got('b2', '是湊姐打來的。'), got('b3', '完全想像不出來。'), got('b4', '有嗎？')])).toEqual([]);
+  });
+
+  it('補翻的 request：system 與前面的 user 內容跟 ① 逐字相同（prompt cache 命中），最後多一段只列有問題的那幾項', () => {
+    const first = [got('b1', '早安'), got('b2', '是ミナト姐打來的。'), got('b3', '我 real 的想像不出來'), got('b4', '')];
+    const suspects = suspectLines(page.items, first);
+    const original = translateRequest(page);
+
+    const body = retranslateRequest(page, first, suspects);
+
+    expect({ ...body, messages: undefined }).toEqual({ ...original, messages: undefined });
+    const content = body.messages[0]!.content;
+    expect(content.slice(0, -1)).toEqual(original.messages[0]!.content);
+    const [instruction, list] = content.at(-1)!.text.split('\n');
+    expect(instruction).toMatch(/只重新翻譯這幾項.*其他項不要回傳/);
+    expect(JSON.parse(list!)).toEqual([
+      { id: 'b2', ja: 'ミナトさんからだ', zh: '是ミナト姐打來的。', problem: expect.stringMatching(/假名/) },
+      { id: 'b3', ja: 'リアルに想像できない', zh: '我 real 的想像不出來', problem: expect.stringMatching(/英文字母/) },
+      { id: 'b4', ja: 'あるんか？', zh: '', problem: expect.stringMatching(/空字串/) },
+    ]);
+  });
+
+  it('併回補翻的答案：只換有問題的那幾項，補翻多回的其他項不看；第一次沒回的項補在最後', () => {
+    const first = [got('b1', '早安'), got('b2', '是ミナト姐打來的。'), got('b4', '')];
+    const suspects = suspectLines(page.items, first);
+
+    const merged = mergeRetranslated(first, [got('b1', '早上好'), got('b2', '是湊姐打來的。'), got('b3', '完全想像不出來。'), got('b4', '有嗎？')], suspects);
+
+    expect(merged).toEqual({
+      items: [got('b1', '早安'), got('b2', '是湊姐打來的。'), got('b4', '有嗎？'), got('b3', '完全想像不出來。')],
+      replaced: 3,
+    });
+  });
+
+  it('補翻的答案照收（還留著假名、改標 unreadable 都收）；只有第一次有譯文、補翻卻回空字串時留著第一次的', () => {
+    const lines = [line('b1', 'ポルカ亭見た？'), line('b2', '下三乃吉へ'), line('b3', 'ミナトだ')];
+    const first = [got('b1', '你看了《ポルカ亭》嗎？'), got('b2', '下三乃吉へ'), got('b3', '是ミナト。')];
+
+    const merged = mergeRetranslated(first, [got('b1', '你看《ポルカ亭》了嗎？'), got('b2', '', true), got('b3', '')], suspectLines(lines, first));
+
+    expect(merged).toEqual({ items: [got('b1', '你看《ポルカ亭》了嗎？'), got('b2', '', true), got('b3', '是ミナト。')], replaced: 2 });
+  });
+
+  it('兩次呼叫的用量相加；舊資料沒有 cacheWriteTokens 當成 0', () => {
+    expect(
+      addUsage(
+        { inputTokens: 1000, outputTokens: 200, cacheReadTokens: 700, costUsd: 0.000137 },
+        { inputTokens: 1100, outputTokens: 30, cacheReadTokens: 900, cacheWriteTokens: 50, costUsd: 0.000044 },
+      ),
+    ).toEqual({ inputTokens: 2100, outputTokens: 230, cacheReadTokens: 1600, cacheWriteTokens: 50, costUsd: 0.000181 });
   });
 });

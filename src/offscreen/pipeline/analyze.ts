@@ -45,8 +45,13 @@ export interface Engine {
 
 /** 偵測分數門檻（#7）。 */
 const SCORE_THRESHOLD = 0.4;
-/** 同類別的兩個框交集 / 較小面積超過這個值，只留分數高的。 */
+/** 同一種的兩個框交集 / 較小面積超過這個值，只留分數高的。 */
 const NMS_OVERLAP = 0.7;
+/**
+ * 去重複時 text_bubble 與 text_free 算同一種：detector 會把同一段字兩種都標，分開比的話兩個都留下，
+ * 同一段字就變成一個 Balloon 加一個 Loose Text，翻兩次、逐字稿出現兩次。bubble 是外框，跟文字框本來就會重疊，自己一種。
+ */
+const sameKind = (a: Detection['label'], b: Detection['label']) => (a === 'bubble') === (b === 'bubble');
 /** 文字框至少有這個比例落在 Balloon 裡才歸給它。 */
 const IN_BALLOON = 0.5;
 
@@ -55,7 +60,7 @@ function nms(detections: Detection[]): Detection[] {
   const keep: Detection[] = [];
   for (const d of sorted) {
     const duplicate = keep.some(
-      (k) => k.label === d.label && intersection(k.box, d.box) / Math.min(area(k.box), area(d.box)) > NMS_OVERLAP,
+      (k) => sameKind(k.label, d.label) && intersection(k.box, d.box) / Math.min(area(k.box), area(d.box)) > NMS_OVERLAP,
     );
     if (!duplicate) keep.push(d);
   }

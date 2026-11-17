@@ -2,13 +2,18 @@
  * Translator 的 Claude 實作（spec #27 第 5 節、#15）：offscreen document 直接 fetch Messages API，
  * 帶 anthropic-dangerous-direct-browser-access，不宣告 api.anthropic.com 的 host_permissions。
  * request body 的組法與回應的解析在共用模組 claude-request.ts（Worker 也 import 它，ADR 0006）；
- * 這裡只負責 HTTP：header、429／5xx 重試、量延遲。
+ * 這裡只負責 HTTP：header、429／5xx 重試、量延遲，以及翻譯回答有問題時再問一次。
  *
  * API key 只在 offscreen document 裡用（ADR 0001）；錯誤訊息只帶 API 回的訊息，不帶 key。
  */
 import {
+  addUsage,
+  BilledFailure,
   CLAUDE_MODEL,
+  mergeRetranslated,
   notesRequest,
+  retranslateRequest,
+  suspectLines,
   parseNotesResponse,
   parseSeriesGuessResponse,
   parseTranslateResponse,
@@ -66,8 +71,26 @@ export function createClaudeTranslator(deps: ClaudeDeps): Translator & { testCon
   }
 
   return {
+    /**
+     * 回答裡有句子沒照規則時，那幾句再問一次、併回去（claude-request.ts 的 suspectLines）。只問一次；Worker 也走這裡，
+     * 所以 Hosted Translation 的補翻在同一個請求裡做完，只扣一頁，用量是兩次的總和。
+     * 補翻失敗不讓整頁失敗：第一次的譯文已經付過錢、大部分是好的，照樣回傳。
+     */
     async translatePage(input: TranslateInput, signal?: AbortSignal): Promise<TranslateOutput> {
-      return call(translateRequest(input), parseTranslateResponse, signal);
+      const first = await call(translateRequest(input), parseTranslateResponse, signal);
+      const suspects = suspectLines(input.items, first.items);
+      if (suspects.length === 0) return first;
+      const asked = suspects.length;
+      try {
+        const second = await call(retranslateRequest(input, first.items, suspects), parseTranslateResponse, signal);
+        const { items, replaced } = mergeRetranslated(first.items, second.items, suspects);
+        return { ...first, items, usage: addUsage(first.usage, second.usage), latencyMs: first.latencyMs + second.latencyMs, recheck: { asked, replaced } };
+      } catch (e) {
+        if (signal?.aborted) throw e;
+        // Claude 回了答案卻不能用：錢已經花了，照樣算進這一頁的用量（#238）
+        const usage = e instanceof BilledFailure ? addUsage(first.usage, e.call.usage) : first.usage;
+        return { ...first, usage, recheck: { asked, replaced: 0 } };
+      }
     },
 
     async proposeNotes(input: NotesInput, signal?: AbortSignal): Promise<NotesOutput> {

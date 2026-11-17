@@ -197,6 +197,7 @@ export function createPageTranslation({ cache, ledger, getSeries, translatorVers
         priorPages: priorPages.length,
         continues,
         usageRecordId: output.usageRecordId,
+        ...(output.recheck ? { recheck: output.recheck } : {}),
         ...(strip ? { strip: { continues: stripContinues, lines: text.balloons.length + text.looseText.length, total: output.strip } } : {}),
       });
     } catch (e) {
