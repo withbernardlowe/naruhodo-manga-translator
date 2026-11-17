@@ -13,7 +13,7 @@ import { loadPageMode, onPageModeChange } from '../shared/page-mode.ts';
 import { createTrace } from '../shared/trace.ts';
 import { createCapturePrep } from './capture.ts';
 import { createOverlay, HOST_ATTRIBUTE, intrinsicSize, isShown, untilRepainted } from './overlay.ts';
-import { columnMemberVisible, columnRegion, longPageVisible, MIN_PAGE_SIDE, pageCandidateRejection, verticalColumns } from './page-candidates.ts';
+import { columnMemberVisible, columnRegion, coveredByLater, longPageVisible, MIN_PAGE_SIDE, pageCandidateRejection, verticalColumns } from './page-candidates.ts';
 import { watchPageTurns } from './page-turn.ts';
 import { stopRepaint } from './repaint.ts';
 
@@ -80,8 +80,7 @@ if (!globalThis.__naruhodo) {
       const hidden = members.filter((m) => !m.visible).map((m) => m.rect);
       columns.set(key, { id: columnIdOf(members[0]!.scroller!, seen[0]!.rect.x), ...columnRegion(seen, hidden) });
     }
-    for (const [i, { element, rect, clips, shown }] of measured.entries()) {
-      const column = columnOf[i] === undefined ? undefined : columns.get(columnOf[i]);
+    const judged = measured.map(({ element, rect, clips, shown }, i) => {
       const inColumn = columnOf[i] !== undefined;
       // 比可見範圍高的長 Page 只處理看得到的那一截（spec #142）；一串裡的元素也是；其他照「完整可見」的規則
       const slice = !shown ? undefined : inColumn ? memberVisible[i] : longPageVisible(rect, visible, clips);
@@ -90,6 +89,16 @@ if (!globalThis.__naruhodo) {
       // object-fit 是 fill（預設）才會變形；contain／cover 這類保持比例，不看
       const intrinsic = getComputedStyle(element).objectFit === 'fill' ? intrinsicSize(element) : undefined;
       const reason = !shown ? 'hidden' : slice ? undefined : inColumn ? 'outsideViewport' : pageCandidateRejection(rect, visible, clips, intrinsic);
+      return { slice, reason };
+    });
+    // 沒藏起來、但被同一個位置上後面那張蓋住的也不算（#311）：理由跟藏起來的一樣
+    const passed = measured.flatMap((m, i) => (judged[i]!.reason === undefined ? [i] : []));
+    const underLater = coveredByLater(passed.map((i) => measured[i]!.rect));
+    const stacked = new Set(passed.filter((_, k) => underLater[k]));
+    for (const [i, { element, rect, clips }] of measured.entries()) {
+      const column = columnOf[i] === undefined ? undefined : columns.get(columnOf[i]);
+      const { slice } = judged[i]!;
+      const reason = stacked.has(i) ? 'covered' : judged[i]!.reason;
       if (reason === undefined) {
         const overlaid = overlay.shownPages(element);
         if (slice) longAnchors.add(element);
