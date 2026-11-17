@@ -77,6 +77,22 @@ export function pageCandidateRejection(
   return undefined;
 }
 
+const sameRect = (a: Rect, b: Rect) =>
+  Math.abs(a.x - b.x) <= VIEWPORT_TOLERANCE &&
+  Math.abs(a.y - b.y) <= VIEWPORT_TOLERANCE &&
+  Math.abs(a.width - b.width) <= VIEWPORT_TOLERANCE &&
+  Math.abs(a.height - b.height) <= VIEWPORT_TOLERANCE;
+
+/**
+ * 疊在同一個位置的候選（#311）：哪些被後面的蓋住。rects 照文件順序；回傳同順序，true＝後面還有 rect 相同的候選。
+ * 電子書閱讀器跨卷時不移除前一卷的容器，前一卷最後一張圖留在原位、沒有被 CSS 藏起來（checkVisibility 是 true），
+ * 只是被後面那張畫在上面。截圖只看得到上面那張，兩個都收就會把同一個 Page 算兩次、覆蓋層畫兩份。
+ * 誰在上面只看文件順序：量到的網站兩張都沒有 z-index，而且 pointer-events 是 none，hit test 回不到它們。
+ */
+export function coveredByLater(rects: readonly Rect[]): boolean[] {
+  return rects.map((rect, i) => rects.some((later, j) => j > i && sameRect(rect, later)));
+}
+
 /** 可見範圍：viewport 與每個裁切祖先的交集。 */
 function visibleRange(viewport: Size, clips: readonly Rect[]): Rect {
   let left = 0;
