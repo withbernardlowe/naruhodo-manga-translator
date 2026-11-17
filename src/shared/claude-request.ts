@@ -6,6 +6,7 @@
  * 每個 Page 兩次呼叫（ADR 0005）：
  * ① translateRequest effort low、關 thinking、只回譯文，user message 先放 Prior Pages 再放這頁的原文；
  * ② notesRequest effort high、開 thinking、只回 notes_changes，輸入這頁的原文與 ① 的譯文（#64）。
+ * ① 的回答有句子沒照規則（空的、留著假名、多出英文）時，那幾句再問一次（suspectLines、retranslateRequest），算在同一頁上。
  * 兩次都把 Series Notes 放在標了 cache_control 的 system（固定前綴）。
  *
  * 另外，啟動時從頁面標題猜作品原名（seriesGuessRequest，#186、ADR 0010），大約每一話一次。
@@ -266,6 +267,93 @@ export function translateRequest(input: TranslateInput): MessagesRequest {
     // 翻譯不需要 thinking、需要的是上下文（ADR 0005）。Haiku 5.5 在 effort ≤ high 時才能關
     thinking: { type: 'disabled' },
     output_config: { effort: 'low', format: { type: 'json_schema', schema: TRANSLATE_SCHEMA } },
+  };
+}
+
+/**
+ * 譯文檢查（Discussion #296、#297、#309）：prompt 已經規定不能留空、不能留假名，模型偶爾還是不照做；真實 trace 的 255 頁裡
+ * 約 4% 的頁有一句這樣。所以回答之後由程式檢查，有問題的句子再問一次（retranslateRequest）。
+ * - empty：譯文是空的，卻沒有標 unreadable（或這一項根本沒回）。
+ * - kana：譯文裡還有平假名或片假名（名字沒音譯、整句日文照抄）。長音「ー」與中點「・」中文也會用，不算。
+ * - latin：譯文裡有英文字母，原文卻沒有（外來語被寫成英文）。
+ */
+export type Suspicion = 'empty' | 'kana' | 'latin';
+
+export interface SuspectLine {
+  id: string;
+  reasons: Suspicion[];
+}
+
+type TranslatedItem = TranslateOutput['items'][number];
+
+const KANA = /[ぁ-ゖァ-ヺ]/;
+/** 半形與全形的英文字母。 */
+const LATIN = /[A-Za-zＡ-Ｚａ-ｚ]/;
+
+function suspicions(ja: string, item: TranslatedItem | undefined): Suspicion[] {
+  if (!item) return ['empty'];
+  if (item.unreadable) return [];
+  if (item.譯文 === '') return ['empty'];
+  return [...(KANA.test(item.譯文) ? ['kana' as const] : []), ...(LATIN.test(item.譯文) && !LATIN.test(ja) ? ['latin' as const] : [])];
+}
+
+/** 這一頁的回答裡要再問一次的句子（依輸入的順序）；沒有就是空陣列。 */
+export function suspectLines(input: TranslateInput['items'], items: readonly TranslatedItem[]): SuspectLine[] {
+  const byId = new Map(items.map((i) => [i.id, i]));
+  return input.flatMap(({ id, 原文 }) => {
+    const reasons = suspicions(原文, byId.get(id));
+    return reasons.length ? [{ id, reasons }] : [];
+  });
+}
+
+const PROBLEM: Record<Suspicion, string> = {
+  empty: 'zh 是空字串。請翻譯這一段；只有原文是無法判斷的亂碼時才把 unreadable 設為 true。',
+  kana: 'zh 裡還有假名。請把假名的部分翻成中文，名字音譯成中文字；只有現實中真的存在、沒有官方中文寫法的名稱可以保留原文。',
+  latin: 'zh 裡有原文沒有的英文字母。請改寫成中文；只有現實中真的存在的名稱照官方寫法。',
+};
+
+/**
+ * 補翻的 request body：跟 ① 一模一樣（system 與前面的 user 內容逐字相同，吃得到 prompt cache），最後多一段說哪幾項有問題、
+ * 只要重翻這幾項。整頁的原文都還在，模型看得到前後文。
+ */
+export function retranslateRequest(input: TranslateInput, items: readonly TranslatedItem[], suspects: readonly SuspectLine[]): MessagesRequest {
+  const request = translateRequest(input);
+  const ja = new Map(input.items.map((i) => [i.id, i.原文]));
+  const zh = new Map(items.map((i) => [i.id, i.譯文]));
+  const again = suspects.map(({ id, reasons }) => ({ id, ja: ja.get(id) ?? '', zh: zh.get(id) ?? '', problem: reasons.map((r) => PROBLEM[r]).join('') }));
+  const text = `上一次回答裡，下面這幾項的 zh 有問題（problem 說明哪裡不對）。請只重新翻譯這幾項：items 只回傳這幾個 id，其他項不要回傳；names 照常先填。\n${JSON.stringify(again)}`;
+  const [message] = request.messages;
+  return { ...request, messages: [{ role: 'user', content: [...message!.content, { type: 'text', text }] }] };
+}
+
+/**
+ * 把補翻的答案併回第一次的回答：只換有問題的那幾項，其他項就算補翻回了也不看。補翻只問一次，答案原則上照收
+ * （保留假名可能是對的，例如沒有官方中文寫法的真實品牌）；唯一的例外是第一次有譯文、補翻卻回空字串，這時留著第一次的。
+ * replaced 是實際換掉幾項。
+ */
+export function mergeRetranslated(
+  first: readonly TranslatedItem[],
+  second: readonly TranslatedItem[],
+  suspects: readonly SuspectLine[],
+): { items: TranslatedItem[]; replaced: number } {
+  const asked = new Set(suspects.map((s) => s.id));
+  const before = new Map(first.map((i) => [i.id, i]));
+  const better = new Map(
+    second.filter((i) => asked.has(i.id) && (i.譯文 !== '' || i.unreadable || !before.get(i.id)?.譯文)).map((i) => [i.id, i]),
+  );
+  // 第一次根本沒回的項排在最後；之後是依 id 對回去的，順序不影響
+  const missing = [...better.values()].filter((i) => !before.has(i.id));
+  return { items: [...first.map((i) => better.get(i.id) ?? i), ...missing], replaced: better.size };
+}
+
+/** 兩次呼叫的用量相加（補翻算在同一頁上）。 */
+export function addUsage(a: Usage, b: Usage): Required<Usage> {
+  return {
+    inputTokens: a.inputTokens + b.inputTokens,
+    outputTokens: a.outputTokens + b.outputTokens,
+    cacheReadTokens: a.cacheReadTokens + b.cacheReadTokens,
+    cacheWriteTokens: (a.cacheWriteTokens ?? 0) + (b.cacheWriteTokens ?? 0),
+    costUsd: Math.round((a.costUsd + b.costUsd) * 1e9) / 1e9,
   };
 }
 

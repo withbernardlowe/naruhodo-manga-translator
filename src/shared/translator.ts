@@ -111,6 +111,11 @@ export interface TranslateOutput extends CallInfo {
    * 長 Page 的接續請求帶回去（NotesInput／TranslateInput 的 pageUsageRecordId）。
    */
   usageRecordId?: number;
+  /**
+   * 這一頁有句子沒照規則（空的、留著假名、多出英文）而補翻過才有：asked 是再問了幾句，replaced 是換成補翻答案的有幾句。
+   * usage 與 latencyMs 已經是兩次呼叫的總和。補翻失敗時 replaced 是 0、譯文是第一次的。
+   */
+  recheck?: { asked: number; replaced: number };
   /** 只有 Hosted Translation 的 Strip 請求有（#282）：這一串到這次為止累計翻了幾句、計了幾個 Translated Page。 */
   strip?: { lines: number; pages: number };
 }
