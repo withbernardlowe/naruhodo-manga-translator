@@ -78,11 +78,11 @@ test.describe('沒有 API key', () => {
 
 test('模型 SHA-256 不符時不使用並顯示錯誤；修好後按重試就能用', { tag: '@e2e' }, async ({ context, sw, extensionId, mockSite, fakeOcr }) => {
   test.skip(fakeOcr, '需要真的模型，只在 e2e 跑');
-  mockSite.corruptModel('onnx/decoder_model_quantized.onnx');
+  mockSite.corruptModel('onnx/decoder_with_past_quantized.onnx');
   const { panel } = await activateOnMockSite({ context, sw, extensionId, mockSite });
 
   await expect(panel.getByRole('alert')).toContainText('SHA-256 不符');
-  await expect(panel.getByRole('alert')).toContainText('decoder_model_quantized.onnx');
+  await expect(panel.getByRole('alert')).toContainText('decoder_with_past_quantized.onnx');
   await expect(panel.getByText('辨識失敗').first()).toBeVisible();
   await expect(panel.getByRole('list', { name: '逐字稿' })).toHaveCount(0);
 
@@ -105,11 +105,11 @@ test('第一次使用時下載模型並顯示進度與大小；重開瀏覽器�
     const { panel } = await activateOnMockSite({ context, sw, extensionId, mockSite: site, beforeActivate: recordModelStatus });
     await expect(transcriptOf(panel, 0).getByRole('listitem').first()).toBeVisible();
     const firstRequests = site.modelRequests.length;
-    expect(firstRequests).toBe(4); // detector、encoder、decoder、vocab
+    expect(firstRequests).toBe(5); // detector、encoder、cross_kv、decoder_with_past、vocab
     const statuses = await panel.evaluate(() => (globalThis as unknown as { __statuses: ModelStatus[] }).__statuses);
     const downloading = statuses.filter((s) => s.state === 'downloading');
-    expect(downloading[0]).toEqual({ state: 'downloading', loaded: 0, total: 127_740_540 });
-    expect(downloading.at(-1)).toEqual({ state: 'downloading', loaded: 127_740_540, total: 127_740_540 });
+    expect(downloading[0]).toEqual({ state: 'downloading', loaded: 0, total: 127_645_430 });
+    expect(downloading.at(-1)).toEqual({ state: 'downloading', loaded: 127_645_430, total: 127_645_430 });
     const ready = await panel.evaluate(
       async (message) => (await chrome.runtime.sendMessage<Message, ModelStatusResponse>(message)).status,
       { type: 'panel:getModelStatus' } satisfies Message,

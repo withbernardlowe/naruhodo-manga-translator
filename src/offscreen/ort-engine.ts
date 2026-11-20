@@ -2,7 +2,8 @@
  * 用 onnxruntime-web 跑 detector（comic-text-and-bubble-detector）與 manga-ocr（spec #27 第 3.3 節）。
  *
  * 沒用 transformers.js：它要 decoder_model_merged.onnx，onnx-community 的 manga-ocr repo 沒有（#7），
- * 所以照 prototype 自己做 greedy decoding（沒有 KV cache；原版 manga-ocr 用 beam 4）。
+ * 所以照 prototype 自己做 greedy decoding（原版 manga-ocr 用 beam 4）。decoder 用自己匯出的 KV cache 版本（#317、ADR 0014）：
+ * cross_kv 整頁算一次 cross-attention 的 K/V，decoder_with_past 每步只餵新的一個 token。
  *
  * onnxruntime-web 不跟著 esbuild 打包：它的 .mjs 原樣放在外掛的 ort/ 裡、執行時動態 import，
  * 這樣它用 import.meta.url 找 wasm 與開多執行緒 worker 時，指到的都是它自己的檔案。
@@ -51,10 +52,68 @@ export interface OrtEngine extends Engine {
  * detector 0.67 s → 0.21 s，整頁 OCR 1.28 s → 0.85 s，每一頁都變快。
  * 代價是兩個 EP 的 int8 捨入不同，框差一點（中位 1 px、p90 2 px），認出的字偶爾不同，
  * 標點符號 wasm 比較常讀歪（「…」變「・・・」之類）；維護者決定接受。
- * encoder／decoder 是 fp32，照樣用 WebGPU。
+ * encoder／cross_kv／decoder 是 fp32，照樣用 WebGPU。
  */
-export function sessionExecutionProviders(ep: ExecutionProvider): Record<'detector' | 'encoder' | 'decoder', ExecutionProvider> {
-  return { detector: 'wasm', encoder: ep, decoder: ep };
+export function sessionExecutionProviders(ep: ExecutionProvider): Record<'detector' | 'encoder' | 'crossKv' | 'decoder', ExecutionProvider> {
+  return { detector: 'wasm', encoder: ep, crossKv: ep, decoder: ep };
+}
+
+const CROSS_NAMES = ['cross_key_0', 'cross_value_0', 'cross_key_1', 'cross_value_1'] as const;
+const PAST_NAMES = ['past_key_0', 'past_value_0', 'past_key_1', 'past_value_1'] as const;
+const PRESENT_NAMES = ['present_key_0', 'present_value_0', 'present_key_1', 'present_value_1'] as const;
+/** decoder 的 self-attention：12 個 head、每個 64 維。 */
+const HEADS = 12;
+const HEAD_DIM = 64;
+
+/** KV cache 解碼用得到的 onnxruntime 介面（測試可以換成假的）。 */
+export interface KvTensor {
+  readonly dims: readonly number[];
+  readonly data: unknown;
+  dispose(): void;
+}
+export interface KvSession {
+  run(feeds: Record<string, KvTensor>): Promise<Record<string, KvTensor>>;
+}
+export type KvTensorFactory = (data: Float32Array | BigInt64Array, dims: readonly number[]) => KvTensor;
+
+/**
+ * KV cache 的 greedy decode（#317）：encoder 輸出先跑一次 cross_kv，之後每步只餵每個框新的一個 token，
+ * self-attention 的 K/V 從上一步的 present 接著用。logits 是 [n, 1, 字表]。
+ *
+ * WebGPU 上 cross K/V 和 present 留在 GPU（session 的 preferredOutputLocation），每步只讀回 logits：
+ * 每步讀回 CPU 只快約 1.5 倍，留在 GPU 才有約 5 倍。上一步的 past 用完就釋放，結束或出錯時呼叫 release 放掉其餘的。
+ * copyCross：wasm 的 proxy 會把輸入的 ArrayBuffer transfer 給 worker，每步重複用的 cross K/V 要每步給一份新的；
+ * past 每步本來就是新的輸出，不用複製。
+ */
+export async function startKvDecoding(
+  tensor: KvTensorFactory,
+  sessions: { crossKv: KvSession; decoder: KvSession },
+  hidden: KvTensor,
+  n: number,
+  { copyCross }: { copyCross: boolean },
+): Promise<{ step(tokens: BigInt64Array): Promise<{ logits: Float32Array; vocabSize: number }>; release(): void }> {
+  const cross = await sessions.crossKv.run({ encoder_hidden_states: hidden });
+  let past: KvTensor[] = PAST_NAMES.map(() => tensor(new Float32Array(0), [n, HEADS, 0, HEAD_DIM]));
+  const crossFeed = (name: string): KvTensor => {
+    const t = cross[name]!;
+    return copyCross ? tensor((t.data as Float32Array).slice(), t.dims) : t;
+  };
+  return {
+    async step(tokens) {
+      const feeds: Record<string, KvTensor> = { input_ids: tensor(tokens, [n, 1]) };
+      PAST_NAMES.forEach((name, i) => (feeds[name] = past[i]!));
+      for (const name of CROSS_NAMES) feeds[name] = crossFeed(name);
+      const out = await sessions.decoder.run(feeds);
+      for (const t of past) t.dispose();
+      past = PRESENT_NAMES.map((name) => out[name]!);
+      const logits = out.logits!;
+      return { logits: logits.data as Float32Array, vocabSize: logits.dims[2]! };
+    },
+    release() {
+      for (const t of past) t.dispose();
+      for (const name of CROSS_NAMES) cross[name]?.dispose();
+    },
+  };
 }
 
 /**
@@ -80,7 +139,7 @@ export function topCandidates(logits: Float32Array, offset: number, vocabSize: n
 
 export async function createOrtEngine(
   ep: ExecutionProvider,
-  models: { detector: ArrayBuffer; encoder: ArrayBuffer; decoder: ArrayBuffer; vocab: string[] },
+  models: { detector: ArrayBuffer; encoder: ArrayBuffer; crossKv: ArrayBuffer; decoder: ArrayBuffer; vocab: string[] },
   maxThreads?: number,
 ): Promise<OrtEngine> {
   const ort = await loadOrt();
@@ -93,20 +152,24 @@ export async function createOrtEngine(
   const providers = sessionExecutionProviders(ep);
   // logSeverityLevel 3＝只記 error：「部分節點沒分給 WebGPU」的警告每建一次 session 就印兩行，
   // 擠滿 chrome://extensions 的錯誤頁，而那是 ORT 刻意把 shape 運算放 CPU（#27 除錯）
-  const create = (buffer: ArrayBuffer, provider: ExecutionProvider) =>
-    ort.InferenceSession.create(new Uint8Array(buffer), { executionProviders: [provider], logSeverityLevel: 3 });
+  const create = (buffer: ArrayBuffer, provider: ExecutionProvider, options: Ort.InferenceSession.SessionOptions = {}) =>
+    ort.InferenceSession.create(new Uint8Array(buffer), { executionProviders: [provider], logSeverityLevel: 3, ...options });
   // detector 最後建：WebGPU 建不起來時要在 wasm 的 session 出現前就失敗，
   // local-pipeline 退回 wasm 重建時 proxy 才還來得及生效。哪個失敗，就把已經建好的放掉。
   const sessions: Ort.InferenceSession[] = [];
-  const createTracked = async (buffer: ArrayBuffer, provider: ExecutionProvider) => {
-    const session = await create(buffer, provider);
+  const createTracked = async (buffer: ArrayBuffer, provider: ExecutionProvider, options?: Ort.InferenceSession.SessionOptions) => {
+    const session = await create(buffer, provider, options);
     sessions.push(session);
     return session;
   };
-  let encoder: Ort.InferenceSession, decoder: Ort.InferenceSession, detector: Ort.InferenceSession;
+  // WebGPU：cross K/V 與 present 留在 GPU，decoder 每步只讀回 logits（startKvDecoding）
+  const gpuBuffer = (names: readonly string[]): Ort.InferenceSession.SessionOptions =>
+    ep === 'webgpu' ? { preferredOutputLocation: Object.fromEntries(names.map((name) => [name, 'gpu-buffer'])) } : {};
+  let encoder: Ort.InferenceSession, crossKv: Ort.InferenceSession, decoder: Ort.InferenceSession, detector: Ort.InferenceSession;
   try {
     encoder = await createTracked(models.encoder, providers.encoder);
-    decoder = await createTracked(models.decoder, providers.decoder);
+    crossKv = await createTracked(models.crossKv, providers.crossKv, gpuBuffer(CROSS_NAMES));
+    decoder = await createTracked(models.decoder, providers.decoder, gpuBuffer(PRESENT_NAMES));
     detector = await createTracked(models.detector, providers.detector);
   } catch (error) {
     await Promise.allSettled(sessions.map((session) => session.release()));
@@ -159,6 +222,8 @@ export async function createOrtEngine(
     const encodeStartedAt = performance.now();
     const { last_hidden_state: hidden } = await encoder.run({ pixel_values: new ort.Tensor('float32', pixels, [n, 3, 224, 224]) });
     const decodeStartedAt = performance.now();
+    const decoding = await startKvDecoding((data, dims) => new ort.Tensor(data, dims), { crossKv, decoder }, hidden!, n, { copyCross: ep === 'wasm' });
+    const crossKvMs = performance.now() - decodeStartedAt;
     let decodeSteps = 0;
     const sequences: bigint[][] = Array.from({ length: n }, () => [CLS]);
     /** 每一步選中的 token 的 softmax 機率（OCR 信心，ADR 0009），跟 sequences 去掉 CLS 後一一對應。 */
@@ -186,23 +251,16 @@ export async function createOrtEngine(
       for (let step = 0; step < MAX_TOKENS && done.includes(false); step++) {
         decodeSteps++;
         const prepStartedAt = __DEBUG__ ? performance.now() : 0;
-        const length = sequences[0]!.length;
-        const ids = BigInt64Array.from(sequences.flat());
-        const feeds = {
-          input_ids: new ort.Tensor('int64', ids, [n, length]),
-          // proxy 模式會把輸入的 ArrayBuffer transfer 給 worker，每一步都要給一份新的
-          encoder_hidden_states: new ort.Tensor('float32', (hidden!.data as Float32Array).slice(), hidden!.dims),
-        };
+        // 每個框只餵上一步選中的 token（讀完的框補 0，照樣留在 batch 裡）
+        const last = BigInt64Array.from(sequences, (seq) => seq.at(-1)!);
         const runStartedAt = __DEBUG__ ? performance.now() : 0;
-        const { logits } = await decoder.run(feeds);
+        const { logits: data, vocabSize } = await decoding.step(last);
         if (__DEBUG__) {
           const ranAt = performance.now();
           prepMs += runStartedAt - prepStartedAt;
           stepRunMs.push(Math.round(ranAt - runStartedAt));
         }
         const postStartedAt = __DEBUG__ ? performance.now() : 0;
-        const vocabSize = logits!.dims[2]!;
-        const data = logits!.data as Float32Array;
         for (let k = 0; k < n; k++) {
           if (done[k]) {
             sequences[k]!.push(0n);
@@ -210,7 +268,7 @@ export async function createOrtEngine(
             stepCandidates[k]!.push([]);
             continue;
           }
-          const top = topCandidates(data, (k * length + length - 1) * vocabSize, vocabSize);
+          const top = topCandidates(data, k * vocabSize, vocabSize);
           const best = top[0]!.id;
           sequences[k]!.push(BigInt(best));
           probabilities[k]!.push(top[0]!.probability);
@@ -221,6 +279,7 @@ export async function createOrtEngine(
       }
     } finally {
       clearInterval(lagProbe);
+      decoding.release();
     }
     if (__DEBUG__) {
       trace('ocr:timing', {
@@ -228,6 +287,7 @@ export async function createOrtEngine(
         detectorMs: Math.round(detectorMs),
         encoderMs: Math.round(decodeStartedAt - encodeStartedAt),
         decoderMs: Math.round(performance.now() - decodeStartedAt),
+        crossKvMs: Math.round(crossKvMs),
         boxes: n,
         decodeSteps,
         decoderRunMs: stepRunMs.reduce((sum, ms) => sum + ms, 0),
@@ -258,7 +318,7 @@ export async function createOrtEngine(
     detect,
     recognize,
     async release() {
-      await Promise.all([detector.release(), encoder.release(), decoder.release()]);
+      await Promise.all([detector.release(), encoder.release(), crossKv.release(), decoder.release()]);
     },
   };
 }
