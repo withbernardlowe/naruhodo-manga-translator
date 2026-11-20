@@ -167,31 +167,60 @@ export async function createOrtEngine(
     const stepCandidates: Candidate[][][] = Array.from({ length: n }, () => []);
     const done = new Array<boolean>(n).fill(false);
     const tokenText = (id: number) => (vocab[id] ?? '').replace(/^##/, '');
-    for (let step = 0; step < MAX_TOKENS && done.includes(false); step++) {
-      decodeSteps++;
-      const length = sequences[0]!.length;
-      const ids = BigInt64Array.from(sequences.flat());
-      const { logits } = await decoder.run({
-        input_ids: new ort.Tensor('int64', ids, [n, length]),
-        // proxy 模式會把輸入的 ArrayBuffer transfer 給 worker，每一步都要給一份新的
-        encoder_hidden_states: new ort.Tensor('float32', (hidden!.data as Float32Array).slice(), hidden!.dims),
-      });
-      const vocabSize = logits!.dims[2]!;
-      const data = logits!.data as Float32Array;
-      for (let k = 0; k < n; k++) {
-        if (done[k]) {
-          sequences[k]!.push(0n);
-          probabilities[k]!.push(1);
-          stepCandidates[k]!.push([]);
-          continue;
+    // debug build：每一步的時間拆成準備輸入／decoder.run／挑 token，加上這段期間 offscreen 主執行緒最久卡多久，
+    // 用來分辨翻頁時 decoder 變慢是在等 GPU（run 變長、主執行緒閒著）還是主執行緒被別的事佔住
+    const stepRunMs: number[] = [];
+    let prepMs = 0;
+    let postMs = 0;
+    let maxLagMs = 0;
+    let lagProbe: ReturnType<typeof setInterval> | undefined;
+    if (__DEBUG__) {
+      let expected = performance.now() + 20;
+      lagProbe = setInterval(() => {
+        const now = performance.now();
+        maxLagMs = Math.max(maxLagMs, now - expected);
+        expected = now + 20;
+      }, 20);
+    }
+    try {
+      for (let step = 0; step < MAX_TOKENS && done.includes(false); step++) {
+        decodeSteps++;
+        const prepStartedAt = __DEBUG__ ? performance.now() : 0;
+        const length = sequences[0]!.length;
+        const ids = BigInt64Array.from(sequences.flat());
+        const feeds = {
+          input_ids: new ort.Tensor('int64', ids, [n, length]),
+          // proxy 模式會把輸入的 ArrayBuffer transfer 給 worker，每一步都要給一份新的
+          encoder_hidden_states: new ort.Tensor('float32', (hidden!.data as Float32Array).slice(), hidden!.dims),
+        };
+        const runStartedAt = __DEBUG__ ? performance.now() : 0;
+        const { logits } = await decoder.run(feeds);
+        if (__DEBUG__) {
+          const ranAt = performance.now();
+          prepMs += runStartedAt - prepStartedAt;
+          stepRunMs.push(Math.round(ranAt - runStartedAt));
         }
-        const top = topCandidates(data, (k * length + length - 1) * vocabSize, vocabSize);
-        const best = top[0]!.id;
-        sequences[k]!.push(BigInt(best));
-        probabilities[k]!.push(top[0]!.probability);
-        stepCandidates[k]!.push(top.map(({ id, probability }) => ({ text: tokenText(id), probability })));
-        if (best === SEP) done[k] = true;
+        const postStartedAt = __DEBUG__ ? performance.now() : 0;
+        const vocabSize = logits!.dims[2]!;
+        const data = logits!.data as Float32Array;
+        for (let k = 0; k < n; k++) {
+          if (done[k]) {
+            sequences[k]!.push(0n);
+            probabilities[k]!.push(1);
+            stepCandidates[k]!.push([]);
+            continue;
+          }
+          const top = topCandidates(data, (k * length + length - 1) * vocabSize, vocabSize);
+          const best = top[0]!.id;
+          sequences[k]!.push(BigInt(best));
+          probabilities[k]!.push(top[0]!.probability);
+          stepCandidates[k]!.push(top.map(({ id, probability }) => ({ text: tokenText(id), probability })));
+          if (best === SEP) done[k] = true;
+        }
+        if (__DEBUG__) postMs += performance.now() - postStartedAt;
       }
+    } finally {
+      clearInterval(lagProbe);
     }
     if (__DEBUG__) {
       trace('ocr:timing', {
@@ -201,6 +230,11 @@ export async function createOrtEngine(
         decoderMs: Math.round(performance.now() - decodeStartedAt),
         boxes: n,
         decodeSteps,
+        decoderRunMs: stepRunMs.reduce((sum, ms) => sum + ms, 0),
+        decoderPrepMs: Math.round(prepMs),
+        decoderPostMs: Math.round(postMs),
+        maxMainThreadLagMs: Math.round(maxLagMs),
+        stepRunMs,
       });
     }
     return sequences.map((seq, k) => {
