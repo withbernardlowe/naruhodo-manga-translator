@@ -7,7 +7,7 @@ import type { PageText } from '../shared/page-text.ts';
 import recordedOcr from '../../testdata/synthetic/recorded-ocr.json' with { type: 'json' };
 import { createFakeEngine, type RecordedOcr } from './fake-engine.ts';
 import { createKuromojiReading } from './kuromoji-reading.ts';
-import { detectExecutionProvider, MODEL_SETS, modelSetFiles, type ExecutionProvider } from './models/model-files.ts';
+import { ALL_MODEL_SET_FILES, detectExecutionProvider, MODEL_SETS, modelSetFiles, type ExecutionProvider } from './models/model-files.ts';
 import { createModelStore, MODEL_CACHE } from './models/model-store.ts';
 import { createResident } from './models/resident.ts';
 import { createOrtEngine, type OrtEngine } from './ort-engine.ts';
@@ -48,17 +48,24 @@ export function createLocalPipeline({ onStatus: report, idleMs = IDLE_RELEASE_MS
   function modelStore() {
     if (!store || storeBaseUrl !== config.modelBaseUrl) {
       storeBaseUrl = config.modelBaseUrl;
-      store = createModelStore({ fetch: (url) => fetch(url), openCache: () => caches.open(MODEL_CACHE), baseUrl: config.modelBaseUrl });
+      store = createModelStore({
+        fetch: (url) => fetch(url),
+        openCache: () => caches.open(MODEL_CACHE),
+        baseUrl: config.modelBaseUrl,
+        // 下載完就清掉舊版留下的檔案（#317：換成 KV cache decoder 後，舊的 decoder 還佔著 117 MB）
+        keep: ALL_MODEL_SET_FILES,
+      });
     }
     return store;
   }
 
   async function loadEngine(ep: ExecutionProvider): Promise<OrtEngine> {
     onStatus({ state: 'loading' });
-    const [detector, encoder, decoder, vocab] = await modelStore().load(modelSetFiles(MODEL_SETS[ep]), (p) => onStatus({ state: 'downloading', ...p }));
+    const [detector, encoder, crossKv, decoder, vocab] = await modelStore().load(modelSetFiles(MODEL_SETS[ep]), (p) => onStatus({ state: 'downloading', ...p }));
     return createOrtEngine(ep, {
       detector: detector!,
       encoder: encoder!,
+      crossKv: crossKv!,
       decoder: decoder!,
       vocab: new TextDecoder().decode(vocab).split(/\r?\n/),
     }, config.maxThreads);

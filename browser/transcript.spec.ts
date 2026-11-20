@@ -78,11 +78,11 @@ test.describe('沒有 API key', () => {
 
 test('模型 SHA-256 不符時不使用並顯示錯誤；修好後按重試就能用', { tag: '@e2e' }, async ({ context, sw, extensionId, mockSite, fakeOcr }) => {
   test.skip(fakeOcr, '需要真的模型，只在 e2e 跑');
-  mockSite.corruptModel('onnx/decoder_model_quantized.onnx');
+  mockSite.corruptModel('onnx/decoder_with_past_quantized.onnx');
   const { panel } = await activateOnMockSite({ context, sw, extensionId, mockSite });
 
   await expect(panel.getByRole('alert')).toContainText('SHA-256 不符');
-  await expect(panel.getByRole('alert')).toContainText('decoder_model_quantized.onnx');
+  await expect(panel.getByRole('alert')).toContainText('decoder_with_past_quantized.onnx');
   await expect(panel.getByText('辨識失敗').first()).toBeVisible();
   await expect(panel.getByRole('list', { name: '逐字稿' })).toHaveCount(0);
 

@@ -18,6 +18,11 @@ export interface ModelFile {
 
 const DETECTOR = { repo: 'ogkalu/comic-text-and-bubble-detector', revision: '16e8a622f91fabc6b5b65c96d32d1183f8843546' };
 const OCR = { repo: 'onnx-community/manga-ocr-base-ONNX', revision: 'f9023406bb2f6b17df67bc4a327c56ecd20611f0' };
+/**
+ * 自己從 kha-white/manga-ocr-base 匯出的 KV cache decoder（#317、ADR 0014）：onnx-community 沒有帶 past 的版本。
+ * cross_kv 把 encoder 輸出投影成 cross-attention 的 K/V（整頁一次），decoder_with_past 每步只算新的一個位置。2026-11-20 查 HF API。
+ */
+const OCR_KV = { repo: 'yurenju/manga-ocr-base-kv-onnx', revision: '449fcfd61f4446a0fb0cd9010e95c3fa927651f5' };
 
 export const MODEL_FILES = {
   detector: {
@@ -32,11 +37,17 @@ export const MODEL_FILES = {
     size: 343_377_067,
     sha256: 'df35f64c2400ea860c70a2d06f2a1f99892374a78c89fcf35308076557a3863f',
   },
+  crossKvFp32: {
+    ...OCR_KV,
+    path: 'onnx/cross_kv.onnx',
+    size: 9_455_859,
+    sha256: '37c72aa64717972146a7ae700a7664441c8bf572270b94328b088567dd294c6b',
+  },
   decoderFp32: {
-    ...OCR,
-    path: 'onnx/decoder_model.onnx',
-    size: 117_445_718,
-    sha256: '31ca14d6dee6b3966144e128d0481d5a91f5083cbced81fe7a9571713fa50cd4',
+    ...OCR_KV,
+    path: 'onnx/decoder_with_past.onnx',
+    size: 107_922_894,
+    sha256: '96a0759d48049f1e5cf7e2f224387c04a52fde6690509a8819c9d04be8a4c48f',
   },
   encoderQ8: {
     ...OCR,
@@ -44,11 +55,17 @@ export const MODEL_FILES = {
     size: 86_967_767,
     sha256: 'ddd1af56963093795705fa38da6ce7e6567d1658e7c7359db7e13fcd37dbf279',
   },
+  crossKvQ8: {
+    ...OCR_KV,
+    path: 'onnx/cross_kv_quantized.onnx',
+    size: 2_383_397,
+    sha256: 'a1eb279b6a3ee37b5ace456e8b7fbd67eecc764f1b78de52d05e5a08edc34f0e',
+  },
   decoderQ8: {
-    ...OCR,
-    path: 'onnx/decoder_model_quantized.onnx',
-    size: 29_627_936,
-    sha256: '2e7177d2b0a59f1c612b694ed70c13971bee765cc2b2bc7bc9376e4753652f27',
+    ...OCR_KV,
+    path: 'onnx/decoder_with_past_quantized.onnx',
+    size: 27_149_429,
+    sha256: '0a0205e4a60991797f875782618a7f6e7191f39a6820813af40a2cc57000bcd3',
   },
   vocab: {
     repo: 'kha-white/manga-ocr-base',
@@ -62,6 +79,7 @@ export const MODEL_FILES = {
 export interface ModelSet {
   detector: ModelFile;
   encoder: ModelFile;
+  crossKv: ModelFile;
   decoder: ModelFile;
   vocab: ModelFile;
 }
@@ -74,19 +92,27 @@ export const MODEL_SETS: Record<ExecutionProvider, ModelSet> = {
   webgpu: {
     detector: MODEL_FILES.detector,
     encoder: MODEL_FILES.encoderFp32,
+    crossKv: MODEL_FILES.crossKvFp32,
     decoder: MODEL_FILES.decoderFp32,
     vocab: MODEL_FILES.vocab,
   },
   wasm: {
     detector: MODEL_FILES.detector,
     encoder: MODEL_FILES.encoderQ8,
+    crossKv: MODEL_FILES.crossKvQ8,
     decoder: MODEL_FILES.decoderQ8,
     vocab: MODEL_FILES.vocab,
   },
 };
 
-/** 一組模型的四個檔案（下載與載入的順序）。 */
-export const modelSetFiles = (set: ModelSet): ModelFile[] => [set.detector, set.encoder, set.decoder, set.vocab];
+/** 一組模型的五個檔案（下載與載入的順序）。 */
+export const modelSetFiles = (set: ModelSet): ModelFile[] => [set.detector, set.encoder, set.crossKv, set.decoder, set.vocab];
+
+/**
+ * 任何一組會用到的檔案：Cache Storage 裡不在這裡面的是舊版留下的，可以清掉（#317）。
+ * 兩組都留：WebGPU 建不起來時會退回 wasm，那組也可能已經下載過。
+ */
+export const ALL_MODEL_SET_FILES: readonly ModelFile[] = [...new Set(Object.values(MODEL_SETS).flatMap(modelSetFiles))];
 
 /** 這組模型要下載的總 bytes（onboarding 第 1 步顯示「約 472 或 128 MB」）。 */
 export const modelSetBytes = (set: ModelSet): number => modelSetFiles(set).reduce((sum, file) => sum + file.size, 0);

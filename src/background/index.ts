@@ -50,10 +50,10 @@ import { BACKUP_KEYS, createBackup } from './backup.ts';
 import { indexedDbPageCache } from './cache-store.ts';
 import { createHostedTranslator } from './hosted-translator.ts';
 import { installPlan } from './install.ts';
-import { modelSetFiles } from '../offscreen/models/model-files.ts';
-import { isCached, MODEL_CACHE } from '../offscreen/models/model-store.ts';
+import { MODEL_SETS, modelSetFiles } from '../offscreen/models/model-files.ts';
+import { MODEL_CACHE, missingFiles } from '../offscreen/models/model-store.ts';
 import { createExecutionProviderDetector } from './execution-provider.ts';
-import { modelStatusResponse } from './model-status.ts';
+import { modelStatusResponse, refreshModelsAfterUpdate } from './model-status.ts';
 import { ensureOffscreenDocument } from './offscreen.ts';
 import { createOutlineSync } from './outline-sync.ts';
 import { createOverlaySync } from './overlay-sync.ts';
@@ -464,7 +464,7 @@ function executionProvider(): Promise<ExecutionProvider> {
 function getModelStatus(): Promise<ModelStatusResponse> {
   return modelStatusResponse(modelStatus, {
     executionProvider,
-    isCached: async (set) => isCached(await caches.open(MODEL_CACHE), modelSetFiles(set)),
+    missingFiles: async (files) => missingFiles(await caches.open(MODEL_CACHE), files),
   });
 }
 
@@ -473,6 +473,17 @@ async function prefetchModels(): Promise<void> {
   await ensureOffscreenDocument();
   await chrome.runtime.sendMessage({ type: 'offscreen:prefetchModels', ...(__E2E__ ? { pipeline: pipelineConfig } : {}) } satisfies Message);
 }
+
+/** 外掛更新換了模型檔、讀者先前已經下載過：在背景補下載，下載完 offscreen 會清掉舊版的檔案（#317）。 */
+async function refreshModelsIfUpdated(reason: `${chrome.runtime.OnInstalledReason}`): Promise<void> {
+  if (reason !== 'update') return;
+  const files = modelSetFiles(MODEL_SETS[await executionProvider()]);
+  const missing = await missingFiles(await caches.open(MODEL_CACHE), files);
+  trace('models:afterUpdate', { missing: missing.map((file) => file.path), total: files.length });
+  if (refreshModelsAfterUpdate(reason, { missing: missing.length, total: files.length })) await prefetchModels();
+}
+
+if (!__E2E__) void installed.then(refreshModelsIfUpdated).catch((e: unknown) => console.warn('refresh models after update failed', e));
 
 if (__E2E__) {
   globalThis.__configureForTest = (config) => {

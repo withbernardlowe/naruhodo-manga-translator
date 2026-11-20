@@ -473,6 +473,6 @@ export type ModelStatus =
 
 export interface ModelStatusResponse {
   status: ModelStatus;
-  /** 會下載的那一組模型的總 bytes（WebGPU 約 472 MB、wasm 約 128 MB），onboarding 第 1 步顯示。還問不到這台電腦用哪一組時沒有（#221）。 */
+  /** 會用的那一組模型還要下載的 bytes（還沒下載過：WebGPU 約 472 MB、wasm 約 128 MB；只缺換過的檔案時只算那些，#317），onboarding 第 1 步顯示。還問不到這台電腦用哪一組時沒有（#221）。 */
   downloadBytes?: number;
 }

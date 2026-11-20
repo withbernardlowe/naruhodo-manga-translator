@@ -38,7 +38,7 @@ test('onboarding 按「開始設定」就在背景下載模型，side panel 看�
   await onboarding.getByRole('button', { name: '開始設定' }).click();
 
   await expect(onboarding.getByRole('status').filter({ hasText: '✓ 辨識模型已就緒' })).toBeVisible();
-  expect(mockSite.modelRequests).toHaveLength(4); // detector、encoder、decoder、vocab
+  expect(mockSite.modelRequests).toHaveLength(5); // detector、encoder、cross_kv、decoder、vocab
   const seen = await statusesOf(panel);
   expect(seen.filter((s) => s.state === 'downloading').at(-1)).toEqual({ state: 'downloading', loaded: WASM_BYTES, total: WASM_BYTES });
   expect(seen.at(-1)).toEqual({ state: 'downloaded' });
@@ -48,5 +48,5 @@ test('onboarding 按「開始設定」就在背景下載模型，side panel 看�
 
   const activated = await activateOnMockSite({ context, sw, extensionId, mockSite });
   await expect(activated.panel.getByRole('list', { name: '逐字稿' }).first().getByRole('listitem').first()).toBeVisible();
-  expect(mockSite.modelRequests).toHaveLength(4);
+  expect(mockSite.modelRequests).toHaveLength(5);
 });

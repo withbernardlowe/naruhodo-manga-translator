@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { ModelFile } from './model-files.ts';
-import { createModelStore, isCached, type CacheLike, type DownloadProgress } from './model-store.ts';
+import { modelUrl, type ModelFile } from './model-files.ts';
+import { createModelStore, missingFiles, type CacheLike, type DownloadProgress } from './model-store.ts';
 
 /** sha256("hello")，獨立算好的值。 */
 const HELLO_SHA256 = '2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824';
@@ -15,7 +15,7 @@ const world: ModelFile = {
   sha256: '711e9609339e92b03ddc0a211827dba421f38f9ed8b9d806e1ffdd8c15ffa03d',
 };
 
-function memoryCache(): CacheLike & { keys(): string[] } {
+function memoryCache(): CacheLike & { urls(): string[] } {
   const entries = new Map<string, ArrayBuffer>();
   return {
     async match(url) {
@@ -25,7 +25,13 @@ function memoryCache(): CacheLike & { keys(): string[] } {
     async put(url, response) {
       entries.set(url, await response.arrayBuffer());
     },
-    keys: () => [...entries.keys()],
+    async keys() {
+      return [...entries.keys()].map((url) => ({ url }));
+    },
+    async delete(url) {
+      return entries.delete(url);
+    },
+    urls: () => [...entries.keys()],
   };
 }
 
@@ -48,7 +54,7 @@ describe('模型下載與快取', () => {
 
     expect(text(buffer!)).toBe('hello');
     expect(fetch).toHaveBeenCalledWith('https://huggingface.co/someone/model/resolve/abc123/onnx/hello.onnx');
-    expect(cache.keys()).toEqual(['https://huggingface.co/someone/model/resolve/abc123/onnx/hello.onnx']);
+    expect(cache.urls()).toEqual(['https://huggingface.co/someone/model/resolve/abc123/onnx/hello.onnx']);
   });
 
   it('快取裡已經有的檔案不再下載', async () => {
@@ -67,7 +73,7 @@ describe('模型下載與快取', () => {
     const store = createModelStore({ fetch: fakeFetch({ 'hello.onnx': 'HELLO' }), openCache: async () => cache });
 
     await expect(store.load([hello])).rejects.toThrow(/SHA-256.*onnx\/hello\.onnx/);
-    expect(cache.keys()).toEqual([]);
+    expect(cache.urls()).toEqual([]);
 
     const retry = createModelStore({ fetch: fakeFetch({ 'hello.onnx': 'hello' }), openCache: async () => cache });
     const [buffer] = await retry.load([hello]);
@@ -100,7 +106,7 @@ describe('模型下載與快取', () => {
     await store.load([hello]);
 
     expect(fetch).toHaveBeenCalledWith('http://127.0.0.1:9999/hf/someone/model/resolve/abc123/onnx/hello.onnx');
-    expect(cache.keys()).toEqual(['https://huggingface.co/someone/model/resolve/abc123/onnx/hello.onnx']);
+    expect(cache.urls()).toEqual(['https://huggingface.co/someone/model/resolve/abc123/onnx/hello.onnx']);
   });
 });
 
@@ -113,7 +119,7 @@ describe('預先下載（#169）', () => {
     await store.download([hello]);
     await store.download([hello]);
 
-    expect(cache.keys()).toEqual(['https://huggingface.co/someone/model/resolve/abc123/onnx/hello.onnx']);
+    expect(cache.urls()).toEqual(['https://huggingface.co/someone/model/resolve/abc123/onnx/hello.onnx']);
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
@@ -149,17 +155,63 @@ describe('預先下載（#169）', () => {
 
     await store.download([hello]);
 
-    expect(await isCached(cache, [hello])).toBe(true);
+    expect(await missingFiles(cache, [hello])).toEqual([]);
   });
 
-  it('isCached：每個檔案都在快取裡才是 true', async () => {
+  it('missingFiles：列出還不在快取裡的檔案（SW 判斷已下載、算還要下載多少）', async () => {
     const cache = memoryCache();
     const store = createModelStore({ fetch: fakeFetch({ 'hello.onnx': 'hello' }), openCache: async () => cache });
-    expect(await isCached(cache, [hello])).toBe(false);
+    expect(await missingFiles(cache, [hello, world])).toEqual([hello, world]);
 
     await store.download([hello]);
 
-    expect(await isCached(cache, [hello])).toBe(true);
-    expect(await isCached(cache, [hello, world])).toBe(false);
+    expect(await missingFiles(cache, [hello, world])).toEqual([world]);
+  });
+});
+
+describe('清掉舊版留下的模型檔（#317）', () => {
+  const old: ModelFile = { ...hello, path: 'onnx/old_decoder.onnx', sha256: 'old' };
+  const oldUrl = 'https://huggingface.co/someone/model/resolve/abc123/onnx/old_decoder.onnx';
+
+  async function cacheWithOldFile() {
+    const cache = memoryCache();
+    await cache.put(modelUrl(old), new Response('old'));
+    return cache;
+  }
+
+  it('下載完一組模型後，刪掉快取裡不屬於任何一組的檔案', async () => {
+    const cache = await cacheWithOldFile();
+    const store = createModelStore({ fetch: fakeFetch({ 'hello.onnx': 'hello' }), openCache: async () => cache, keep: [hello, world] });
+
+    await store.download([hello]);
+
+    expect(cache.urls()).toEqual(['https://huggingface.co/someone/model/resolve/abc123/onnx/hello.onnx']);
+  });
+
+  it('要保留的檔案不刪，即使不是這次下載的那一組（WebGPU 退回 wasm 時會用到）', async () => {
+    const cache = await cacheWithOldFile();
+    const store = createModelStore({ fetch: fakeFetch({ 'hello.onnx': 'hello' }), openCache: async () => cache, keep: [hello, old] });
+
+    await store.download([hello]);
+
+    expect(cache.urls()).toContain(oldUrl);
+  });
+
+  it('下載失敗時不刪：舊的檔案留到新的那組下載完為止', async () => {
+    const cache = await cacheWithOldFile();
+    const store = createModelStore({ fetch: fakeFetch({}), openCache: async () => cache, keep: [hello] });
+
+    await expect(store.download([hello])).rejects.toThrow(/404/);
+
+    expect(cache.urls()).toEqual([oldUrl]);
+  });
+
+  it('沒給要保留的檔案就不清（測試用的 store）', async () => {
+    const cache = await cacheWithOldFile();
+    const store = createModelStore({ fetch: fakeFetch({ 'hello.onnx': 'hello' }), openCache: async () => cache });
+
+    await store.download([hello]);
+
+    expect(cache.urls()).toContain(oldUrl);
   });
 });
