@@ -2,7 +2,7 @@
  * SW 回答「目前的模型狀態」（#169）。SW 記在記憶體裡的狀態，在 SW 被回收或模型釋放後是 idle（不知道）；
  * 這時查 Cache Storage 裡會用的那一組模型齊不齊全，齊全就是 downloaded（已下載、還沒載入）。
  */
-import { MODEL_SETS, modelSetFiles, type ModelFile, type ModelSet } from '../offscreen/models/model-files.ts';
+import { filesBytes, MODEL_SETS, modelSetFiles, type ModelFile, type ModelSet } from '../offscreen/models/model-files.ts';
 import type { ExecutionProvider, ModelStatus, ModelStatusResponse } from '../shared/messages.ts';
 
 export async function currentModelStatus(known: ModelStatus, isCached: () => Promise<boolean>): Promise<ModelStatus> {
@@ -31,15 +31,14 @@ export async function modelStatusResponse(known: ModelStatus, deps: ModelStatusD
     return { status: known };
   }
   const missing = await deps.missingFiles(modelSetFiles(set));
-  const downloadBytes = missing.reduce((sum, file) => sum + file.size, 0);
-  return { status: await currentModelStatus(known, async () => missing.length === 0), downloadBytes };
+  return { status: await currentModelStatus(known, async () => missing.length === 0), downloadBytes: filesBytes(missing) };
 }
 
 /**
- * 外掛更新後要不要在背景補下載（#317）：更新換了模型檔（例如 KV cache decoder），而讀者先前已經下載過這一組
+ * 外掛更新（onInstalled 的 reason 是 update）後要不要在背景補下載（#317）：更新換了模型檔（例如 KV cache decoder），而讀者先前已經下載過這一組
  * （快取裡有一部分）時，就先把缺的補齊，免得更新後第一次翻頁要等一百多 MB。先前已經同意過下載模型，所以不再問；
  * 從沒下載過的讀者照舊等 onboarding 或第一次翻譯。
  */
-export function refreshModelsAfterUpdate(reason: `${chrome.runtime.OnInstalledReason}`, { missing, total }: { missing: number; total: number }): boolean {
-  return reason === 'update' && missing > 0 && missing < total;
+export function shouldRefreshModelsAfterUpdate({ missing, total }: { missing: number; total: number }): boolean {
+  return missing > 0 && missing < total;
 }

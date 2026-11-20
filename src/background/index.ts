@@ -53,7 +53,7 @@ import { installPlan } from './install.ts';
 import { MODEL_SETS, modelSetFiles } from '../offscreen/models/model-files.ts';
 import { MODEL_CACHE, missingFiles } from '../offscreen/models/model-store.ts';
 import { createExecutionProviderDetector } from './execution-provider.ts';
-import { modelStatusResponse, refreshModelsAfterUpdate } from './model-status.ts';
+import { modelStatusResponse, shouldRefreshModelsAfterUpdate } from './model-status.ts';
 import { ensureOffscreenDocument } from './offscreen.ts';
 import { createOutlineSync } from './outline-sync.ts';
 import { createOverlaySync } from './overlay-sync.ts';
@@ -480,7 +480,7 @@ async function refreshModelsIfUpdated(reason: `${chrome.runtime.OnInstalledReaso
   const files = modelSetFiles(MODEL_SETS[await executionProvider()]);
   const missing = await missingFiles(await caches.open(MODEL_CACHE), files);
   trace('models:afterUpdate', { missing: missing.map((file) => file.path), total: files.length });
-  if (refreshModelsAfterUpdate(reason, { missing: missing.length, total: files.length })) await prefetchModels();
+  if (shouldRefreshModelsAfterUpdate({ missing: missing.length, total: files.length })) await prefetchModels();
 }
 
 if (!__E2E__) void installed.then(refreshModelsIfUpdated).catch((e: unknown) => console.warn('refresh models after update failed', e));

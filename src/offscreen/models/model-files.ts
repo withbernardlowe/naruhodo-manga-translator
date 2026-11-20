@@ -115,7 +115,10 @@ export const modelSetFiles = (set: ModelSet): ModelFile[] => [set.detector, set.
 export const ALL_MODEL_SET_FILES: readonly ModelFile[] = [...new Set(Object.values(MODEL_SETS).flatMap(modelSetFiles))];
 
 /** 這組模型要下載的總 bytes（onboarding 第 1 步顯示「約 472 或 128 MB」）。 */
-export const modelSetBytes = (set: ModelSet): number => modelSetFiles(set).reduce((sum, file) => sum + file.size, 0);
+export const modelSetBytes = (set: ModelSet): number => filesBytes(modelSetFiles(set));
+
+/** 這些檔案的總 bytes。 */
+export const filesBytes = (files: readonly ModelFile[]): number => files.reduce((sum, file) => sum + file.size, 0);
 
 /**
  * 有 WebGPU adapter 才用 WebGPU；headless 與部分 Mac 沒有，退回 wasm。翻譯流程、預先下載與 SW 判斷「已下載」都用它選同一組。

@@ -4,7 +4,7 @@
  * 同一組檔案同時只有一個下載（#169）：onboarding 的預先下載進行中時開始翻譯，翻譯接續同一個下載、看到同一份進度。
  * 中斷了不續傳，下次呼叫時重新下載還沒進快取的檔案。
  */
-import { HUGGING_FACE, modelUrl, type ModelFile } from './model-files.ts';
+import { filesBytes, HUGGING_FACE, modelUrl, type ModelFile } from './model-files.ts';
 
 /** Cache Storage 裡放模型的 cache 名稱。 */
 export const MODEL_CACHE = 'models-v1';
@@ -97,7 +97,7 @@ export function createModelStore(deps: ModelStoreDeps) {
   async function downloadMissing(files: readonly ModelFile[], report: (progress: DownloadProgress) => void): Promise<void> {
     const cache = await deps.openCache();
     const missing = await missingFiles(cache, files);
-    const total = missing.reduce((sum, file) => sum + file.size, 0);
+    const total = filesBytes(missing);
     let loaded = 0;
     if (total > 0) report({ loaded, total });
     for (const file of missing) {
