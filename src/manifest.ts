@@ -14,7 +14,8 @@ const icons = Object.fromEntries(ICON_SIZES.map((size) => [String(size), `icons/
  * 與 ADR 0003 的差異：ADR 只列 activeTab＋scripting＋sidePanel，這裡多了 offscreen（ADR 0001）
  * 與 unlimitedStorage（ADR 0002）。spec #27 第 13 節第 6 項決定以合併後的清單為準。
  * storage：Page Mode 存在 chrome.storage.local（spec #70、#73），沒有安裝警告。
- * contextMenus：圖示的右鍵選單（「帳號與訂閱」，#213；側邊欄用 Chrome 自己的「開啟側邊面板」，#269），沒有安裝警告。
+ * contextMenus：圖示的右鍵選單（「帳號與訂閱」#213、閱讀／學習與羅馬拼音 #326；側邊欄用 Chrome 自己的「開啟側邊面板」，#269），沒有安裝警告。
+ * options_ui：設定頁（#326）。Chrome 會在圖示的右鍵選單加上「選項」、在 chrome://extensions 加上「擴充功能選項」，已經開著就切過去。
  * minimum_chrome_version 142：圖示當開關、停止時用 sidePanel.close() 關掉 side panel（141，#185）；
  * 已啟動時點圖示要知道 side panel 被讀者關掉了沒，靠 sidePanel.onClosed（142，ADR 0003）。
  */
@@ -36,6 +37,7 @@ export function buildManifest({ e2e, debug = false }: { e2e: boolean; debug?: bo
     // hover 提示：SW 依狀態改「點一下會怎樣」（ADR 0003），內建翻譯、已登入時再加上剩餘頁數（#237）
     action: { default_title: actionTitle({ click: 'start', quotaLine: undefined }), default_icon: icons },
     side_panel: { default_path: 'sidepanel.html' },
+    options_ui: { page: 'settings.html', open_in_tab: true },
     // 讓外掛頁面（offscreen document）crossOriginIsolated，onnxruntime-web 的 wasm 才能用 SharedArrayBuffer 多執行緒。
     // 外掛頁面只載入自己的檔案、data URL，以及有 CORS 的 Hugging Face 下載，require-corp 不會擋到。
     cross_origin_embedder_policy: { value: 'require-corp' },

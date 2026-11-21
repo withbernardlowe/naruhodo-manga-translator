@@ -38,6 +38,8 @@ export type Message =
   | { type: 'models:status'; status: ModelStatus }
   /** 登入（side panel、onboarding）、或 Worker 說 token 已失效（SW 清掉）→ 全部：Hosted Translation 的 session 變了，重新讀（shared/hosted-session.ts）；SW 收到就翻已啟動分頁裡還沒翻的頁。 */
   | { type: 'session:changed' }
+  /** 設定頁或側邊欄 → 其他外掛頁面：存了或刪了 Claude API key（IndexedDB，沒有 storage 事件，#326）。 */
+  | { type: 'apiKey:changed' }
   /** SW → side panel：內建翻譯的剩餘額度可能變了（翻譯扣了一頁、Worker 說用完了），重新向 Worker 讀。 */
   | { type: 'quota:changed' }
   /** onboarding、side panel、帳號頁 → SW：「訂閱」拿到 checkout 網址（from＝誰按了「訂閱」，shared/payment-return.ts 的 PaymentFrom），請 SW 開付款分頁，付款後帶讀者回到 originTabId（#176）。 */

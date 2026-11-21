@@ -40,6 +40,28 @@ test('Page Mode 在重開 side panel、新分頁啟動後沿用', async ({ conte
   await expect(shownTranslations(first.page)).not.toHaveCount(0);
 });
 
+const menuChecked = (sw: Worker) => sw.evaluate(() => globalThis.__actionMenuChecked ?? {});
+
+// unit 測不到的（#326）：SW 的選單點擊真的寫進 chrome.storage、content script 與側邊欄跟著變，側邊欄改了選單的勾也跟著變。
+// 選單項目與勾選規則在 src/shared/action-menu.test.ts；Playwright 點不到 Chrome 原生的選單，用 e2e 入口代替點擊。
+test('圖示右鍵選單切 Page Mode 與羅馬拼音：漫畫頁立刻跟著變，側邊欄也是；側邊欄切回來，選單的勾跟著變', async ({ context, sw, extensionId, mockSite }) => {
+  const { page, panel } = await activateOnMockSite({ context, sw, extensionId, mockSite, url: mockSite.canvasSitePagedUrl });
+  await expect(statusLines(panel)).toHaveText([/^已翻譯・/]);
+  await expect(shownTranslations(page)).not.toHaveCount(0);
+  expect(await menuChecked(sw)).toEqual({ 'pageMode:read': true, 'pageMode:learn': false, romaji: false });
+
+  await sw.evaluate(() => globalThis.__clickActionMenu!({ menuItemId: 'pageMode:learn', checked: true }));
+  await expect(shownTranslations(page)).toHaveCount(0);
+  await expect(pageMode(panel, '學習')).toHaveAttribute('aria-pressed', 'true');
+
+  await sw.evaluate(() => globalThis.__clickActionMenu!({ menuItemId: 'romaji', checked: true }));
+  await expect.poll(async () => (await sw.evaluate(() => chrome.storage.local.get('displaySettings'))).displaySettings).toMatchObject({ romaji: true });
+
+  await pageMode(panel, '閱讀').click();
+  await expect(shownTranslations(page)).not.toHaveCount(0);
+  await expect.poll(() => menuChecked(sw)).toEqual({ 'pageMode:read': true, 'pageMode:learn': false, romaji: true });
+});
+
 test('學習時重新擷取：頁面上沒蓋東西的截圖也認得是同一頁，不重翻', async ({ context, sw, extensionId, mockSite }) => {
   const { page, panel, tabId } = await activateOnMockSite({ context, sw, extensionId, mockSite, url: mockSite.canvasSitePagedUrl });
   await expect(statusLines(panel)).toHaveText([/^已翻譯・/]);

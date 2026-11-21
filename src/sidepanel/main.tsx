@@ -1,10 +1,7 @@
-import { Fragment, render } from 'preact';
+import { render } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
-import { indexedDbApiKeyStore, lastFour } from '../shared/api-key-store.ts';
 import { grantDataConsent, watchDataConsent, type DataConsent } from '../shared/data-consent.ts';
-import type { BackupFile } from '../background/backup.ts';
 import type {
-  ImportResponse,
   LineRef,
   Message,
   ModelStatus,
@@ -14,19 +11,14 @@ import type {
   SeriesResponse,
   StatusResponse,
   StripStatus,
-  TestConnectionResponse,
 } from '../shared/messages.ts';
 import { PANEL_PORT } from '../shared/messages.ts';
 import { accountUrl } from '../shared/account-page.ts';
 import type { SeriesOption } from '../shared/series.ts';
 import { useHostedQuota, useHostedSession, useTranslationMode } from '../shared/hosted-account-hooks.ts';
-import type { BillingPeriod, Quota } from '../shared/hosted-api.ts';
-import type { HostedSession } from '../shared/hosted-session.ts';
+import type { BillingPeriod } from '../shared/hosted-api.ts';
 import { dismissHostedHint, onboardingUrl, watchHostedHint, watchOnboarding, type OnboardingProgress } from '../shared/onboarding.ts';
-import { DEFAULT_DISPLAY_SETTINGS, saveDisplaySettings, watchDisplaySettings, type DisplaySettings } from '../shared/display-settings.ts';
-import { DEFAULT_PAGE_MODE, savePageMode, watchPageMode, type PageMode } from '../shared/page-mode.ts';
 import { dismissSubscribedNotice, watchSubscribedNotice } from '../shared/payment-return.ts';
-import { DEFAULT_SIDE_PANEL_ON_ACTIVATION, saveSidePanelOnActivation, watchSidePanelOnActivation } from '../shared/side-panel-setting.ts';
 import { dismissStripNotice, watchStripNoticeSeen } from '../shared/strip-notice.ts';
 import {
   DEFAULT_TRANSCRIPT_DISPLAY,
@@ -34,12 +26,13 @@ import {
   watchTranscriptDisplay,
   type TranscriptDisplay,
 } from '../shared/transcript-display.ts';
-import { saveTranslationMode, type TranslationMode } from '../shared/translation-mode.ts';
-import { Badge, Button, RadioCard, Switch } from '../ui/components.tsx';
+import { saveTranslationMode } from '../shared/translation-mode.ts';
+import { Button } from '../ui/components.tsx';
 import { problemReport, type ProblemReportContext } from '../shared/problem-report.ts';
-import { CONTACT_EMAIL, DISCUSSIONS_URL, PROBLEM_REPORT_URL } from '../ui/links.ts';
+import { PROBLEM_REPORT_URL } from '../ui/links.ts';
 import { SidePanel, type SeriesHeader, type SeriesPage } from '../ui/side-panel.tsx';
-import { accountPlanView, seriesActions, type SeriesAsk } from '../ui/view.ts';
+import { seriesActions, type SeriesAsk } from '../ui/view.ts';
+import { PanelSettings, useApiKeySuffix, useDisplaySettings, usePageMode } from '../settings/settings-sections.tsx';
 import { ClearCache, DeleteSeries, SeriesNotesSection } from './series-notes.tsx';
 
 /**
@@ -52,57 +45,6 @@ function readTabId(): number | undefined {
 }
 
 const send = <R,>(message: Message) => chrome.runtime.sendMessage<Message, R>(message);
-
-const apiKeys = indexedDbApiKeyStore();
-
-/**
- * 匯出／匯入 JSON（#38）：全部 Series、網址模式、Series Notes、翻譯快取，給兩台電腦之間搬資料；不含 API key。
- * 匯入是合併、本機優先。
- */
-function Backup() {
-  const [result, setResult] = useState<string | undefined>(undefined);
-
-  async function exportFile() {
-    const data = await send<BackupFile>({ type: 'panel:export' });
-    const url = URL.createObjectURL(new Blob([JSON.stringify(data)], { type: 'application/json' }));
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `naruhodo-${new Date(data.exportedAt).toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
-  async function importFile(file: File) {
-    let data: unknown;
-    try {
-      data = JSON.parse(await file.text());
-    } catch {
-      setResult('匯入失敗：不是 JSON 檔');
-      return;
-    }
-    const r = await send<ImportResponse>({ type: 'panel:import', data });
-    setResult(r.ok ? '匯入完成' : `匯入失敗：${r.error}`);
-  }
-
-  return (
-    <div class="backup">
-      <Button onClick={() => void exportFile()}>匯出 JSON</Button>
-      <label>
-        匯入 JSON
-        <input
-          type="file"
-          accept="application/json,.json"
-          onChange={(e) => {
-            const file = e.currentTarget.files?.[0];
-            if (file) void importFile(file);
-            e.currentTarget.value = '';
-          }}
-        />
-      </label>
-      {result && <p role="status">{result}</p>}
-    </div>
-  );
-}
 
 /** 每種翻譯模式的資料使用同意；undefined＝還在讀。 */
 function useDataConsent(): DataConsent | undefined {
@@ -137,254 +79,6 @@ function useSubscribedNotice(): BillingPeriod | undefined {
  * 設定早就完成的重新登入，登入完直接「回到漫畫」，不走選擇方案與試翻頁。「完成設定」不帶，照常走到第 4 步。
  */
 const openOnboarding = (step?: 'signIn') => void chrome.tabs.create({ url: onboardingUrl(step, step ? readTabId() : undefined) });
-
-/**
- * 設定頁的帳號摘要（#213）：已登入時是 email＋方案 Badge、剩餘說明與「管理帳號 →」（打開帳號與訂閱頁；訂閱、管理訂閱、登出、刪除帳號都在那裡）；
- * 沒登入時是「登入」，打開 onboarding 的第 2 步。
- */
-function HostedAccount({ session, quota }: { session: HostedSession | null; quota: Quota | undefined }) {
-  if (!session)
-    return (
-      <>
-        <p>尚未登入。</p>
-        <Button variant="primary" onClick={() => openOnboarding('signIn')}>
-          登入
-        </Button>
-      </>
-    );
-  const plan = quota && accountPlanView(quota);
-  return (
-    <>
-      <p class="naru-row">
-        {session.email}
-        {plan && <Badge tone={plan.badge.tone}>{plan.badge.text}</Badge>}
-      </p>
-      {plan && (
-        <p class="hint">
-          {plan.lines.map((line, i) => (
-            <Fragment key={line}>
-              {i > 0 && <br />}
-              {line}
-            </Fragment>
-          ))}
-        </p>
-      )}
-      <div class="actions">
-        <Button onClick={() => void chrome.tabs.create({ url: accountUrl() })}>管理帳號 →</Button>
-      </div>
-    </>
-  );
-}
-
-/**
- * 設定頁「自備金鑰」卡片展開的內容（spec #27 第 5 節）：API key 存在外掛 origin 的 IndexedDB，只顯示末四碼。
- * side panel 自己讀寫 key；「測試連線」由 offscreen 讀 key 呼叫 API，訊息裡不帶 key。
- */
-function OwnKey({ onKeyChanged }: { onKeyChanged: (hasKey: boolean) => void }) {
-  /** undefined＝還在讀；''＝沒有 key */
-  const [suffix, setSuffix] = useState<string | undefined>(undefined);
-  const [draft, setDraft] = useState('');
-  const [connection, setConnection] = useState<string | undefined>(undefined);
-
-  useEffect(() => {
-    void apiKeys.get().then((key) => setSuffix(key ? lastFour(key) : ''));
-  }, []);
-
-  async function save() {
-    const key = draft.trim();
-    if (!key) return;
-    await apiKeys.set(key);
-    setDraft('');
-    setConnection(undefined);
-    setSuffix(lastFour(key));
-    onKeyChanged(true);
-  }
-
-  async function remove() {
-    await apiKeys.delete();
-    setSuffix('');
-    setConnection(undefined);
-    onKeyChanged(false);
-  }
-
-  async function test() {
-    setConnection('測試中…');
-    const r = await send<TestConnectionResponse>({ type: 'panel:testConnection' });
-    setConnection(r.ok ? `連線成功（${r.model}）` : `連線失敗：${r.error}`);
-  }
-
-  return (
-    <>
-      {suffix === undefined ? null : suffix ? (
-        <>
-          <p>已設定 Claude API key（末四碼 {suffix}）</p>
-          <div class="actions">
-            <Button onClick={() => void test()}>測試連線</Button>
-            <Button onClick={() => void remove()}>刪除</Button>
-          </div>
-        </>
-      ) : (
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            void save();
-          }}
-        >
-          <label>
-            Claude API key
-            <input
-              type="password"
-              autocomplete="off"
-              spellcheck={false}
-              value={draft}
-              onInput={(e) => setDraft((e.target as HTMLInputElement).value)}
-            />
-          </label>
-          <Button variant="primary" type="submit">
-            儲存
-          </Button>
-        </form>
-      )}
-      {connection && <p class="connection">{connection}</p>}
-      <p class="hint">
-        建議在 Anthropic Console 為這個外掛建立專用的 API key，並為它的 workspace 設定花費上限。key 只存在這台電腦的外掛裡，不會交給網頁，也不會出現在匯出檔。
-      </p>
-    </>
-  );
-}
-
-/** Side Panel on Activation（#269）：設定頁的「點圖示時也打開側邊欄」。 */
-function SidePanelOnActivation() {
-  const [open, setOpen] = useState(DEFAULT_SIDE_PANEL_ON_ACTIVATION);
-  useEffect(() => watchSidePanelOnActivation(setOpen), []);
-  return (
-    <Switch
-      label="點圖示時也打開側邊欄"
-      checked={open}
-      onChange={(checked) => {
-        setOpen(checked);
-        void saveSidePanelOnActivation(checked);
-      }}
-    />
-  );
-}
-
-/** ⚙ 設定頁「顯示」的兩個開關（shared/display-settings.ts）；逐字稿與 Problem Report 也讀它。 */
-function useDisplaySettings(): [DisplaySettings, (next: DisplaySettings) => void] {
-  const [settings, setSettings] = useState(DEFAULT_DISPLAY_SETTINGS);
-  useEffect(() => watchDisplaySettings(setSettings), []);
-  const choose = (next: DisplaySettings) => {
-    setSettings(next);
-    void saveDisplaySettings(next);
-  };
-  return [settings, choose];
-}
-
-function DisplaySwitches() {
-  const [settings, choose] = useDisplaySettings();
-  return (
-    <>
-      <Switch
-        label="學習模式直接顯示譯文"
-        description="學習模式下，tooltip 與逐字稿的譯文不用先把游標移到「譯」上就看得到。漫畫頁面一樣只留日文原文。"
-        checked={settings.learnShowsTranslation}
-        onChange={(checked) => choose({ ...settings, learnShowsTranslation: checked })}
-      />
-      <Switch
-        label="讀音加上羅馬拼音"
-        description="有顯示讀音的地方，原文下面多一行羅馬拼音，例如 kinō wa rāmen o tabemashita。"
-        checked={settings.romaji}
-        onChange={(checked) => choose({ ...settings, romaji: checked })}
-      />
-    </>
-  );
-}
-
-/**
- * 設定頁（#93 畫面定案）：按頂部的 ⚙ 打開，整個 side panel 換成這一頁。
- * 翻譯方式是明確的二選一（不會自動切換；切到自備金鑰不會登出），然後是側邊欄、顯示、匯出／匯入。
- */
-function Settings({
-  mode,
-  session,
-  quota,
-  onKeyChanged,
-}: {
-  mode: TranslationMode;
-  session: HostedSession | null;
-  quota: Quota | undefined;
-  onKeyChanged: (hasKey: boolean) => void;
-}) {
-  return (
-    <section aria-label="設定" class="settings">
-      <h2>翻譯方式</h2>
-      <div role="radiogroup" aria-label="翻譯方式" class="mode-cards">
-        <RadioCard
-          name="translation-mode"
-          title="內建翻譯"
-          description="用 email 帳號，Naruhodo 代為翻譯，有頁數限制"
-          checked={mode === 'hosted'}
-          onSelect={() => void saveTranslationMode('hosted')}
-        >
-          <HostedAccount session={session} quota={quota} />
-        </RadioCard>
-        <RadioCard
-          name="translation-mode"
-          title="自備金鑰"
-          description="用你自己的 Anthropic API key，費用直接付給 Anthropic，沒有頁數限制"
-          checked={mode === 'ownKey'}
-          onSelect={() => void saveTranslationMode('ownKey')}
-        >
-          <OwnKey onKeyChanged={onKeyChanged} />
-        </RadioCard>
-      </div>
-      {mode === 'ownKey' && session && (
-        // 自備金鑰時內建翻譯的卡片收著：還登入著的帳號另外列出來，才找得到「管理帳號」與登出（#213）
-        <>
-          <h2>帳號</h2>
-          <div class="naru-radio-card">
-            <HostedAccount session={session} quota={quota} />
-          </div>
-          <p class="hint">目前用自備金鑰翻譯，不會用到這個帳號的頁數；切回內建翻譯就能接著用。</p>
-        </>
-      )}
-      <h2>側邊欄</h2>
-      <SidePanelOnActivation />
-      <h2>顯示</h2>
-      <div class="display-switches">
-        <DisplaySwitches />
-      </div>
-      <h2>資料</h2>
-      <p class="hint">在兩台電腦之間搬作品、角色與用語與翻譯快取（不含 API key 與帳號）。</p>
-      <Backup />
-      <h2>意見回饋</h2>
-      <p class="hint">翻不出來、譯文位置跑掉，或有想要的功能，歡迎到討論區告訴我們。</p>
-      <div class="actions">
-        <a class="naru-btn naru-btn--secondary" href={DISCUSSIONS_URL} target="_blank" rel="noreferrer">
-          到討論區回報
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-            <path d="M4.5 2.5h5v5" />
-            <path d="M9.5 2.5 3 9" />
-          </svg>
-        </a>
-      </div>
-      <p class="hint">
-        帳號或付款的問題請寄 <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>，不要貼在公開的討論區。
-      </p>
-    </section>
-  );
-}
-
-/** 目前的 Page Mode 與切換函式；別的 side panel 切了也跟著變。只在 App 訂閱一次，往下傳。 */
-function usePageMode(): [PageMode, (mode: PageMode) => void] {
-  const [mode, setMode] = useState<PageMode>(DEFAULT_PAGE_MODE);
-  useEffect(() => watchPageMode(setMode), []);
-  const choose = (value: PageMode) => {
-    setMode(value);
-    void savePageMode(value);
-  };
-  return [mode, choose];
-}
 
 /** 逐字稿的顯示方式與切換函式；跟 Page Mode 一樣全域記住，別的 side panel 切了也跟著變。 */
 function useTranscriptDisplay(): [TranscriptDisplay, (display: TranscriptDisplay) => void] {
@@ -669,7 +363,9 @@ function App({ tabId }: { tabId: number | undefined }) {
   const [pages, setPages] = useState<PageView[]>([]);
   const [strip, setStrip] = useState<StripStatus | undefined>(undefined);
   const [modelStatus, setModelStatus] = useState<ModelStatus>({ state: 'idle' });
-  const [hasKey, setHasKey] = useState(true);
+  // 讀到之前當作有 key：有 key 的讀者打開側邊欄時「尚未設定 API key」不會閃一下
+  const keySuffix = useApiKeySuffix();
+  const hasKey = keySuffix !== '';
   const [pageMode, choosePageMode] = usePageMode();
   const [transcriptDisplay, chooseTranscriptDisplay] = useTranscriptDisplay();
   const [displaySettings] = useDisplaySettings();
@@ -687,10 +383,6 @@ function App({ tabId }: { tabId: number | undefined }) {
   const [renameOnOpen, setRenameOnOpen] = useState(false);
   /** 這個 tab 的作品剛被刪掉（#214，不管是在哪個 side panel 刪的）：停用的畫面顯示「這部作品已刪除」，再啟動就不再顯示。 */
   const [seriesDeleted, setSeriesDeleted] = useState(false);
-
-  useEffect(() => {
-    void apiKeys.get().then((key) => setHasKey(Boolean(key)));
-  }, []);
 
   useEffect(() => {
     if (tabId === undefined) return;
@@ -805,7 +497,16 @@ function App({ tabId }: { tabId: number | undefined }) {
       series={seriesHeader(series)}
       onConfirmSeries={() => void send({ type: 'panel:confirmSeries', tabId: tabId! })}
       onOpenSeries={({ rename }) => setRenameOnOpen(rename)}
-      renderSettings={() => <Settings mode={translationMode} session={session} quota={quota} onKeyChanged={setHasKey} />}
+      renderSettings={() => (
+        <PanelSettings
+          mode={translationMode}
+          session={session}
+          quota={quota}
+          onSignIn={() => openOnboarding('signIn')}
+          // 方案與退款太寬，不塞進側邊欄：用新分頁打開設定頁的帳號與訂閱
+          onOpenAccount={() => void chrome.tabs.create({ url: accountUrl() })}
+        />
+      )}
       renderSeries={(page, navigate) => {
         if (tabId === undefined) return null;
         if (page === 'seriesPick') return <SeriesPickView tabId={tabId} navigate={navigate} />;

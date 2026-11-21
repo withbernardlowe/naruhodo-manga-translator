@@ -22,11 +22,17 @@ export function iconClick(s: { active: boolean; panelOnActivation: boolean; pane
   return s.panelOnActivation && !s.panelOpen ? 'openPanel' : 'stop';
 }
 
+/**
+ * 最後一行（#326）：讓沒想過要按右鍵的讀者知道選單裡有東西。「選項」是 Chrome 看到 options_ui 自己加的那一項（設定頁），
+ * 閱讀／學習是我們的（shared/action-menu.ts）。
+ */
+const MENU_HINT = '右鍵：選項、閱讀／學習';
+
 /** quotaLine：剩餘頁數那行（shared/quota-indicator.ts）；自備金鑰或沒登入時沒有。strip：正在讀照句數計頁的條漫。 */
 export function actionTitle({ click, quotaLine, strip = false }: { click: IconClick; quotaLine: string | undefined; strip?: boolean }): string {
   const name = click === 'start' ? ACTION_NAME : `${ACTION_NAME}・翻譯中`;
   const stripLine = strip ? `條漫：每 ${STRIP_LINES_PER_PAGE} 句計 1 頁` : undefined;
-  return [name, CLICK_HINTS[click], quotaLine, stripLine].filter((line) => line !== undefined).join('\n');
+  return [name, CLICK_HINTS[click], quotaLine, stripLine, MENU_HINT].filter((line) => line !== undefined).join('\n');
 }
 
 interface TabTitle {

@@ -195,16 +195,8 @@
 }
 :where(.naru-side-panel) .hint { color: var(--naru-ink-3); font-size: var(--naru-text-caption); }
 
-/* 設定、Series Notes 頁（#93：從 ⚙、作品卡打開，整個取代 side panel） */
-:where(.naru-side-panel) .settings, :where(.naru-side-panel) .notes { margin: var(--naru-space-2) 0; }
-/* 設定頁的小標（翻譯方式、資料） */
-:where(.naru-side-panel) .settings > h2 { margin: var(--naru-space-4) 0 var(--naru-space-1); font-size: var(--naru-text-caption); font-weight: 700; color: var(--naru-ink-3); letter-spacing: 0.04em; }
-:where(.naru-side-panel) .settings > h2:first-child { margin-top: 0; }
-:where(.naru-side-panel) .mode-cards { display: flex; flex-direction: column; gap: var(--naru-space-2); }
-:where(.naru-side-panel) .settings p { margin: 0 0 var(--naru-space-1); }
-:where(.naru-side-panel) .settings .display-switches { display: flex; flex-direction: column; gap: var(--naru-space-3); }
-:where(.naru-side-panel) .settings form, :where(.naru-side-panel) .settings .actions { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--naru-space-2); }
-:where(.naru-side-panel) .settings form label { display: flex; flex-direction: column; gap: var(--naru-space-1); }
+/* Series Notes 頁（從作品頁打開，整個取代 side panel）；設定的樣式在 settings.css（#326） */
+:where(.naru-side-panel) .notes { margin: var(--naru-space-2) 0; }
 :where(.naru-side-panel) .notes { overflow-x: auto; }
 :where(.naru-side-panel) .notes table { border-collapse: collapse; width: 100%; font-size: var(--naru-text-small); }
 :where(.naru-side-panel) .notes td, :where(.naru-side-panel) .notes th { border-bottom: 1px solid var(--naru-line); padding: var(--naru-space-1); text-align: left; }
@@ -221,8 +213,6 @@
 :where(.naru-side-panel) .excluded-terms { margin-top: var(--naru-space-3); }
 :where(.naru-side-panel) .excluded-terms summary { cursor: pointer; font-size: var(--naru-text-small); color: var(--naru-ink-2); }
 :where(.naru-side-panel) .excluded-terms li { justify-content: space-between; }
-:where(.naru-side-panel) .backup { display: flex; flex-wrap: wrap; gap: var(--naru-space-2); align-items: center; margin: var(--naru-space-2) 0; }
-:where(.naru-side-panel) .backup p { margin: 0; }
 
 /*
  * 逐字稿最下面的「這個畫面」（按鈕放置方案）：秒數、平常的剩餘頁數、條漫計頁合成一塊淺底的資訊；

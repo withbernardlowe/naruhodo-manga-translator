@@ -20,23 +20,23 @@ describe('點圖示會怎樣（ADR 0003）', () => {
 });
 
 describe('圖示的 hover 提示說清楚點一下會怎樣（ADR 0003）', () => {
-  it('沒在翻譯：名字、點一下翻譯、剩餘額度', () => {
+  it('沒在翻譯：名字、點一下翻譯、剩餘額度、右鍵選單有什麼（#326）', () => {
     expect(actionTitle({ click: 'start', quotaLine: '本月剩 2,561 頁・12/11 重置' })).toBe(
-      'Naruhodo 漫畫翻譯\n點一下翻譯這個分頁\n本月剩 2,561 頁・12/11 重置',
+      'Naruhodo 漫畫翻譯\n點一下翻譯這個分頁\n本月剩 2,561 頁・12/11 重置\n右鍵：選項、閱讀／學習',
     );
   });
 
   it('翻譯中、側邊欄開著：點一下停止', () => {
-    expect(actionTitle({ click: 'stop', quotaLine: '免費額度剩 42 頁' })).toBe('Naruhodo 漫畫翻譯・翻譯中\n點一下停止翻譯\n免費額度剩 42 頁');
+    expect(actionTitle({ click: 'stop', quotaLine: '免費額度剩 42 頁' })).toBe('Naruhodo 漫畫翻譯・翻譯中\n點一下停止翻譯\n免費額度剩 42 頁\n右鍵：選項、閱讀／學習');
   });
 
   it('翻譯中、側邊欄關著：點一下打開側邊欄', () => {
-    expect(actionTitle({ click: 'openPanel', quotaLine: undefined })).toBe('Naruhodo 漫畫翻譯・翻譯中\n點一下打開側邊欄');
+    expect(actionTitle({ click: 'openPanel', quotaLine: undefined })).toBe('Naruhodo 漫畫翻譯・翻譯中\n點一下打開側邊欄\n右鍵：選項、閱讀／學習');
   });
 
-  it('正在讀條漫（#282）：最後多一行計費方式', () => {
+  it('正在讀條漫（#282）：多一行計費方式', () => {
     expect(actionTitle({ click: 'stop', quotaLine: '免費額度剩 37 頁', strip: true })).toBe(
-      'Naruhodo 漫畫翻譯・翻譯中\n點一下停止翻譯\n免費額度剩 37 頁\n條漫：每 8 句計 1 頁',
+      'Naruhodo 漫畫翻譯・翻譯中\n點一下停止翻譯\n免費額度剩 37 頁\n條漫：每 8 句計 1 頁\n右鍵：選項、閱讀／學習',
     );
   });
 });
@@ -54,15 +54,15 @@ describe('hover 提示要設到哪裡', () => {
 
     sync.quota('免費額度剩 9 頁');
 
-    expect(titles.get('global')).toBe('Naruhodo 漫畫翻譯\n點一下翻譯這個分頁\n免費額度剩 9 頁');
-    expect(titles.get(3)).toBe('Naruhodo 漫畫翻譯・翻譯中\n點一下打開側邊欄\n免費額度剩 9 頁\n條漫：每 8 句計 1 頁');
+    expect(titles.get('global')).toBe('Naruhodo 漫畫翻譯\n點一下翻譯這個分頁\n免費額度剩 9 頁\n右鍵：選項、閱讀／學習');
+    expect(titles.get(3)).toBe('Naruhodo 漫畫翻譯・翻譯中\n點一下打開側邊欄\n免費額度剩 9 頁\n條漫：每 8 句計 1 頁\n右鍵：選項、閱讀／學習');
   });
 
   it('停止翻譯、不是條漫的分頁跟全域那份一樣：設一次，之後不再一個個重設', () => {
     const { titles, sync } = fakeAction();
     sync.tab(3, { click: 'stop', strip: false });
     sync.tab(3, { click: 'start', strip: false });
-    expect(titles.get(3)).toBe('Naruhodo 漫畫翻譯\n點一下翻譯這個分頁');
+    expect(titles.get(3)).toBe('Naruhodo 漫畫翻譯\n點一下翻譯這個分頁\n右鍵：選項、閱讀／學習');
     titles.clear();
 
     sync.quota(undefined);

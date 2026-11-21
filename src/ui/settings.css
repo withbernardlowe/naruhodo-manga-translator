@@ -1,0 +1,32 @@
+/*
+ * 設定的內容（src/settings/settings-sections.tsx，#326）：設定頁與側邊欄 ⚙ 共用。顏色、字級、間距取自 src/shared/tokens.css，元件樣式在 components.css。
+ * 以根元素 .naru-settings 為範圍、前綴用 :where()（specificity 是 0），跟 side-panel.css 一樣。
+ */
+.naru-settings { display: flex; flex-direction: column; gap: var(--naru-space-2); }
+:where(.naru-settings) p { margin: 0; }
+:where(.naru-settings) .hint { color: var(--naru-ink-3); font-size: var(--naru-text-caption); }
+:where(.naru-settings) a { color: var(--naru-accent); }
+:where(.naru-settings) .naru-btn { text-decoration: none; }
+/* 小標（翻譯方式、漫畫頁面、側邊欄…）：第一個不留上方空白 */
+:where(.naru-settings) .naru-settings__sub { margin: var(--naru-space-3) 0 0; font-size: var(--naru-text-caption); font-weight: 700; color: var(--naru-ink-3); letter-spacing: 0.04em; }
+:where(.naru-settings) .naru-settings__sub:first-child { margin-top: 0; }
+:where(.naru-settings) .mode-cards { display: flex; flex-direction: column; gap: var(--naru-space-2); }
+:where(.naru-settings) .naru-settings__switches { display: flex; flex-direction: column; gap: var(--naru-space-3); }
+:where(.naru-settings) form, :where(.naru-settings) .actions { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--naru-space-2); }
+:where(.naru-settings) form label { display: flex; flex-direction: column; gap: var(--naru-space-1); }
+:where(.naru-settings) .backup { display: flex; flex-wrap: wrap; gap: var(--naru-space-2); align-items: center; }
+/* 「匯入 JSON」：label 長得跟「匯出 JSON」一樣；原生的檔案 input 只在視覺上藏起來，鍵盤聚焦時框住整顆按鈕 */
+:where(.naru-settings) .backup__import { position: relative; cursor: pointer; }
+:where(.naru-settings) .backup__import:focus-within { outline: 2px solid var(--naru-accent); outline-offset: 2px; }
+:where(.naru-settings) .backup__file { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; opacity: 0; }
+:where(.naru-settings) .backup > p { flex-basis: 100%; }
+/* 頁面模式：左邊名稱與說明、右邊分段切換（跟開關的排法一樣，說明字級取自 .naru-switch__desc） */
+:where(.naru-settings) .naru-settings__row { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--naru-space-3); }
+:where(.naru-settings) .naru-settings__row-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+:where(.naru-settings) .naru-settings__row > .naru-seg { flex: none; min-width: 140px; }
+
+/* 側邊欄：三類由上往下，分類名稱是小標，類與類之間一條分隔線 */
+:where(.naru-settings--panel) { gap: 0; margin: var(--naru-space-2) 0; }
+:where(.naru-settings--panel) .naru-settings__category { display: flex; flex-direction: column; gap: var(--naru-space-2); padding: var(--naru-space-4) 0; border-top: 1px solid var(--naru-line); }
+:where(.naru-settings--panel) .naru-settings__category:first-child { padding-top: 0; border-top: 0; }
+:where(.naru-settings--panel) .naru-settings__category-title { margin: 0 0 var(--naru-space-1); font-size: var(--naru-text-body); font-weight: 700; color: var(--naru-ink); }
