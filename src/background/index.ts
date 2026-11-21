@@ -36,6 +36,9 @@ import { hostedBlockedStep } from '../shared/onboarding-step.ts';
 import type { ActionBadge, StatusAction } from '../shared/page-status.ts';
 import { quotaIndicator } from '../shared/quota-indicator.ts';
 import { createActionTitleSync, iconClick } from '../shared/action-title.ts';
+import { ACCOUNT_MENU_ID, actionMenuChecks, actionMenuChoice, actionMenuItems, type ActionMenuState } from '../shared/action-menu.ts';
+import { DEFAULT_PAGE_MODE, savePageMode, watchPageMode } from '../shared/page-mode.ts';
+import { DEFAULT_DISPLAY_SETTINGS, loadDisplaySettings, saveDisplaySettings, watchDisplaySettings } from '../shared/display-settings.ts';
 import { createPanelOpenTracker } from './side-panel-open.ts';
 import { createQuotaIndicatorSync, type QuotaLookup } from './quota-indicator-sync.ts';
 import { loadSidePanelOnActivation, watchSidePanelOnActivation } from '../shared/side-panel-setting.ts';
@@ -82,6 +85,10 @@ declare global {
   var __notesInputs: NotesInput[] | undefined;
   /** e2e build 才有：記下過幾個 Page「帶覆蓋層的樣子」（scan.ts），給測試等它做完。 */
   var __overlaidRecords: number | undefined;
+  /** e2e build 才有：等同點了圖示右鍵選單的那一項（Playwright 點不到 Chrome 原生的選單，#326）。 */
+  var __clickActionMenu: ((info: { menuItemId: string; checked?: boolean }) => void) | undefined;
+  /** e2e build 才有：右鍵選單每個可勾選項目最後一次設成的勾選狀態（contextMenus 沒有讀取的 API）。 */
+  var __actionMenuChecked: Record<string, boolean> | undefined;
 }
 
 const trace = createTrace('sw');
@@ -396,7 +403,7 @@ const quotaIndicatorSync = createQuotaIndicatorSync({
   async show({ quotaLine, menuTitle, lowQuota }) {
     actionTitles.quota(quotaLine);
     // 選單還沒建好（SW 剛啟動）時會失敗：建好之後會再更新一次
-    chrome.contextMenus.update(MENU_ACCOUNT, { title: menuTitle }, () => void chrome.runtime.lastError);
+    chrome.contextMenus.update(ACCOUNT_MENU_ID, { title: menuTitle }, () => void chrome.runtime.lastError);
     await pageStatus.quotaChanged(lowQuota);
   },
 });
@@ -624,8 +631,6 @@ const closeSidePanel = (tabId: number) => chrome.sidePanel.close({ tabId }).catc
 
 const tabPanelOptions = (tabId: number) => ({ tabId, path: `sidepanel.html?tabId=${tabId}`, enabled: true });
 
-const MENU_ACCOUNT = 'account';
-
 /**
  * 全域 side panel（沒有 tabId）永遠關著（#269）：Chrome 圖示右鍵的「開啟側邊面板」只在 side panel 是 enabled 又有 path 的 tab 出現，
  * 所以只出現在翻譯中的 tab（activation.ts）。沒翻譯的 tab 打開也沒有 activeTab、不會翻譯，乾脆藏起來。
@@ -786,22 +791,59 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
 });
 
 /**
- * 圖示的右鍵選單：只有「帳號與訂閱」（#213）。側邊欄用 Chrome 自己的「開啟側邊面板」（只在翻譯中的 tab 出現，#269），
- * Side Panel on Activation 在側邊欄的 ⚙ 設定改。
+ * 圖示的右鍵選單（shared/action-menu.ts）：「帳號與訂閱」（#213）、閱讀／學習與羅馬拼音（#326），不開側邊欄也能切。
+ * 設定頁是 Chrome 看到 options_ui 自己加的「選項」；側邊欄用 Chrome 自己的「開啟側邊面板」（只在翻譯中的 tab 出現，#269）。
  * SW 每次啟動都重建，不只在 onInstalled：開發時重新載入 unpacked 外掛、或 Chrome 開機時載入改過的外掛，不一定有安裝事件。
+ * 勾選跟著 chrome.storage：側邊欄、設定頁改了也跟著變；SW 重新啟動時 watch 先讀一次，選單建好後再對一次。
  */
+const menuState: ActionMenuState = { pageMode: DEFAULT_PAGE_MODE, romaji: DEFAULT_DISPLAY_SETTINGS.romaji };
+let menusCreated = false;
+
+function recordMenuCheck(id: string, checked: boolean | undefined): void {
+  if (__E2E__ && checked !== undefined) (globalThis.__actionMenuChecked ??= {})[id] = checked;
+}
+
+function syncMenuChecks(): void {
+  // 選單還沒建好：建的時候用的就是最新的 menuState
+  if (!menusCreated) return;
+  for (const { id, checked } of actionMenuChecks(menuState)) {
+    chrome.contextMenus.update(id, { checked }, () => void chrome.runtime.lastError);
+    recordMenuCheck(id, checked);
+  }
+}
+
+watchPageMode((pageMode) => {
+  menuState.pageMode = pageMode;
+  syncMenuChecks();
+});
+watchDisplaySettings(({ romaji }) => {
+  menuState.romaji = romaji;
+  syncMenuChecks();
+});
+
 const createMenus = () =>
   chrome.contextMenus.removeAll(() => {
-    // 不管有沒有登入、用哪一種翻譯方式都在：帳號的事都到這一頁（#213）
-    chrome.contextMenus.create({ id: MENU_ACCOUNT, title: quotaIndicator(undefined).menuTitle, contexts: ['action'] });
+    // 「帳號與訂閱」不管有沒有登入、用哪一種翻譯方式都在：帳號的事都到這一頁（#213）
+    for (const item of actionMenuItems(quotaIndicator(undefined).menuTitle, menuState)) {
+      chrome.contextMenus.create(item, () => void chrome.runtime.lastError);
+      recordMenuCheck(String(item.id), item.checked);
+    }
+    menusCreated = true;
     // 快用完時改成「帳號與訂閱・剩 N 頁」（#237）；hover 提示也在這時第一次設定
     refreshQuotaIndicator();
   });
 createMenus();
 
-chrome.contextMenus.onClicked.addListener((info, tab) => {
-  if (info.menuItemId === MENU_ACCOUNT) void chrome.tabs.create({ url: accountUrl() });
-});
+/** 點了選單的一項：改設定都寫進 chrome.storage，已啟動的分頁、側邊欄、設定頁與選單的勾選都從那裡跟著變。 */
+function onActionMenuClicked(info: { menuItemId: string | number; checked?: boolean }): void {
+  const choice = actionMenuChoice(info);
+  if (choice?.kind === 'account') void chrome.tabs.create({ url: accountUrl() });
+  // Page Mode 是全域設定：還沒啟動的分頁也能切
+  if (choice?.kind === 'pageMode') void savePageMode(choice.mode);
+  if (choice?.kind === 'romaji') void loadDisplaySettings().then((settings) => saveDisplaySettings({ ...settings, romaji: choice.on }));
+}
+chrome.contextMenus.onClicked.addListener((info) => onActionMenuClicked(info));
+if (__E2E__) globalThis.__clickActionMenu = onActionMenuClicked;
 
 /**
  * 付款後回到外掛（#176）：「訂閱」由 SW 開付款分頁，每 3 秒向 Worker 查一次方案，確認了就關掉付款分頁、帶讀者回到發起的分頁。

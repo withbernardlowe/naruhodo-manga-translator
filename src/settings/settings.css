@@ -1,0 +1,34 @@
+/*
+ * 設定頁（#326）整頁的版面：淺灰底，左側導覽（白底、一次只顯示一類），右邊是白色卡片（account.css 的 .ac-card）。
+ * 窄的時候（手機寬度）導覽改排在上面。顏色、字級、間距取自 src/shared/tokens.css。
+ */
+html, body { margin: 0; background: var(--naru-surface-2); }
+.st { display: flex; min-height: 100vh; }
+.st-nav {
+  box-sizing: border-box; flex: none; width: 260px; display: flex; flex-direction: column; gap: var(--naru-space-1);
+  padding: var(--naru-space-5) var(--naru-space-4); border-right: 1px solid var(--naru-line); background: var(--naru-surface);
+}
+.st-brand { display: flex; align-items: center; gap: var(--naru-space-2); margin: 0 0 var(--naru-space-4) var(--naru-space-3); font-weight: 700; }
+.st-nav__item {
+  display: flex; flex-direction: column; gap: 2px; width: 100%; padding: 10px var(--naru-space-3);
+  border: 0; border-radius: var(--naru-radius-sm); background: transparent; text-align: left; font: inherit; color: var(--naru-ink); cursor: pointer;
+}
+.st-nav__item:hover { background: var(--naru-surface-2); }
+.st-nav__item[aria-current='page'] { background: var(--naru-accent-weak); }
+.st-nav__item:focus-visible { outline: 2px solid var(--naru-accent); outline-offset: 2px; }
+.st-nav__label { font-size: var(--naru-text-label); font-weight: 700; }
+.st-nav__sub { font-size: var(--naru-text-caption); line-height: 1.4; color: var(--naru-ink-3); }
+
+.st-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: var(--naru-space-4); padding: var(--naru-space-6) var(--naru-space-6); }
+.st-head { display: flex; flex-direction: column; gap: var(--naru-space-1); }
+.st-crumb { display: flex; align-items: center; gap: 6px; font-size: var(--naru-text-small); color: var(--naru-ink-3); }
+.st-crumb [aria-current] { color: var(--naru-ink); }
+
+/* onboarding 還沒做完：跟側邊欄一樣的「完成設定」，放在置中的白色卡片裡 */
+.st-finish { max-width: 480px; margin: var(--naru-space-6) auto; overflow: hidden; border-radius: var(--naru-radius-md); box-shadow: var(--naru-shadow-1); }
+
+@media (max-width: 720px) {
+  .st { flex-direction: column; }
+  .st-nav { width: auto; border-right: 0; border-bottom: 1px solid var(--naru-line); }
+  .st-main { padding: var(--naru-space-4); }
+}

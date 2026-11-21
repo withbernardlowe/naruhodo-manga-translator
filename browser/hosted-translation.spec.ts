@@ -14,7 +14,7 @@
  * onboarding 第 3 步選季繳：把扣款週期帶到 Worker 的結帳 API。Worker 的 Paddle 是假的（env.test），webhook 由測試用 env.test 的 secret 簽好送出；
  * 真的 Paddle sandbox 只在 `npm run smoke:paddle`。webhook 與額度的規則在 worker/src/subscription.test.ts。
  * 已訂閱的帳號（#167）：onboarding 的第 3 步一進來就向 Worker 讀方案，訂閱中就不顯示方案選擇。
- * 帳號與訂閱頁（#213）：設定頁的「管理帳號 →」打開帳號頁；刪除帳號（#95）在帳號頁 → 確認畫面 → Worker 的 DELETE /v1/account →
+ * 帳號與訂閱頁（#213）：設定頁的「管理帳號與訂閱 ↗」打開帳號頁；刪除帳號（#95）在帳號頁 → 確認畫面 → Worker 的 DELETE /v1/account →
  * 清掉 session → 帳號頁與 side panel 都回到未登入。帳號頁顯示什麼在 src/ui/view.test.ts，刪除的規則在
  * worker/src/account-deletion.test.ts，清掉 session 的流程在 src/shared/account-exit.test.ts。
  */
@@ -73,9 +73,9 @@ test.describe('全新安裝', () => {
     await openSettings(panel);
     const settings = panel.getByRole('region', { name: '設定' });
     await selectTranslationMode(panel, '自備金鑰');
-    // 內建翻譯的卡片收起來了：還登入著的帳號另外列出來，看得到「管理帳號 →」（#213）
+    // 內建翻譯的卡片收起來了：還登入著的帳號另外列出來，看得到「管理帳號與訂閱 ↗」（#213）
     await expect(settings).toContainText(`帳號${email}`);
-    await expect(settings.getByRole('button', { name: '管理帳號 →' })).toBeVisible();
+    await expect(settings.getByRole('button', { name: '管理帳號與訂閱 ↗' })).toBeVisible();
     await settings.getByLabel('Claude API key').fill('sk-ant-e2e-not-a-real-key-WXYZ');
     await settings.getByRole('button', { name: '儲存' }).click();
     await panel.getByRole('button', { name: '返回' }).click();
@@ -239,7 +239,7 @@ test('訂閱：side panel 的「查看方案」打開帳號頁，選年繳用新
   await waitForVisiblePagesCharged(panel);
 
   const account = await openPlansFromPanel(panel, context);
-  await expect.poll(() => account.url()).toBe(`chrome-extension://${extensionId}/account.html?from=${tabId}`);
+  await expect.poll(() => account.url()).toBe(`chrome-extension://${extensionId}/settings.html?from=${tabId}#account`);
   const checkout = await openCheckout(account, context, '訂閱年繳');
   await expect.poll(() => checkout.url()).toMatch(/^http:\/\/localhost:4321\/zh-tw\/checkout\?_ptxn=txn_fake_yearly_/);
   const accountId = accountIdFromCheckout(checkout.url());
@@ -256,7 +256,7 @@ test('訂閱：side panel 的「查看方案」打開帳號頁，選年繳用新
   await openSettings(panel);
   const settings = panel.getByRole('region', { name: '設定' });
   await expect(settings.getByText('訂閱中', { exact: true })).toBeVisible();
-  await expect(settings.getByRole('button', { name: '管理帳號 →' })).toBeVisible();
+  await expect(settings.getByRole('button', { name: '管理帳號與訂閱 ↗' })).toBeVisible();
 });
 
 /** side panel 剩餘額度那一行的「查看方案」打開帳號與訂閱頁。 */
@@ -277,11 +277,11 @@ async function openCheckout(page: Page, context: BrowserContext, button: string)
   return opened;
 }
 
-/** 設定頁的「管理帳號 →」打開帳號與訂閱頁（#213）。 */
+/** 設定頁的「管理帳號與訂閱 ↗」打開帳號與訂閱頁（#213）。 */
 async function openAccountFromSettings(panel: Page, context: BrowserContext): Promise<Page> {
   await openSettings(panel);
   const opened = context.waitForEvent('page');
-  await panel.getByRole('region', { name: '設定' }).getByRole('button', { name: '管理帳號 →' }).click();
+  await panel.getByRole('region', { name: '設定' }).getByRole('button', { name: '管理帳號與訂閱 ↗' }).click();
   return opened;
 }
 
@@ -386,7 +386,7 @@ test('申請退款：訂閱並扣款後，帳號頁按「申請退款」並確�
 
 // unit 測不到的：Worker 的 502 經過 hosted-account-client 回到帳號頁，畫面真的出現錯誤、沒有打開新分頁（#156）。
 // 「訂閱」失敗走同一個 usePaymentAction 與 PaymentUnavailable，只留「管理訂閱」這一條代表路徑。
-test('管理訂閱：設定頁的「管理帳號 →」打開帳號頁；Paddle 拒絕建立 customer portal 時，帳號頁顯示付款服務暫時無法使用，不打開新分頁', async ({
+test('管理訂閱：設定頁的「管理帳號與訂閱 ↗」打開帳號頁；Paddle 拒絕建立 customer portal 時，帳號頁顯示付款服務暫時無法使用，不打開新分頁', async ({
   context,
   sw,
   extensionId,
@@ -397,7 +397,7 @@ test('管理訂閱：設定頁的「管理帳號 →」打開帳號頁；Paddle 
   await waitForVisiblePagesCharged(panel);
   await subscribeOnPanel(panel, context, PORTAL_FORBIDDEN_CUSTOMER);
   const account = await openAccountFromSettings(panel, context);
-  await expect.poll(() => account.url()).toBe(`chrome-extension://${extensionId}/account.html`);
+  await expect.poll(() => account.url()).toBe(`chrome-extension://${extensionId}/settings.html#account`);
   await expect(account.getByRole('region', { name: '目前方案' })).toContainText('下次續訂');
 
   const pagesBefore = context.pages().length;
@@ -446,7 +446,7 @@ test('免費額度用完：Worker 回額度不足後，side panel 顯示用完�
   const opened = context.waitForEvent('page');
   await status.getByRole('button', { name: '查看方案' }).click();
   const account = await opened;
-  await expect.poll(() => account.url()).toBe(`chrome-extension://${extensionId}/account.html?from=${tabId}`);
+  await expect.poll(() => account.url()).toBe(`chrome-extension://${extensionId}/settings.html?from=${tabId}#account`);
   await expect(account.getByRole('status').filter({ hasText: '免費額度已用完' })).toBeVisible();
   await expect(account.getByRole('region', { name: '訂閱' }).getByRole('button', { name: '訂閱年繳' })).toBeVisible();
 });

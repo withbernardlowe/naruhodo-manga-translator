@@ -53,7 +53,7 @@ The kana pronunciation of a whole Line, shown as furigana over each run of kanji
 _Avoid_: furigana (that is how a Reading is shown), ruby, pronunciation
 
 **Romaji** (羅馬拼音)
-A Line's Reading written in Latin letters, shown as one extra line under the original wherever the Reading is shown, in addition to the furigana, never instead of it. Off by default; turned on in the side panel's ⚙ settings, for both Page Modes. Hepburn, split into words with particles on their own and inflections joined to their word, particles written as pronounced (は wa, へ e, を o), long vowels with macrons (ō, ū, ā) except えい and いい, which stay ei and ii (sensei). Every Line that has a Reading has Romaji, Pages translated before it existed included; an Unreadable Line has neither.
+A Line's Reading written in Latin letters, shown as one extra line under the original wherever the Reading is shown, in addition to the furigana, never instead of it. Off by default; turned on in the settings, for both Page Modes. Hepburn, split into words with particles on their own and inflections joined to their word, particles written as pronounced (は wa, へ e, を o), long vowels with macrons (ō, ū, ā) except えい and いい, which stay ei and ii (sensei). Every Line that has a Reading has Romaji, Pages translated before it existed included; an Unreadable Line has neither.
 _Avoid_: pinyin, 拼音 (that is Mandarin's), romanization (in the UI)
 
 **Unreadable** (無法辨識)
@@ -69,7 +69,7 @@ A reading-page URL reduced to origin + path (query and hash ignored), remembered
 _Avoid_: site rule, domain mapping
 
 **Page Mode** (頁面模式)
-A global setting, remembered across tabs and browser restarts, that decides what the manga page itself shows: 閱讀 (the default) covers each Balloon with its translation; 學習 leaves the Japanese original untouched and reveals readings, then the translation, step by step through the hover tooltip. Hover sync works in both. Under 閱讀 the tooltip only shows while the side panel is closed: with it open, the hovered Line is already highlighted there, so the page marks the Line with its number instead. Under 學習 the tooltip always shows, and carries the same number while the side panel is open. 學習 also hides the side panel transcript's translations (see Display Level). A reader who wants the Japanese left on the page but no step to reveal the translation turns on 「學習模式直接顯示譯文」 in the side panel's ⚙ settings (off by default): under 學習 the tooltip and the transcript then show each translation outright, while the page itself still shows only the original. In the side panel it sits on a row labelled 漫畫頁面, apart from the transcript's own Display Level menu, so each control names what it changes.
+A global setting, remembered across tabs and browser restarts, that decides what the manga page itself shows: 閱讀 (the default) covers each Balloon with its translation; 學習 leaves the Japanese original untouched and reveals readings, then the translation, step by step through the hover tooltip. Besides the settings and the side panel, 閱讀／學習 can also be switched from the extension icon's right-click menu. Hover sync works in both. Under 閱讀 the tooltip only shows while the side panel is closed: with it open, the hovered Line is already highlighted there, so the page marks the Line with its number instead. Under 學習 the tooltip always shows, and carries the same number while the side panel is open. 學習 also hides the side panel transcript's translations (see Display Level). A reader who wants the Japanese left on the page but no step to reveal the translation turns on 「學習模式直接顯示譯文」 in the settings (off by default): under 學習 the tooltip and the transcript then show each translation outright, while the page itself still shows only the original. In the side panel it sits on a row labelled 漫畫頁面, apart from the transcript's own Display Level menu, so each control names what it changes.
 _Avoid_: learning mode (that is the whole feature), overlay toggle
 
 **Display Level** (顯示層級)
@@ -77,7 +77,7 @@ Which parts of every Line the side panel transcript shows, switched once for all
 _Avoid_: mode, learning mode (that is the whole feature)
 
 **Side Panel on Activation** (啟動時開側邊欄)
-A global setting, remembered like Page Mode, that decides whether activating the extension on a tab also opens the side panel. On by default; changed in the side panel's ⚙ settings (「點圖示時也打開側邊欄」). Pages are translated the same either way; a reader who only wants to read manga turns it off, one learning Japanese keeps it on. When it is off, Chrome's own 「開啟側邊面板」 still opens the side panel of a tab being translated.
+A global setting, remembered like Page Mode, that decides whether activating the extension on a tab also opens the side panel. On by default; changed in the settings (「點圖示時也打開側邊欄」). Pages are translated the same either way; a reader who only wants to read manga turns it off, one learning Japanese keeps it on. When it is off, Chrome's own 「開啟側邊面板」 still opens the side panel of a tab being translated.
 _Avoid_: reader mode, learning mode, panel mode
 
 **Series Notes** (角色與用語)

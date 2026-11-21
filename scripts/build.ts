@@ -4,7 +4,7 @@
  *   debug build → dist/debug（多印除錯記錄，src/shared/trace.ts；平常由 scripts/debug-chrome.ts 建到固定位置）
  *
  * 每個入口各自用 esbuild 打包，因為格式不同：
- *   - background（SW）、sidepanel、onboarding、account、offscreen：ES module
+ *   - background（SW）、sidepanel、onboarding、settings、account（轉址）、offscreen：ES module
  *   - content：IIFE。scripting.executeScript({files}) 只能注入傳統 script，不能有 import。
  */
 import { createHash } from 'node:crypto';
@@ -30,13 +30,18 @@ const STATIC_FILES: [string, string][] = [
   // side panel 的畫面樣式（src/ui/，#108）；sidepanel.css 只剩外掛整頁的 html／body
   ['src/ui/components.css', 'components.css'],
   ['src/ui/side-panel.css', 'side-panel.css'],
+  // 設定的內容（#326）：側邊欄 ⚙ 與設定頁共用
+  ['src/ui/settings.css', 'settings-content.css'],
   ['src/sidepanel/sidepanel.css', 'sidepanel.css'],
   // 全新安裝時打開的全頁 onboarding（#93）：跟 side panel 共用 tokens.css、components.css
   ['src/onboarding/onboarding.html', 'onboarding.html'],
   ['src/onboarding/onboarding.css', 'onboarding.css'],
-  // 帳號與訂閱頁（#213）：圖示右鍵選單、額度用完、設定頁的「管理帳號 →」打開
+  // 設定頁（#326，options_ui）：帳號與訂閱（#213）是它的子畫面 #account
+  ['src/settings/settings.html', 'settings.html'],
+  ['src/settings/settings.css', 'settings.css'],
+  ['src/settings/account.css', 'account.css'],
+  // 舊的帳號與訂閱頁：只轉址到 settings.html#account，已經開著或被記下來的分頁不會壞
   ['src/account/account.html', 'account.html'],
-  ['src/account/account.css', 'account.css'],
   ['src/offscreen/offscreen.html', 'offscreen.html'],
   // onnxruntime-web 不打包進 offscreen.js，執行時動態 import（見 src/offscreen/ort-engine.ts）。
   // webgpu bundle 同時支援 WebGPU 與 wasm，只會載入 asyncify 這一份 wasm（與它的 .mjs，多執行緒 worker 用）。
@@ -143,6 +148,7 @@ export async function build({
         background: 'src/background/index.ts',
         sidepanel: 'src/sidepanel/main.tsx',
         onboarding: 'src/onboarding/main.tsx',
+        settings: 'src/settings/main.tsx',
         account: 'src/account/main.tsx',
         offscreen: 'src/offscreen/index.ts',
         ...(e2e ? { 'test-pipeline': 'src/test-pipeline/main.ts', 'test-overlay': 'src/test-overlay/main.ts' } : {}),

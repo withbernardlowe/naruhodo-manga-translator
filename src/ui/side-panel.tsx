@@ -430,7 +430,8 @@ function ScreenEnd({
   );
 }
 
-const PAGE_MODES: readonly SegmentOption<PageMode>[] = [
+/** Page Mode 的兩個選項：側邊欄的「漫畫頁面」列與設定頁的「頁面模式」共用。 */
+export const PAGE_MODES: readonly SegmentOption<PageMode>[] = [
   { value: 'read', label: '閱讀', description: '漫畫頁面直接顯示中文' },
   { value: 'learn', label: '學習', description: '漫畫頁面保留日文，游標移到對話框上看讀音；逐字稿的譯文也先收起來' },
 ];
@@ -695,8 +696,11 @@ export interface SidePanelProps {
 /** 從標題列的作品名稱與作品確認打得開的頁（#191）。 */
 export type SeriesPage = Extract<PanelPage, 'series' | 'seriesPick'>;
 
-/** 沒做完 onboarding（#93 畫面定案）：只有置中的大 logo、名稱、「設定還沒完成」與「完成設定」，沒有頂部的狀態與 ⚙。 */
-function FinishSetup({ logoSrc, onFinishSetup }: { logoSrc: string; onFinishSetup: (() => void) | undefined }) {
+/**
+ * 沒做完 onboarding（#93 畫面定案）：只有置中的大 logo、名稱、「設定還沒完成」與「完成設定」，沒有頂部的狀態與 ⚙。
+ * 設定頁（#326）也用這一個：還沒同意資料使用說明，不能先選好翻譯方式。
+ */
+export function FinishSetup({ logoSrc, onFinishSetup }: { logoSrc: string; onFinishSetup: (() => void) | undefined }) {
   return (
     <div class="naru-side-panel">
       <main class="finish-setup">
