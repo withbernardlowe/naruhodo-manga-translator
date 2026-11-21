@@ -25,11 +25,37 @@ const ENDS_WITH_KANJI = /[一-鿿々〆ヶ]$/;
 
 const known =(s: string | undefined) => (s && s !== '*' ? s : undefined);
 
+/** 送假名可能是的假名：五段的い段、一段的い段與え段。 */
+const OKURIGANA = [...'きぎしじちにひびみりいけげせぜてでねへべめれえ'];
+
+/**
+ * 字典沒收的漢字（UNKNOWN、沒有讀音），多半是省略送假名的複合詞（吹出口、受付、取扱）：
+ * 補上一個送假名，字典認得成動詞連用形（吹き → フキ），就拿那個讀音。每個漢字都要查得到才算。
+ */
+function okuriganaOmitted(
+  t: kuromoji.Tokenizer<kuromoji.IpadicFeatures>,
+  surface: string,
+): { reading: string; pronunciation: string } | undefined {
+  if (!ALL_KANJI.test(surface)) return undefined;
+  let reading = '';
+  let pronunciation = '';
+  for (const kanji of surface) {
+    const verb = OKURIGANA.map((kana) => t.tokenize(kanji + kana))
+      .filter((ts) => ts.length === 1)
+      .map(([only]) => only)
+      .find((w) => w?.pos === '動詞' && w.conjugated_form === '連用形' && known(w.reading));
+    if (!verb?.reading) return undefined;
+    reading += verb.reading;
+    pronunciation += known(verb.pronunciation) ?? verb.reading;
+  }
+  return { reading, pronunciation };
+}
+
 /**
  * kuromoji 的詞，整理成我們用的樣子。IPADIC 把踊り字「々」切成沒有讀音的記號（只々 → 只／々）：
  * 併進前一個詞，讀音重複一次（ただただ），ルビ與羅馬拼音才不會漏掉。
  */
-function words(tokens: kuromoji.IpadicFeatures[]): RomajiToken[] {
+function words(t: kuromoji.Tokenizer<kuromoji.IpadicFeatures>, tokens: kuromoji.IpadicFeatures[]): RomajiToken[] {
   const out: RomajiToken[] = [];
   for (const token of tokens) {
     const prev = out.at(-1);
@@ -39,8 +65,9 @@ function words(tokens: kuromoji.IpadicFeatures[]): RomajiToken[] {
       if (prev.pronunciation) prev.pronunciation += prev.pronunciation;
       continue;
     }
-    const reading = known(token.reading);
-    const pronunciation = known(token.pronunciation);
+    const guessed = token.word_type === 'UNKNOWN' && !known(token.reading) ? okuriganaOmitted(t, token.surface_form) : undefined;
+    const reading = known(token.reading) ?? guessed?.reading;
+    const pronunciation = known(token.pronunciation) ?? guessed?.pronunciation;
     out.push({
       surface: token.surface_form,
       pos: token.pos,
@@ -56,7 +83,7 @@ function words(tokens: kuromoji.IpadicFeatures[]): RomajiToken[] {
 export async function createKuromojiReading(dicPath: string): Promise<(ja: string) => Reading> {
   const t = await loadTokenizer(dicPath);
   return (ja) => {
-    const tokens = words(t.tokenize(ja));
+    const tokens = words(t, t.tokenize(ja));
     const 讀音分詞: ReadingWord[] = [];
     for (const token of tokens) {
       // 沒有讀音的詞（記號、數字、字典沒收的字）照原文
