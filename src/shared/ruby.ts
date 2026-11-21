@@ -63,7 +63,7 @@ export function alignRuby(ja: string, reading: string): RubySegment[] | null {
 export type RubyDisplay = { segments: RubySegment[] } | { fallback: string };
 
 /**
- * 照 kuromoji 的詞一個一個對齊：相鄰兩個詞的漢字（写真＋撮っ）各自帶讀音，讀音裡碰巧有的假名（全知全能の「の」）
+ * 照 kuromoji 的詞一個一個對齊：相鄰兩個詞的漢字（写真＋撮っ）各自帶讀音，讀音裡碰巧有的假名（万能の「の」）
  * 也不會被當成分界。某個詞自己對不上（數字讀成假名）就整個詞帶讀音；詞接起來不是原文（舊資料）→ null。
  */
 function alignWords(ja: string, words: readonly ReadingWord[]): RubySegment[] | null {

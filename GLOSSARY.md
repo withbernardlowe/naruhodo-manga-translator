@@ -53,7 +53,7 @@ The kana pronunciation of a whole Line, shown as furigana over the kanji of each
 _Avoid_: furigana (that is how a Reading is shown), ruby, pronunciation
 
 **Romaji** (羅馬拼音)
-A Line's Reading written in Latin letters, shown as one extra line under the original wherever the Reading is shown, in addition to the furigana, never instead of it. Off by default; turned on in the settings, for both Page Modes. Hepburn, split into words with particles on their own and inflections joined to their word, particles written as pronounced (は wa, へ e, を o), long vowels with macrons (ō, ū, ā) except えい and いい, which stay ei and ii (sensei). Every Line that has a Reading has Romaji, Pages translated before it existed included; an Unreadable Line has neither.
+A Line's Reading written in Latin letters, shown as one extra line under the original wherever the Reading is shown, in addition to the furigana, never instead of it. Off by default; turned on in the settings, for both Page Modes. Hepburn, split into words with particles on their own and inflections joined to their word, particles written as pronounced (は wa, へ e, を o), long vowels with macrons (ō, ū, ā) except えい and いい, which stay ei and ii (sensei). Every Line that has a Reading has Romaji, Pages translated before it existed included; an Unreadable Line has neither. The original and its Romaji line are both split into these words: hovering a word on either line highlights the same word on the other. Where one furigana run covers two words (a kanji suffix), they count as one word.
 _Avoid_: pinyin, 拼音 (that is Mandarin's), romanization (in the UI)
 
 **Unreadable** (無法辨識)

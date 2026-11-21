@@ -119,6 +119,14 @@
 /* 羅馬拼音（GLOSSARY 的 Romaji）：原文下一行，比譯文再小一號、用次要字色，看得出是讀音不是譯文 */
 :where(.naru-side-panel) .romaji { font-size: var(--naru-text-small); line-height: 1.4; color: var(--naru-ink-2); letter-spacing: 0.02em; margin-bottom: 2px; }
 /*
+ * 羅馬拼音按詞（#330）：滑過任一邊的詞，原文與羅馬拼音同一個詞一起亮。帶ルビ的原文每個詞是 inline-block、上方先留讀音的高度，
+ * 色塊才蓋得住振り仮名；沒有漢字的詞也留一樣的高度，色塊一樣高
+ */
+:where(.naru-side-panel) .w { border-radius: 3px; }
+:where(.naru-side-panel) .original.with-ruby .w { display: inline-block; line-height: 1.25; padding: var(--naru-word-ruby-padding); }
+:where(.naru-side-panel) .w.on { background: var(--naru-word-highlight); color: var(--naru-word-highlight-ink); }
+:where(.naru-side-panel) .w.on rt { color: var(--naru-word-highlight-ruby); }
+/*
  * 兩個切換各自標出管哪裡（U15）：「漫畫頁面」一行（名稱＋閱讀／學習），「逐字稿」標題列（名稱＋顯示選單）。
  * 兩行同樣的排法，名稱就是範圍；名稱用小標的樣式（跟設定頁的小標同一款），不加圖示：空心方框的圖示會被看成 checkbox。
  * 逐字稿標題列上面一條線，把上面的控制項跟逐字稿分開。

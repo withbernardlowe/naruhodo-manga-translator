@@ -21,9 +21,10 @@ import { ERASE_WHITE, LOOSE_OUTLINE_PAD_PX, onAnchor, staggerRanks, WASH_STAGGER
 import { findSamePage } from '../shared/page-hash.ts';
 import type { PageMode } from '../shared/page-mode.ts';
 import { DEFAULT_DISPLAY_SETTINGS, hidesTranslation, type DisplaySettings } from '../shared/display-settings.ts';
-import { overlaidTexts, REVEAL_HINT, unreadableLabel, type PageText, type RatioRect, type ReadingWord } from '../shared/page-text.ts';
+import { overlaidTexts, REVEAL_HINT, unreadableLabel, type PageText, type RatioRect, type ReadingWord, type RomajiWord } from '../shared/page-text.ts';
 import { TRANSLATE_ICON } from '../shared/translate-icon.ts';
-import { rubyDisplay } from '../shared/ruby.ts';
+import { rubyDisplay, type RubySegment } from '../shared/ruby.ts';
+import { wordUnits } from '../shared/word-units.ts';
 import TOKENS from '../shared/tokens.css';
 import { createTrace } from '../shared/trace.ts';
 import { hoverAid } from './hover-aid.ts';
@@ -126,6 +127,11 @@ const STYLE = `${TOKENS}
 .tip-guess { font-size: 0.75em; }
 /* 羅馬拼音：原文下一行，比振り仮名淡，不跟譯文搶 */
 .tip-romaji { margin: -0.1em 0 0.35em; font-size: 0.9em; color: var(--naru-tooltip-ink-3); letter-spacing: 0.02em; }
+/* 羅馬拼音按詞（#330）：滑過任一邊的詞，原文與羅馬拼音同一個詞一起亮（半透明品牌黃）。原文的詞是 inline-block、上方留讀音的高度，色塊才蓋得住振り仮名 */
+.tip .w { border-radius: 3px; }
+.tip-ja .w { display: inline-block; line-height: 1.25; padding: var(--naru-word-ruby-padding); }
+.tip .w.on { background: var(--naru-tooltip-word-highlight); color: var(--naru-tooltip-word-highlight-ink); }
+.tip-ja .w.on rt { color: var(--naru-tooltip-word-highlight-ruby); }
 .tip-unreadable { color: var(--naru-tooltip-ink-3); text-decoration: line-through dotted; }
 .tip-zh { font-size: 1.15em; font-family: '${PUNCTUATION_FAMILY}', var(--naru-font-sans); }
 .tip.learn .tip-ja { font-size: 1.4em; color: var(--naru-tooltip-ink); }
@@ -237,6 +243,7 @@ interface HoverLine {
   讀音: string;
   讀音分詞?: ReadingWord[];
   羅馬拼音?: string;
+  羅馬拼音分詞?: RomajiWord[];
   譯文: string;
   unreadable: boolean;
 }
@@ -678,6 +685,7 @@ export function createOverlay({ onHover }: { onHover?: OnHover } = {}) {
       讀音: t.讀音,
       ...(t.讀音分詞 === undefined ? {} : { 讀音分詞: t.讀音分詞 }),
       ...(t.羅馬拼音 === undefined ? {} : { 羅馬拼音: t.羅馬拼音 }),
+      ...(t.羅馬拼音分詞 === undefined ? {} : { 羅馬拼音分詞: t.羅馬拼音分詞 }),
       譯文: t.譯文,
       unreadable: t.unreadable,
     });
@@ -846,12 +854,16 @@ export function createOverlay({ onHover }: { onHover?: OnHover } = {}) {
     clearTimeout(dwellTimer);
     const from = lastPointer;
     lastPointer = { x, y };
-    // 學習時滑鼠在顯示中的 tooltip 上（含緩衝）：tooltip 留著，在「譯」區塊上就揭露譯文
-    if (hovered && pageMode === 'learn' && within(hovered.layer.tip.getBoundingClientRect(), x, y, TOOLTIP_BUFFER_SCREEN_PX)) {
-      const chip = hovered.layer.tip.querySelector('.tip-reveal');
+    // 滑鼠在顯示中的 tooltip 上（含緩衝）：tooltip 留著，在「譯」區塊上就揭露譯文，在詞上就亮那個詞
+    if (hovered && keepsTooltip(hovered.layer.tip) && within(hovered.layer.tip.getBoundingClientRect(), x, y, TOOLTIP_BUFFER_SCREEN_PX)) {
+      const { tip } = hovered.layer;
+      const chip = tip.querySelector('.tip-reveal');
       setRevealed(chip !== null && within(chip.getBoundingClientRect(), x, y));
+      setHoveredWord(tip, { x, y });
       return;
     }
+    // 出了 tooltip：裡面亮著的詞熄掉（直接回到同一句的框上時 setHovered 不重畫 tooltip）
+    if (hovered) setHoveredWord(hovered.layer.tip, undefined);
     let hit: { layer: PageLayer; line: HoverLine; area: number } | undefined;
     for (const entry of entries.values()) {
       if (entry.host.style.visibility === 'hidden' || 'unverified' in entry.host.dataset) continue;
@@ -869,8 +881,8 @@ export function createOverlay({ onHover }: { onHover?: OnHover } = {}) {
       }
     }
     const next = hit && { layer: hit.layer, line: hit.line };
-    // 學習時從句子移向 tooltip 的「譯」區塊，途中擦過別句的框或空白（安全三角形）：先留著這句，停住夠久才換
-    if (aim && from && hovered && pageMode === 'learn' && next?.line !== hovered.line) {
+    // 從句子移向 tooltip（「譯」區塊或詞），途中擦過別句的框或空白（安全三角形）：先留著這句，停住夠久才換
+    if (aim && from && hovered && keepsTooltip(hovered.layer.tip) && next?.line !== hovered.line) {
       const r = hovered.layer.tip.getBoundingClientRect();
       const m = TOOLTIP_BUFFER_SCREEN_PX;
       if (headingToward(from, { x, y }, { left: r.left - m, top: r.top - m, right: r.right + m, bottom: r.bottom + m })) {
@@ -913,25 +925,33 @@ export function createOverlay({ onHover }: { onHover?: OnHover } = {}) {
       parts.push(textDiv('tip-zh', unreadableLabel(line.loose)));
     } else {
       const display = rubyDisplay(line.原文, line.讀音, line.讀音分詞);
-      if ('segments' in display) {
-        for (const segment of display.segments) {
-          if (segment.rt === undefined) ja.append(segment.text);
-          else {
-            const ruby = document.createElement('ruby');
-            const rt = document.createElement('rt');
-            rt.textContent = segment.rt;
-            ruby.append(segment.text, rt);
-            ja.append(ruby);
-          }
-        }
-      } else {
-        // 對不上：原文＋整句讀音
-        ja.append(line.原文, textDiv('tip-guess', display.fallback));
-      }
       // 羅馬拼音（⚙ 的「讀音加上羅馬拼音」）：tooltip 一律有讀音，所以只看設定
-      if (displaySettings.romaji && line.羅馬拼音) {
-        const romaji = textDiv('tip-romaji', line.羅馬拼音);
-        romaji.lang = 'ja-Latn';
+      const showRomaji = displaySettings.romaji && line.羅馬拼音 !== undefined && line.羅馬拼音 !== '';
+      // 按詞（#330）：原文與羅馬拼音都切成詞，data-word 一樣的兩邊一起亮（updateHover）；沒有詞資料就照舊整句一行
+      const units = showRomaji ? wordUnits(line.原文, display, line.羅馬拼音分詞) : null;
+      const romaji = textDiv('tip-romaji', '');
+      romaji.lang = 'ja-Latn';
+      if (units) {
+        units.forEach((unit, i) => {
+          const word = document.createElement('span');
+          word.className = 'w';
+          appendSegments(word, unit.segments);
+          ja.append(word);
+          if (unit.羅馬拼音 === '') return;
+          word.dataset.word = String(i);
+          const latin = document.createElement('span');
+          latin.className = 'w';
+          latin.dataset.word = String(i);
+          latin.textContent = unit.羅馬拼音;
+          if (romaji.childNodes.length > 0) romaji.append(' ');
+          romaji.append(latin);
+        });
+      } else if ('segments' in display) appendSegments(ja, display.segments);
+      else ja.append(line.原文);
+      // 對不上：原文＋整句讀音
+      if ('fallback' in display) ja.append(textDiv('tip-guess', display.fallback));
+      if (showRomaji) {
+        if (!units) romaji.textContent = line.羅馬拼音!;
         parts.push(romaji);
       }
       // 譯文：閱讀直接顯示；學習藏在「譯」區塊後面，除非開了「學習模式直接顯示譯文」。沒有譯文就都不放
@@ -943,6 +963,33 @@ export function createOverlay({ onHover }: { onHover?: OnHover } = {}) {
     tip.classList.add('on');
     placeTooltip(layer, line);
   }
+
+  /** 分段的原文接到 parent 後面：漢字段包成 <ruby>。 */
+  function appendSegments(parent: HTMLElement, segments: readonly RubySegment[]): void {
+    for (const segment of segments) {
+      if (segment.rt === undefined) parent.append(segment.text);
+      else {
+        const ruby = document.createElement('ruby');
+        const rt = document.createElement('rt');
+        rt.textContent = segment.rt;
+        ruby.append(segment.text, rt);
+        parent.append(ruby);
+      }
+    }
+  }
+
+  /** 滑鼠在 tooltip 的哪個詞上（#330）：原文與羅馬拼音 data-word 一樣的一起亮；不在詞上（或沒有 pointer）就都熄。 */
+  function setHoveredWord(tip: HTMLElement, pointer: Point | undefined): void {
+    const words = [...tip.querySelectorAll<HTMLElement>('[data-word]')];
+    const index = pointer && words.find((w) => within(w.getBoundingClientRect(), pointer.x, pointer.y))?.dataset.word;
+    for (const w of words) w.classList.toggle('on', w.dataset.word === index);
+  }
+
+  /**
+   * 滑鼠移進 tooltip 時 tooltip 留著：學習時要移進「譯」區塊；tooltip 裡有按詞的羅馬拼音時（#330）要 hover 得到那些詞，
+   * 閱讀時也一樣。其他時候閱讀模式照舊，滑出那句就收起。
+   */
+  const keepsTooltip = (tip: HTMLElement) => tip.classList.contains('on') && (pageMode === 'learn' || tip.querySelector('[data-word]') !== null);
 
   /**
    * 「譯」區塊（RevealChip 深色版）：翻譯圖示＋提示與譯文疊在同一格。譯文一開始就排進版面（藏著），

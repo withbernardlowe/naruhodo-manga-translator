@@ -27,12 +27,13 @@ const pageText: PageText = {
         { 原文: 'は', 讀音: 'は' },
       ],
       羅馬拼音: 'konnichiwa',
+      羅馬拼音分詞: [{ 原文: '今日は', 羅馬拼音: 'konnichiwa' }],
       譯文: '',
       unreadable: false,
     },
   ],
   looseText: [
-    { id: 'l1', order: 2, bbox: rect, orientation: 'horizontal', 原文: 'ドン', 讀音: 'どん', 讀音來源: 'kuromoji', 讀音分詞: [{ 原文: 'ドン', 讀音: 'どん' }], 羅馬拼音: 'don', 譯文: '', unreadable: false },
+    { id: 'l1', order: 2, bbox: rect, orientation: 'horizontal', 原文: 'ドン', 讀音: 'どん', 讀音來源: 'kuromoji', 讀音分詞: [{ 原文: 'ドン', 讀音: 'どん' }], 羅馬拼音: 'don', 羅馬拼音分詞: [{ 原文: 'ドン', 羅馬拼音: 'don' }], 譯文: '', unreadable: false },
   ],
 };
 
@@ -612,7 +613,7 @@ describe('翻譯快取', () => {
     }
 
     it('命中時讀音換成 kuromoji 的、補上羅馬拼音，譯文照用', async () => {
-      const kuromojiReadings = vi.fn(async (texts: string[]) => texts.map((t) => ({ 讀音: `kuromoji:${t}`, 讀音分詞: [], 羅馬拼音: `romaji:${t}` })));
+      const kuromojiReadings = vi.fn(async (texts: string[]) => texts.map((t) => ({ 讀音: `kuromoji:${t}`, 讀音分詞: [], 羅馬拼音: `romaji:${t}`, 羅馬拼音分詞: [] })));
 
       const last = await hitOldPage(kuromojiReadings);
 
@@ -627,7 +628,7 @@ describe('翻譯快取', () => {
       const { 羅馬拼音: _l, ...l1 } = pageText.looseText[0]!;
       const cache = memoryCache();
       await cache.save({ ...oldPage(), balloons: [{ ...b1, 譯文: '今天' }], looseText: [{ ...l1, 譯文: '咚' }] });
-      const kuromojiReadings = vi.fn(async (texts: string[]) => texts.map((t) => ({ 讀音: `kuromoji:${t}`, 讀音分詞: [], 羅馬拼音: `romaji:${t}` })));
+      const kuromojiReadings = vi.fn(async (texts: string[]) => texts.map((t) => ({ 讀音: `kuromoji:${t}`, 讀音分詞: [], 羅馬拼音: `romaji:${t}`, 羅馬拼音分詞: [] })));
       const { transcriber, published } = setup({ cache, kuromojiReadings });
 
       await transcriber.update(1, [thumb('a1')], capture);
@@ -643,7 +644,7 @@ describe('翻譯快取', () => {
       const { 讀音分詞: _l, ...l1 } = pageText.looseText[0]!;
       const cache = memoryCache();
       await cache.save({ ...oldPage(), balloons: [{ ...b1, 譯文: '今天' }], looseText: [{ ...l1, 譯文: '咚' }] });
-      const kuromojiReadings = vi.fn(async (texts: string[]) => texts.map((t) => ({ 讀音: t, 讀音分詞: [{ 原文: t, 讀音: `kuromoji:${t}` }], 羅馬拼音: t })));
+      const kuromojiReadings = vi.fn(async (texts: string[]) => texts.map((t) => ({ 讀音: t, 讀音分詞: [{ 原文: t, 讀音: `kuromoji:${t}` }], 羅馬拼音: t, 羅馬拼音分詞: [] })));
       const { transcriber, published } = setup({ cache, kuromojiReadings });
 
       await transcriber.update(1, [thumb('a1')], capture);
@@ -652,6 +653,24 @@ describe('翻譯快取', () => {
       if (last.state !== 'done') throw new Error('not done');
       expect(last.text.balloons[0]).toMatchObject({ 讀音分詞: [{ 原文: '今日は', 讀音: 'kuromoji:今日は' }], 譯文: '今天' });
       expect(last.text.looseText[0]).toMatchObject({ 讀音分詞: [{ 原文: 'ドン', 讀音: 'kuromoji:ドン' }], 譯文: '咚' });
+    });
+
+    it('有羅馬拼音、但還沒有羅馬拼音分詞的頁（#330 之前翻的）：命中時補算', async () => {
+      const { 羅馬拼音分詞: _b, ...b1 } = pageText.balloons[0]!;
+      const { 羅馬拼音分詞: _l, ...l1 } = pageText.looseText[0]!;
+      const cache = memoryCache();
+      await cache.save({ ...oldPage(), balloons: [{ ...b1, 譯文: '今天' }], looseText: [{ ...l1, 譯文: '咚' }] });
+      const kuromojiReadings = vi.fn(async (texts: string[]) =>
+        texts.map((t) => ({ 讀音: t, 讀音分詞: [{ 原文: t, 讀音: t }], 羅馬拼音: t, 羅馬拼音分詞: [{ 原文: t, 羅馬拼音: `romaji:${t}` }] })),
+      );
+      const { transcriber, published } = setup({ cache, kuromojiReadings });
+
+      await transcriber.update(1, [thumb('a1')], capture);
+
+      const last = published.at(-1)![0]!.transcript;
+      if (last.state !== 'done') throw new Error('not done');
+      expect(last.text.balloons[0]).toMatchObject({ 羅馬拼音分詞: [{ 原文: '今日は', 羅馬拼音: 'romaji:今日は' }], 譯文: '今天' });
+      expect(last.text.looseText[0]).toMatchObject({ 羅馬拼音分詞: [{ 原文: 'ドン', 羅馬拼音: 'romaji:ドン' }], 譯文: '咚' });
     });
 
     it('kuromoji 失敗時先顯示快取裡的讀音', async () => {
@@ -663,7 +682,7 @@ describe('翻譯快取', () => {
     });
 
     it('讀音已經是 kuromoji、也有羅馬拼音的頁不再重算', async () => {
-      const kuromojiReadings = vi.fn(async (texts: string[]) => texts.map((t) => ({ 讀音: t, 讀音分詞: [], 羅馬拼音: t })));
+      const kuromojiReadings = vi.fn(async (texts: string[]) => texts.map((t) => ({ 讀音: t, 讀音分詞: [], 羅馬拼音: t, 羅馬拼音分詞: [] })));
       const cache = memoryCache();
       await setup({ cache, getTranslator: () => countingTranslator() }).transcriber.update(1, [thumb('a1')], capture);
 

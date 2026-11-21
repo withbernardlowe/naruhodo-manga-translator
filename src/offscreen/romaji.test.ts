@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { romaji, type RomajiToken } from './romaji.ts';
+import { romaji, romajiWords, type RomajiToken } from './romaji.ts';
 
 /** 測試資料照 kuromoji（IPADIC）實際分析的結果抄：表層／詞性／細分類／讀音／發音。 */
 const t = (spec: string): RomajiToken[] =>
@@ -71,5 +71,40 @@ describe('romaji', () => {
 
   it('外來語的小假名合成一個音；發音跟讀音不一樣長時只看讀音', () => {
     expect(romaji(t('ヴァイオリン/名詞/一般/ヴァイオリン/バイオリン |  /記号/空白// | ティー/名詞/一般/ティー/ティー'))).toBe('vaiorin tī');
+  });
+});
+
+describe('romajiWords：每個詞的原文與羅馬拼音（hover 兩邊一起亮）', () => {
+  const pairs = (spec: string) => romajiWords(t(spec)).map((w) => `${w.原文}=${w.羅馬拼音}`);
+
+  it('助動詞、て 黏在前一個詞，原文也一起；助詞照發音', () => {
+    expect(pairs('今日/名詞/副詞可能/キョウ/キョー | は/助詞/係助詞/ハ/ワ | 疲れ/動詞/自立/ツカレ/ツカレ | た/助動詞/*/タ/タ')).toEqual(['今日=kyō', 'は=wa', '疲れた=tsukareta']);
+  });
+
+  it('促音跨詞：待っ＋て 是一個詞 matte；標點黏在前一個詞', () => {
+    expect(pairs('待っ/動詞/自立/マッ/マッ | て/助詞/接続助詞/テ/テ | ください/動詞/非自立/クダサイ/クダサイ | ！/記号/一般/！/！')).toEqual(['待って=matte', 'ください！=kudasai!']);
+  });
+
+  it('長音跨詞：行こ＋う 是一個詞 ikō', () => {
+    expect(pairs('行こ/動詞/自立/イコ/イコ | う/助動詞/*/ウ/ウ')).toEqual(['行こう=ikō']);
+  });
+
+  it('句首的標點自己一個詞；拉長音「ー」併進前一個詞', () => {
+    expect(pairs('…/記号/一般/…/… | おいし/形容詞/自立/オイシ/オイシ | ー/名詞/一般//')).toEqual(['…=…', 'おいしー=oishī']);
+  });
+
+  it('不寫的記號也要留在原文裡：開括號接下一個詞、其他接前一個詞；空白是沒有羅馬拼音的詞', () => {
+    const words = romajiWords(t('「/記号/括弧開/「/「 | 本/名詞/一般/ホン/ホン | 」/記号/括弧閉/」/」 |  /記号/空白// | 本/名詞/一般/ホン/ホン'));
+    expect(words).toEqual([
+      { 原文: '「本」', 羅馬拼音: 'hon' },
+      { 原文: ' ', 羅馬拼音: '' },
+      { 原文: '本', 羅馬拼音: 'hon' },
+    ]);
+  });
+
+  it('詞接起來等於 romaji()', () => {
+    const tokens = t('ちょっと/副詞/助詞類接続/チョット/チョット | 待っ/動詞/自立/マッ/マッ | て/助詞/接続助詞/テ/テ | っ/動詞/非自立/ッ/ッ | …/記号/一般/…/…');
+    expect(romajiWords(tokens).map((w) => w.羅馬拼音).join(' ')).toBe(romaji(tokens));
+    expect(romajiWords(tokens).map((w) => w.原文).join('')).toBe('ちょっと待ってっ…');
   });
 });

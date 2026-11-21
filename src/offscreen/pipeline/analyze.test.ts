@@ -55,7 +55,7 @@ describe('analyzePage：偵測結果 → Balloon／Loose Text', () => {
       { 700: '今日は', 100: 'ドドド' },
     );
 
-    const page = await analyzePage(engine, whitePage(), (ja) => ({ 讀音: `讀音:${ja}`, 讀音分詞: [{ 原文: ja, 讀音: `詞:${ja}` }], 羅馬拼音: `羅馬拼音:${ja}` }));
+    const page = await analyzePage(engine, whitePage(), (ja) => ({ 讀音: `讀音:${ja}`, 讀音分詞: [{ 原文: ja, 讀音: `詞:${ja}` }], 羅馬拼音: `羅馬拼音:${ja}`, 羅馬拼音分詞: [{ 原文: ja, 羅馬拼音: `詞:${ja}` }] }));
 
     expect(page.balloons).toEqual([
       {
@@ -69,6 +69,7 @@ describe('analyzePage：偵測結果 → Balloon／Loose Text', () => {
         讀音來源: 'kuromoji',
         讀音分詞: [{ 原文: '今日は', 讀音: '詞:今日は' }],
         羅馬拼音: '羅馬拼音:今日は',
+        羅馬拼音分詞: [{ 原文: '今日は', 羅馬拼音: '詞:今日は' }],
         譯文: '',
         unreadable: false,
         ocrConfidence: 0.99,
@@ -85,6 +86,7 @@ describe('analyzePage：偵測結果 → Balloon／Loose Text', () => {
         讀音來源: 'kuromoji',
         讀音分詞: [{ 原文: 'ドドド', 讀音: '詞:ドドド' }],
         羅馬拼音: '羅馬拼音:ドドド',
+        羅馬拼音分詞: [{ 原文: 'ドドド', 羅馬拼音: '詞:ドドド' }],
         譯文: '',
         unreadable: false,
         ocrConfidence: 0.99,
@@ -102,7 +104,7 @@ describe('analyzePage：偵測結果 → Balloon／Loose Text', () => {
       { 600: '……', 300: 'はい' },
     );
 
-    const page = await analyzePage(engine, whitePage(), (ja) => ({ 讀音: ja, 讀音分詞: [], 羅馬拼音: '' }));
+    const page = await analyzePage(engine, whitePage(), (ja) => ({ 讀音: ja, 讀音分詞: [], 羅馬拼音: '', 羅馬拼音分詞: [] }));
 
     expect(page.balloons.map((b) => [b.id, b.order, b.原文])).toEqual([['b1', 1, 'はい']]);
     expect(page.looseText).toEqual([]);
@@ -118,7 +120,7 @@ describe('analyzePage：偵測結果 → Balloon／Loose Text', () => {
       { 500: 'ひとつ', 100: 'ふたつ' },
     );
 
-    const page = await analyzePage(engine, whitePage(), (ja) => ({ 讀音: ja, 讀音分詞: [], 羅馬拼音: '' }));
+    const page = await analyzePage(engine, whitePage(), (ja) => ({ 讀音: ja, 讀音分詞: [], 羅馬拼音: '', 羅馬拼音分詞: [] }));
 
     expect(page.balloons.map((b) => b.原文)).toEqual(['ひとつ']);
   });
@@ -134,7 +136,7 @@ describe('analyzePage：偵測結果 → Balloon／Loose Text', () => {
       { 500: 'そとの字', 100: 'なかの字' },
     );
 
-    const page = await analyzePage(engine, whitePage(), (ja) => ({ 讀音: ja, 讀音分詞: [], 羅馬拼音: '' }));
+    const page = await analyzePage(engine, whitePage(), (ja) => ({ 讀音: ja, 讀音分詞: [], 羅馬拼音: '', 羅馬拼音分詞: [] }));
 
     expect(page.looseText.map((l) => l.原文)).toEqual(['そとの字']);
     expect(page.balloons.map((b) => b.原文)).toEqual(['なかの字']);
@@ -143,7 +145,7 @@ describe('analyzePage：偵測結果 → Balloon／Loose Text', () => {
   it('Balloon 外框跟它裡面的文字框幾乎一樣大：兩個都留，文字照樣歸給 Balloon', async () => {
     const engine = fakeEngine([det('bubble', [500, 100, 100, 300], 0.9), det('text_bubble', [505, 105, 90, 290], 0.8)], { 505: 'せりふ' });
 
-    const page = await analyzePage(engine, whitePage(), (ja) => ({ 讀音: ja, 讀音分詞: [], 羅馬拼音: '' }));
+    const page = await analyzePage(engine, whitePage(), (ja) => ({ 讀音: ja, 讀音分詞: [], 羅馬拼音: '', 羅馬拼音分詞: [] }));
 
     expect(page.balloons).toHaveLength(1);
     expect(page.balloons[0]).toMatchObject({ 原文: 'せりふ', balloonBbox: { x: 0.5, y: 0.05, w: 0.1, h: 0.15 } });
@@ -152,7 +154,7 @@ describe('analyzePage：偵測結果 → Balloon／Loose Text', () => {
   it('OCR 的裁切範圍是文字框往外擴（短邊的 8%＋2 px），不超出 Page', async () => {
     const engine = fakeEngine([det('text_free', [0, 100, 100, 300])], { 0: 'あ' });
 
-    await analyzePage(engine, whitePage(), (ja) => ({ 讀音: ja, 讀音分詞: [], 羅馬拼音: '' }));
+    await analyzePage(engine, whitePage(), (ja) => ({ 讀音: ja, 讀音分詞: [], 羅馬拼音: '', 羅馬拼音分詞: [] }));
 
     // pad = round(100 × 0.08) + 2 = 10；左邊夾到 0，寬度維持 100＋2×10（跟 #7 的 prototype 一樣）
     expect(engine.crops).toEqual([[0, 90, 120, 320]]);
@@ -162,7 +164,7 @@ describe('analyzePage：偵測結果 → Balloon／Loose Text', () => {
     // 真實網站上兩個 Balloon 重疊：左邊那段的裁切範圍蓋到右邊那段最左一行，句首多讀出亂碼、信心低到被擋（ADR 0009）
     const engine = fakeEngine([det('text_bubble', [198, 113, 148, 163]), det('text_bubble', [103, 152, 105, 298])], { 198: 'みぎ', 103: 'ひだり' });
 
-    await analyzePage(engine, whitePage(), (ja) => ({ 讀音: ja, 讀音分詞: [], 羅馬拼音: '' }));
+    await analyzePage(engine, whitePage(), (ja) => ({ 讀音: ja, 讀音分詞: [], 羅馬拼音: '', 羅馬拼音分詞: [] }));
 
     // 兩個文字框重疊在 x 198～208：白頁上那一帶沒有字，兩段都切在中間
     expect(engine.crops).toEqual([
@@ -185,7 +187,7 @@ describe('analyzePage：偵測結果 → Balloon／Loose Text', () => {
     ]);
     const engine = fakeEngine([det('text_bubble', above), det('text_bubble', below)], { 470: 'した', 511: 'うえ' });
 
-    await analyzePage(engine, image, (ja) => ({ 讀音: ja, 讀音分詞: [], 羅馬拼音: '' }));
+    await analyzePage(engine, image, (ja) => ({ 讀音: ja, 讀音分詞: [], 羅馬拼音: '', 羅馬拼音分詞: [] }));
 
     const [, top] = engine.crops.find((c) => c[0] < 500)!;
     expect(top).toBeLessThan(903); // 自己的字整個留著
@@ -212,7 +214,7 @@ describe('analyzePage：偵測結果 → Balloon／Loose Text', () => {
     ]);
     const engine = fakeEngine([det('text_bubble', above), det('text_bubble', below)], { 674: 'うえ', 518: 'した' });
 
-    await analyzePage(engine, image, (ja) => ({ 讀音: ja, 讀音分詞: [], 羅馬拼音: '' }));
+    await analyzePage(engine, image, (ja) => ({ 讀音: ja, 讀音分詞: [], 羅馬拼音: '', 羅馬拼音分詞: [] }));
 
     const [x, y, w, h] = engine.crops.find((c) => c[0] < 600)!;
     // 自己的字整個留著（左 565、右 694 含注音、頂 1045）
@@ -237,7 +239,7 @@ describe('analyzePage：偵測結果 → Balloon／Loose Text', () => {
     ]);
     const engine = fakeEngine([det('text_bubble', right), det('text_bubble', left)], { 152: 'みぎ', 48: 'ひだり' });
 
-    await analyzePage(engine, image, (ja) => ({ 讀音: ja, 讀音分詞: [], 羅馬拼音: '' }));
+    await analyzePage(engine, image, (ja) => ({ 讀音: ja, 讀音分詞: [], 羅馬拼音: '', 羅馬拼音分詞: [] }));
 
     const [x, y, w] = engine.crops.find((c) => c[0] < 100)!;
     expect([x <= 69, x + w >= 159, y < 176]).toEqual([true, true, true]); // 自己的字整個留著
@@ -249,7 +251,7 @@ describe('analyzePage：偵測結果 → Balloon／Loose Text', () => {
     // 兩段的字疊在一起：重疊帶裡沒有空白可切
     const image = inkPage(1000, 2000, [[430, 100, 170, 300]]);
 
-    await analyzePage(engine, image, (ja) => ({ 讀音: ja, 讀音分詞: [], 羅馬拼音: '' }));
+    await analyzePage(engine, image, (ja) => ({ 讀音: ja, 讀音分詞: [], 羅馬拼音: '', 羅馬拼音分詞: [] }));
 
     // 第一段 pad = 10：留下最多的切法是左緣切到 530，但會少掉自己 30% 的寬，所以照原本的外擴範圍
     expect(engine.crops[0]).toEqual([490, 90, 120, 320]);
@@ -266,7 +268,7 @@ describe('analyzePage：偵測結果 → Balloon／Loose Text', () => {
     );
 
     // 只收沒碰到上緣的框；Balloon 看的是外框
-    const page = await analyzePage(engine, whitePage(), (ja) => ({ 讀音: ja, 讀音分詞: [], 羅馬拼音: '' }), { accept: (box) => box.y > 0 });
+    const page = await analyzePage(engine, whitePage(), (ja) => ({ 讀音: ja, 讀音分詞: [], 羅馬拼音: '', 羅馬拼音分詞: [] }), { accept: (box) => box.y > 0 });
 
     expect(page.balloons.map((b) => [b.id, b.order, b.原文])).toEqual([['b1', 1, 'のこる']]);
     expect(engine.crops).toHaveLength(1);
@@ -281,7 +283,7 @@ describe('analyzePage：OCR 信心門檻（ADR 0009）', () => {
       ocrs.map((_, i) => det('text_bubble', [lefts[i]!, 100, 50, 200])),
       Object.fromEntries(ocrs.map((ocr, i) => [lefts[i]!, ocr])),
     );
-    return (await analyzePage(engine, whitePage(), (ja) => ({ 讀音: ja, 讀音分詞: [], 羅馬拼音: '' }))).balloons;
+    return (await analyzePage(engine, whitePage(), (ja) => ({ 讀音: ja, 讀音分詞: [], 羅馬拼音: '', 羅馬拼音分詞: [] }))).balloons;
   }
 
   it('每段記下非標點字的最低信心：標點、長音、―…〜 不算', async () => {
@@ -359,7 +361,7 @@ describe('analyzePage：用 Series Notes 的名字修形近字（#228）', () =>
     };
     const engine = fakeEngine([det('text_bubble', [800, 100, 50, 200])], { 800: ocr });
     const fixes: unknown[] = [];
-    const page = await analyzePage(engine, whitePage(), (ja) => ({ 讀音: `讀音:${ja}`, 讀音分詞: [], 羅馬拼音: '' }), { notesNames: names, onNameFix: (fix) => fixes.push(fix) });
+    const page = await analyzePage(engine, whitePage(), (ja) => ({ 讀音: `讀音:${ja}`, 讀音分詞: [], 羅馬拼音: '', 羅馬拼音分詞: [] }), { notesNames: names, onNameFix: (fix) => fixes.push(fix) });
     return { balloon: page.balloons[0]!, fixes };
   }
 

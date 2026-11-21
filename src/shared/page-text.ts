@@ -41,6 +41,8 @@ export interface BalloonText {
   讀音分詞?: ReadingWord[];
   /** Romaji（GLOSSARY）：kuromoji 跟讀音一起算。羅馬拼音之前翻的快取與備份沒有，命中時補算（page-translation.ts）。 */
   羅馬拼音?: string;
+  /** 按詞的羅馬拼音（#330）：hover 一個詞，原文與羅馬拼音兩邊一起亮。之前翻的快取與備份沒有，命中時補算；補不了就整句一行。 */
+  羅馬拼音分詞?: RomajiWord[];
   /** 空字串＝未翻譯（沒有 API key 或還沒翻）。 */
   譯文: string;
   /** LLM 判斷是 OCR 亂碼，或 OCR 最低信心低於門檻（ADR 0009）：不覆蓋，side panel 列出原文。 */
@@ -72,6 +74,7 @@ export interface LooseText {
   讀音來源: 'llm' | 'kuromoji';
   讀音分詞?: ReadingWord[];
   羅馬拼音?: string;
+  羅馬拼音分詞?: RomajiWord[];
   譯文: string;
   unreadable: boolean;
   ocrConfidence?: number;
@@ -93,11 +96,21 @@ export interface ReadingWord {
   讀音: string;
 }
 
-/** kuromoji 對一句原文算出的讀音（整句平假名）、每個詞的讀音（ルビ照詞對齊，ruby.ts）與羅馬拼音。 */
+/**
+ * 羅馬拼音的一個詞（#330）：切法是 romaji() 決定空格的單位，助動詞、て、標點黏在前一個詞。
+ * 原文接起來就是整句原文；空白這類沒有羅馬拼音的詞，羅馬拼音是空字串。
+ */
+export interface RomajiWord {
+  原文: string;
+  羅馬拼音: string;
+}
+
+/** kuromoji 對一句原文算出的讀音（整句平假名）、每個詞的讀音（ルビ照詞對齊，ruby.ts）與羅馬拼音（整句與按詞）。 */
 export interface Reading {
   讀音: string;
   讀音分詞: ReadingWord[];
   羅馬拼音: string;
+  羅馬拼音分詞: RomajiWord[];
 }
 
 export interface PageText {

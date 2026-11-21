@@ -316,6 +316,59 @@ test('Page Mode 學習：頁面保留日文；滑過 Balloon 的 tooltip 有原�
   expect(await page.evaluate(() => (globalThis as unknown as { __clicked: number[] }).__clicked)).toEqual([0]);
 });
 
+// #330 羅馬拼音按詞：詞怎麼切、ルビ怎麼分是 unit（romaji.test.ts、word-units.test.ts）；這裡測真的 DOM 上滑過哪個詞、
+// 兩邊一起亮的串接：side panel 用滑鼠事件，tooltip 在 pointer-events:none 的覆蓋層裡、靠座標 hit-test
+test('羅馬拼音按詞：滑過原文或羅馬拼音的詞，兩邊同一個詞一起亮；逐字稿與 tooltip 都是', async ({ context, sw, extensionId, mockSite }) => {
+  const { page, panel } = await activateOnMockSite({ context, sw, extensionId, mockSite });
+  const center = await greetingOnPage(page);
+  await sw.evaluate(() => globalThis.__clickActionMenu!({ menuItemId: 'romaji', checked: true }));
+  await pageMode(panel, '學習').click();
+
+  // 逐字稿：日文 → 羅馬拼音、羅馬拼音 → 日文，離開就熄
+  const line = firstTranscript(panel).getByRole('listitem').filter({ hasText: 'hayai' });
+  const latin = line.locator('[lang="ja-Latn"] .w');
+  await expect(latin).toHaveText(['ohayō!', 'kyō', 'wa', 'hayai', 'ne']);
+  const lit = line.locator('.w.on');
+  await line.locator('[lang="ja"] .w').filter({ hasText: '今日' }).hover();
+  await expect(lit).toHaveText([/^今日/, 'kyō']);
+  await latin.filter({ hasText: 'hayai' }).hover();
+  await expect(lit).toHaveText([/^早/, 'hayai']);
+  await panel.mouse.move(1, 1);
+  await expect(lit).toHaveCount(0);
+
+  // tooltip：從 Balloon 移進 tooltip，tooltip 留著；滑到哪個詞就亮哪個
+  await page.bringToFront();
+  const tooltip = page.locator('[data-naruhodo-overlay] .tip.on');
+  await page.mouse.move(1, 1);
+  await page.mouse.move(center.x, center.y);
+  await expect(tooltip).toHaveCount(1);
+  const tipLit = tooltip.locator('.w.on');
+  await expect(tipLit).toHaveCount(0);
+  const middle = async (word: Locator) => {
+    const box = (await word.boundingBox())!;
+    return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  };
+  const kyo = await middle(tooltip.locator('.tip-romaji .w').filter({ hasText: 'kyō' }));
+  await page.mouse.move(kyo.x, kyo.y, { steps: 20 });
+  await expect(tipLit).toHaveText([/^今日/, 'kyō']);
+  const hayai = await middle(tooltip.locator('.tip-ja .w').filter({ hasText: '早' }));
+  await page.mouse.move(hayai.x, hayai.y, { steps: 5 });
+  await expect(tipLit).toHaveText([/^早/, 'hayai']);
+  // 高亮色塊蓋住振り仮名：帶ルビ的詞，色塊上緣在讀音上緣之上（rt 的盒子含行距，比字形高一點，容許次像素誤差）；
+  // 沒有漢字的詞（ね）色塊一樣高
+  const ruby = (await tooltip.locator('.tip-ja .w.on rt').boundingBox())!;
+  const block = (await tooltip.locator('.tip-ja .w.on').boundingBox())!;
+  expect(block.y).toBeLessThanOrEqual(ruby.y + 1);
+  const kana = (await tooltip.locator('.tip-ja .w').filter({ hasText: /^ね/ }).boundingBox())!;
+  expect(kana.height).toBeCloseTo(block.height, 0);
+  // 從 tooltip 直接跳回同一句的框上：還是這句，tooltip 留著，詞熄掉
+  await page.mouse.move(center.x, center.y);
+  await expect(tipLit).toHaveCount(0);
+  await expect(tooltip).toHaveCount(1);
+  await page.mouse.move(1, 1);
+  await expect(tooltip).toHaveCount(0);
+});
+
 test('學習時從 Balloon 斜著移向 tooltip、途中出了框：tooltip 留著；停住才收起', async ({ context, sw, extensionId, mockSite }) => {
   // unit 測了安全三角形的幾何（hover-intent.test.ts）；這裡測 overlay 真的拿 tooltip 的畫面位置判斷、停住後計時器會換句
   const { page, panel } = await activateOnMockSite({ context, sw, extensionId, mockSite });

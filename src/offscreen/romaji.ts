@@ -2,6 +2,7 @@
  * Romaji（羅馬拼音，GLOSSARY）：kuromoji 斷好的詞 → 一句修正平文式羅馬字。
  * 斷詞與助詞要看詞性，所以只能在 kuromoji 分析的當下算，不能從整句讀音事後轉。
  */
+import type { RomajiWord } from '../shared/page-text.ts';
 
 /** kuromoji 一個詞裡用得到的欄位。reading／pronunciation 是片假名；字典沒有的詞（ぱち）兩個都沒有。 */
 export interface RomajiToken {
@@ -135,46 +136,80 @@ function tokenRomaji(token: RomajiToken): string {
   return token.surface;
 }
 
-/** 一句的羅馬拼音：詞與詞空一格，標點黏前面，全部小寫。 */
-export function romaji(tokens: readonly RomajiToken[]): string {
-  const words: string[] = [];
+/** 開括號、開引號：不寫進羅馬拼音，原文接到下一個詞前面（「本」 整個是一個詞）。 */
+const OPENING = /^[「『（(［[【〈《“‘｛{〔]+$/;
+
+/**
+ * 一句按詞的原文與羅馬拼音（#330 hover 兩邊一起亮）：詞的切法就是 romaji() 決定空格的單位，
+ * 黏在前一個詞的（助動詞、て、促音、標點、拉長音）原文也一起黏上。原文接起來等於整句原文；
+ * 沒有羅馬拼音的詞（空白、句尾落單的記號）羅馬拼音是空字串。
+ */
+export function romajiWords(tokens: readonly RomajiToken[]): RomajiWord[] {
+  const words: RomajiWord[] = [];
+  // 開括號：等下一個詞來了接在它前面
+  let pending = '';
   // 上一個詞不能再接東西：標點與拉長音之後另起一個詞（来れない?なんで → korenai? na）；
   // 自己一個詞的助詞後面也不接（これはない：IPADIC 把 ない 當助動詞，但不能寫成 wanai）
   let closed = false;
+  /** 原文接到上一個詞（沒有上一個詞就自己一個、沒有羅馬拼音）。 */
+  const attach = (surface: string) => {
+    const last = words.at(-1);
+    if (last) last.原文 += pending + surface;
+    else words.push({ 原文: pending + surface, 羅馬拼音: '' });
+    pending = '';
+  };
+  const push = (surface: string, latin: string) => {
+    words.push({ 原文: pending + surface, 羅馬拼音: latin });
+    pending = '';
+  };
   for (const token of tokens) {
+    const last = words.at(-1);
     const mark = punctuation(token.surface);
     if (mark !== undefined) {
       // 句首的標點（......どこまで）自己一個詞
-      if (words.length > 0) words[words.length - 1] += mark;
-      else words.push(mark);
+      if (last) {
+        attach(token.surface);
+        last.羅馬拼音 += mark;
+      } else push(token.surface, mark);
       closed = true;
       continue;
     }
     if (token.pos === '記号') {
-      if (token.posDetail1 === '空白') words.push('');
+      if (token.posDetail1 === '空白') push(token.surface, '');
+      else if (OPENING.test(token.surface)) pending += token.surface;
+      else attach(token.surface);
       continue;
     }
-    const last = words.at(-1);
     if (LONG_VOWEL.test(token.surface)) {
-      const vowel = closed ? undefined : last?.match(VOWEL_END)?.[0];
-      if (vowel) words[words.length - 1] = last!.slice(0, -1) + MACRON[vowel];
+      const vowel = closed ? undefined : last?.羅馬拼音.match(VOWEL_END)?.[0];
+      attach(token.surface);
+      if (vowel) last!.羅馬拼音 = last!.羅馬拼音.slice(0, -1) + MACRON[vowel];
       // 拉長音是語氣停在這裡，後面另起一個詞（すげーな：IPADIC 把 な 當助動詞，但不能寫成 sugēna）
       closed = true;
       continue;
     }
     const piece = tokenRomaji(token);
-    if (last !== undefined && last !== '' && !closed && (joinsPrevious(token) || last.endsWith(SOKUON))) {
+    const prev = last?.羅馬拼音;
+    if (prev !== undefined && prev !== '' && !closed && (joinsPrevious(token) || prev.endsWith(SOKUON))) {
+      attach(token.surface);
       // 行こ＋う：跨詞的 o＋u 也是長音
-      words[words.length - 1] = token.pos === '助動詞' && piece === 'u' && last.endsWith('o') ? last.slice(0, -1) + 'ō' : joinSokuon(last, piece);
+      last!.羅馬拼音 = token.pos === '助動詞' && piece === 'u' && prev.endsWith('o') ? prev.slice(0, -1) + 'ō' : joinSokuon(prev, piece);
       closed = false;
     } else {
-      words.push(piece);
+      push(token.surface, piece);
       closed = token.pos === '助詞';
     }
   }
-  return words
-    .map((w) => w.replaceAll(SOKUON, ''))
-    .filter((w) => w !== '')
-    .join(' ')
-    .toLowerCase();
+  if (pending) attach('');
+  return words.map((w) => ({ 原文: w.原文, 羅馬拼音: w.羅馬拼音.replaceAll(SOKUON, '').toLowerCase() }));
 }
+
+/** 按詞的羅馬拼音接成一句：詞與詞空一格（沒有羅馬拼音的詞跳過）。 */
+export const joinRomaji = (words: readonly RomajiWord[]): string =>
+  words
+    .map((w) => w.羅馬拼音)
+    .filter((w) => w !== '')
+    .join(' ');
+
+/** 一句的羅馬拼音：詞與詞空一格，標點黏前面，全部小寫。 */
+export const romaji = (tokens: readonly RomajiToken[]): string => joinRomaji(romajiWords(tokens));

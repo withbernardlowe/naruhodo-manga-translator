@@ -4,7 +4,7 @@
  */
 import kuromoji from 'kuromoji';
 import type { Reading, ReadingWord } from '../shared/page-text.ts';
-import { romaji, type RomajiToken } from './romaji.ts';
+import { joinRomaji, romajiWords, type RomajiToken } from './romaji.ts';
 
 const toHiragana = (s: string) => s.replace(/[ァ-ヶ]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0x60));
 
@@ -79,7 +79,7 @@ function words(t: kuromoji.Tokenizer<kuromoji.IpadicFeatures>, tokens: kuromoji.
   return out;
 }
 
-/** 回傳「原文 → 整句平假名、每個詞的讀音＋羅馬拼音」的函式：同一次斷詞一起算，羅馬拼音要看詞性（romaji.ts）。 */
+/** 回傳「原文 → 整句平假名、每個詞的讀音、整句與按詞的羅馬拼音」的函式：同一次斷詞一起算，羅馬拼音要看詞性（romaji.ts）。 */
 export async function createKuromojiReading(dicPath: string): Promise<(ja: string) => Reading> {
   const t = await loadTokenizer(dicPath);
   return (ja) => {
@@ -95,10 +95,12 @@ export async function createKuromojiReading(dicPath: string): Promise<(ja: strin
         prev.讀音 += word.讀音;
       } else 讀音分詞.push(word);
     }
+    const 羅馬拼音分詞 = romajiWords(tokens);
     return {
       讀音: 讀音分詞.map((w) => w.讀音).join(''),
       讀音分詞,
-      羅馬拼音: romaji(tokens),
+      羅馬拼音: joinRomaji(羅馬拼音分詞),
+      羅馬拼音分詞,
     };
   };
 }
