@@ -4,6 +4,7 @@
  */
 import type { ButtonHTMLAttributes, ComponentChildren, HTMLAttributes } from 'preact';
 import { useId, useState } from 'preact/hooks';
+import { REVEAL_HINT } from '../shared/page-text.ts';
 import type { PageHeading, SpreadSide } from './view.ts';
 
 const cx = (...names: (string | false | undefined)[]) => names.filter(Boolean).join(' ');
@@ -155,7 +156,7 @@ export function Callout({ tone = 'info', class: extra, ...rest }: CalloutProps) 
 }
 
 /**
- * 「譯」區塊（淺色版；頁面 tooltip 的深色版在 content script 用 DOM 畫）：先藏著內容，滑過或聚焦才顯示，
+ * 「譯」區塊（淺色版；頁面 tooltip 的深色版在 content script 用 DOM 畫）：先藏著內容，游標移上去或聚焦才顯示，
  * 離開又藏起來。group 的名字是「譯」，測試與讀屏都靠它找到區塊。
  */
 export function RevealChip({ children }: { children: ComponentChildren }) {
@@ -174,7 +175,7 @@ export function RevealChip({ children }: { children: ComponentChildren }) {
       <span class="naru-reveal__tag" aria-hidden="true">
         譯
       </span>
-      {revealed ? children : <span class="naru-reveal__hint">滑過這裡看譯文</span>}
+      {revealed ? children : <span class="naru-reveal__hint">{REVEAL_HINT}</span>}
     </div>
   );
 }

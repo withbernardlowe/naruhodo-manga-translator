@@ -1,3 +1,4 @@
+import type { DisplaySettings } from './display-settings.ts';
 import type { ModelStatus, PageView, ProblemReportView } from './messages.ts';
 import type { PageMode } from './page-mode.ts';
 import type { BalloonText, LooseText, RatioRect } from './page-text.ts';
@@ -19,6 +20,8 @@ export interface ProblemReportInput {
   userAgent: string;
   translationMode: TranslationMode;
   pageMode: PageMode;
+  /** ⚙ 設定頁「顯示」的兩個開關：tooltip 與逐字稿的版面跟著變，回報版面問題時要知道。 */
+  displaySettings: DisplaySettings;
   modelStatus: ModelStatus;
   /** side panel 手上的畫面上的 Page（依閱讀順序）。 */
   pages: PageView[];
@@ -126,6 +129,7 @@ export function problemReport(input: ProblemReportInput): string {
     userAgent: input.userAgent,
     translationMode: input.translationMode,
     pageMode: input.pageMode,
+    displaySettings: input.displaySettings,
     ocr: input.modelStatus,
     pageUrl: context.pageUrl,
     zoom: context.zoom,

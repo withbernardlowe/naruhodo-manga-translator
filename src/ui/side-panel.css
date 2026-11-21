@@ -116,6 +116,8 @@
 :where(.naru-side-panel) rt, :where(.naru-side-panel) .reading { color: var(--naru-ruby); }
 :where(.naru-side-panel) rt { font-size: 0.6em; }
 :where(.naru-side-panel) .reading { display: block; font-size: 0.6em; line-height: 1.4; }
+/* 羅馬拼音（GLOSSARY 的 Romaji）：原文下一行，比譯文再小一號、用次要字色，看得出是讀音不是譯文 */
+:where(.naru-side-panel) .romaji { font-size: var(--naru-text-small); line-height: 1.4; color: var(--naru-ink-2); letter-spacing: 0.02em; margin-bottom: 2px; }
 /*
  * 兩個切換各自標出管哪裡（U15）：「漫畫頁面」一行（名稱＋閱讀／學習），「逐字稿」標題列（名稱＋顯示選單）。
  * 兩行同樣的排法，名稱就是範圍；名稱用小標的樣式（跟設定頁的小標同一款），不加圖示：空心方框的圖示會被看成 checkbox。
@@ -200,6 +202,7 @@
 :where(.naru-side-panel) .settings > h2:first-child { margin-top: 0; }
 :where(.naru-side-panel) .mode-cards { display: flex; flex-direction: column; gap: var(--naru-space-2); }
 :where(.naru-side-panel) .settings p { margin: 0 0 var(--naru-space-1); }
+:where(.naru-side-panel) .settings .display-switches { display: flex; flex-direction: column; gap: var(--naru-space-3); }
 :where(.naru-side-panel) .settings form, :where(.naru-side-panel) .settings .actions { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--naru-space-2); }
 :where(.naru-side-panel) .settings form label { display: flex; flex-direction: column; gap: var(--naru-space-1); }
 :where(.naru-side-panel) .notes { overflow-x: auto; }

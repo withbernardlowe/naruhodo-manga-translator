@@ -6,7 +6,7 @@
 import { useEffect, useId, useRef, useState } from 'preact/hooks';
 import { unreadableLabel, type PageText } from '../shared/page-text.ts';
 import { rubyDisplay, type RubyDisplay } from '../shared/ruby.ts';
-import { displaySummary, LEVEL_LABELS, LEVELS, type Display, type DisplayLevel } from '../shared/transcript-display.ts';
+import { displaySummary, LEVEL_LABELS, LEVELS, type Display, type DisplayLevel, type LineDisplay } from '../shared/transcript-display.ts';
 import { Badge, RevealChip, SegmentedControl, Switch } from './components.tsx';
 import { transcriptRows } from './transcript-rows.ts';
 
@@ -124,7 +124,8 @@ function Ruby({ ja, display }: { ja: string; display: RubyDisplay }) {
 export interface TranscriptProps {
   text: PageText;
   translated: boolean;
-  display: Display;
+  /** 每句顯示哪些部分（shared/transcript-display.ts 的 lineDisplay）。 */
+  show: LineDisplay;
   /** 頁面上滑鼠所在的那句（高亮並捲過去）。 */
   hoveredId: string | undefined;
   /** 滑過這行（null＝離開）→ 頁面上那句高亮。 */
@@ -136,10 +137,8 @@ export interface TranscriptProps {
  * 框外文字裡無法辨識的段收到這頁最後的收合列（U17，規則在 transcript-rows.ts）；每頁從收起開始。
  * 編號直接顯示閱讀順序（order），行被收走也不會重編，跟頁面上的編號一致（U10）。
  */
-export function Transcript({ text, translated, display, hoveredId, onHover }: TranscriptProps) {
-  const learn = display.mode === 'learn';
-  const showRuby = learn ? display.furigana : display.level === 'withReading';
-  const translationOnly = !learn && display.level === 'translationOnly';
+export function Transcript({ text, translated, show, hoveredId, onHover }: TranscriptProps) {
+  const { ruby: showRuby, translationOnly, hideTranslation } = show;
   const [expanded, setExpanded] = useState(false);
   const foldedId = useId();
   const lines = [...text.balloons.map((b) => ({ ...b, loose: false })), ...text.looseText.map((l) => ({ ...l, loose: true }))];
@@ -176,6 +175,11 @@ export function Transcript({ text, translated, display, hoveredId, onHover }: Tr
             {ruby ? <Ruby ja={line.原文} display={ruby} /> : line.原文}
           </span>
         )}
+        {showOriginal && show.romaji && !unreadable && line.羅馬拼音 && (
+          <span lang="ja-Latn" class="romaji">
+            {line.羅馬拼音}
+          </span>
+        )}
         {line.loose && !unreadable && (
           <span class="badges">
             <Badge tone="loose">框外文字</Badge>
@@ -184,7 +188,7 @@ export function Transcript({ text, translated, display, hoveredId, onHover }: Tr
         {unreadable && <span class={line.loose ? 'unreadable-label' : 'unreadable-label unreadable-label--balloon'}>{unreadableLabel(line.loose)}</span>}
         {!unreadable &&
           (hasTranslation ? (
-            learn ? <RevealChip>{shownTranslation}</RevealChip> : shownTranslation
+            hideTranslation ? <RevealChip>{shownTranslation}</RevealChip> : shownTranslation
           ) : (
             <span class="untranslated">未翻譯</span>
           ))}

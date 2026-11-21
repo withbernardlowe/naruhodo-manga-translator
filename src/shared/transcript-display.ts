@@ -1,8 +1,10 @@
 /**
- * 逐字稿要顯示什麼（GLOSSARY 的 Display Level）：閱讀時三個層級；學習時只有振り仮名開關，譯文一律藏在「譯」區塊後面。
+ * 逐字稿要顯示什麼（GLOSSARY 的 Display Level）：閱讀時三個層級；學習時只有振り仮名開關，
+ * 譯文藏在「譯」區塊後面（⚙ 開了「學習模式直接顯示譯文」就不藏，lineDisplay）。
  * 只改 side panel 的逐字稿，頁面不變（頁面跟著 Page Mode）。跟 Page Mode 一樣存在 chrome.storage.local：
  * 所有分頁共用、重開 side panel 也記得（U15）。
  */
+import { hidesTranslation, type DisplaySettings } from './display-settings.ts';
 import type { PageMode } from './page-mode.ts';
 import { watchLocal } from './watch-local.ts';
 
@@ -29,6 +31,25 @@ export type Display = { mode: 'read'; level: DisplayLevel } | { mode: 'learn'; f
 
 export const currentDisplay = (pageMode: PageMode, saved: TranscriptDisplay): Display =>
   pageMode === 'learn' ? { mode: 'learn', furigana: saved.furigana } : { mode: 'read', level: saved.level };
+
+/** 逐字稿每一句顯示哪些部分：ルビ、羅馬拼音、只看譯文（藏原文）、譯文藏在「譯」後面。 */
+export interface LineDisplay {
+  ruby: boolean;
+  romaji: boolean;
+  translationOnly: boolean;
+  hideTranslation: boolean;
+}
+
+/** 逐字稿選單的選擇＋⚙ 的顯示設定 → 每一句怎麼畫。羅馬拼音跟著讀音走（GLOSSARY 的 Romaji）。 */
+export function lineDisplay(display: Display, settings: DisplaySettings): LineDisplay {
+  const ruby = display.mode === 'learn' ? display.furigana : display.level === 'withReading';
+  return {
+    ruby,
+    romaji: ruby && settings.romaji,
+    translationOnly: display.mode === 'read' && display.level === 'translationOnly',
+    hideTranslation: hidesTranslation(display.mode, settings),
+  };
+}
 
 const KEY = 'transcriptDisplay';
 

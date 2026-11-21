@@ -2,7 +2,7 @@
  * 本機流水線的一個 Page（spec #27 第 3.3 節）：偵測 → 分組成 Balloon／Loose Text → 閱讀順序 → OCR → 讀音後備。
  * 移植自 prototype/local-ocr-pipeline 的 core.mjs（#7）。模型呼叫（onnxruntime-web）在 Engine 後面，這裡只有純邏輯。
  */
-import type { BalloonText, LooseText, Orientation, PageText, RatioRect } from '../../shared/page-text.ts';
+import type { BalloonText, LooseText, Orientation, PageText, RatioRect, Reading } from '../../shared/page-text.ts';
 import { area, intersection, union, type PixelBox } from './boxes.ts';
 import { fixNames, type Candidate, type SegmentNameFix } from './name-fix.ts';
 import { readingOrder, type GrayImage } from './reading-order.ts';
@@ -252,7 +252,7 @@ export interface AnalyzeOptions {
   onNameFix?: (fix: SegmentNameFix) => void;
 }
 
-export async function analyzePage(engine: Engine, image: PageImage, reading: (ja: string) => string, { accept, notesNames = [], onNameFix }: AnalyzeOptions = {}): Promise<PageText> {
+export async function analyzePage(engine: Engine, image: PageImage, reading: (ja: string) => Reading, { accept, notesNames = [], onNameFix }: AnalyzeOptions = {}): Promise<PageText> {
   const { width, height } = image;
   const ratio = ([x, y, w, h]: PixelBox): RatioRect => ({ x: x / width, y: y / height, w: w / width, h: h / height });
   const detections = nms((await engine.detect(image)).filter((d) => d.score >= SCORE_THRESHOLD));
@@ -287,7 +287,7 @@ export async function analyzePage(engine: Engine, image: PageImage, reading: (ja
       order,
       orientation: orientation(unit.textBbox),
       原文,
-      讀音: reading(原文),
+      ...reading(原文),
       讀音來源: 'kuromoji',
       譯文: '',
       unreadable: ocrConfidence !== undefined && ocrConfidence < OCR_CONFIDENCE_THRESHOLD,

@@ -10,6 +10,7 @@ import type {
 } from '../shared/messages.ts';
 import { PANEL_PORT } from '../shared/messages.ts';
 import { loadPageMode, onPageModeChange } from '../shared/page-mode.ts';
+import { watchDisplaySettings } from '../shared/display-settings.ts';
 import { createTrace } from '../shared/trace.ts';
 import { createCapturePrep } from './capture.ts';
 import { createOverlay, HOST_ATTRIBUTE, intrinsicSize, isShown, untilRepainted } from './overlay.ts';
@@ -189,6 +190,8 @@ if (!globalThis.__naruhodo) {
   // Page Mode 是全域設定，content script 自己讀、自己聽變更（side panel 切換時立刻跟著變）。
   // 讀到之前不畫覆蓋層：學習時不能先用預設的閱讀閃一下譯文
   const pageModeLoaded = loadPageMode().then((mode) => overlay.setPageMode(mode));
+  // ⚙ 的顯示設定只改 tooltip 的內容，不必等它才畫覆蓋層
+  const stopWatchingDisplaySettings = watchDisplaySettings((settings) => overlay.setDisplaySettings(settings));
   const stopWatchingPageMode = onPageModeChange(pageModeLoaded, (mode) => {
     overlay.setPageMode(mode);
     // 切回閱讀：譯文重新出現，跟剛畫好時一樣讓 SW 記下帶覆蓋層的樣子，下次截圖就不必藏
@@ -315,6 +318,7 @@ if (!globalThis.__naruhodo) {
     panelPorts.clear();
     stopWatching();
     stopWatchingPageMode();
+    stopWatchingDisplaySettings();
     stopRepaint();
     overlay.clear();
     anchors.clear();

@@ -61,7 +61,7 @@ function Intro({ downloadBytes, onNext }: { downloadBytes: number | undefined; o
   return (
     <>
       <h1 class="ob-h1">歡迎使用 Naruhodo</h1>
-      <p class="ob-lead">在日文漫畫網站上，把對話框直接換成中文；也可以保留日文、滑過看讀音，拿來學日文。</p>
+      <p class="ob-lead">在日文漫畫網站上，把對話框直接換成中文；也可以保留日文、游標移到對話框上看讀音，拿來學日文。</p>
       <div class="ob-price">
         <ul>
           <li>

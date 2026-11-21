@@ -114,13 +114,13 @@ test('學習時逐字稿藏譯文，滑過「譯」區塊才出現；振り仮�
   // 譯文藏在「譯」區塊後面
   await expect(transcript).not.toContainText(GREETING_ZH);
   const reveal = greeting.getByRole('group', { name: '譯' });
-  await expect(reveal).toContainText('滑過這裡看譯文');
+  await expect(reveal).toContainText('游標移到這裡看譯文');
 
   await reveal.hover();
   await expect(reveal).toContainText(GREETING_ZH);
   await panel.mouse.move(1, 1);
   await expect(transcript).not.toContainText(GREETING_ZH);
-  await expect(reveal).toContainText('滑過這裡看譯文');
+  await expect(reveal).toContainText('游標移到這裡看譯文');
 
   // 關掉振り仮名：ルビ不見，原文還在、譯文仍藏著；開關不會關上選單
   await displayMenu(panel).click();
@@ -260,7 +260,7 @@ test('Page Mode 學習：頁面保留日文；滑過 Balloon 的 tooltip 有原�
   await expect(line).toHaveClass(/\bhl\b/);
 
   // 逐步揭露（#75）：從 Balloon 一路移進 tooltip 的「譯」區塊，tooltip 不會消失；進了區塊才出現譯文
-  const chip = tooltip.getByText('滑過這裡看譯文');
+  const chip = tooltip.getByText('游標移到這裡看譯文');
   await expect(chip).toBeVisible();
   const chipBox = (await chip.boundingBox())!;
   const inChip = { x: chipBox.x + chipBox.width / 2, y: chipBox.y + chipBox.height / 2 };

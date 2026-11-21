@@ -1,5 +1,28 @@
 import { describe, expect, it } from 'vitest';
-import { displaySummary, parseTranscriptDisplay } from './transcript-display.ts';
+import { displaySummary, lineDisplay, parseTranscriptDisplay } from './transcript-display.ts';
+
+const off = { learnShowsTranslation: false, romaji: false };
+const on = { learnShowsTranslation: true, romaji: true };
+
+describe('lineDisplay：逐字稿每一句顯示哪些部分', () => {
+  it('預設（⚙ 兩個開關都關）跟以前一樣：學習藏譯文、閱讀直接顯示，都沒有羅馬拼音', () => {
+    expect(lineDisplay({ mode: 'learn', furigana: true }, off)).toEqual({ ruby: true, romaji: false, translationOnly: false, hideTranslation: true });
+    expect(lineDisplay({ mode: 'read', level: 'withReading' }, off)).toEqual({ ruby: true, romaji: false, translationOnly: false, hideTranslation: false });
+  });
+
+  it('學習模式直接顯示譯文：不藏在「譯」後面；閱讀本來就不藏', () => {
+    expect(lineDisplay({ mode: 'learn', furigana: true }, { ...off, learnShowsTranslation: true }).hideTranslation).toBe(false);
+    expect(lineDisplay({ mode: 'read', level: 'withOriginal' }, { ...off, learnShowsTranslation: true }).hideTranslation).toBe(false);
+  });
+
+  it('羅馬拼音跟著讀音走：讀音沒顯示時也不顯示', () => {
+    expect(lineDisplay({ mode: 'learn', furigana: true }, on).romaji).toBe(true);
+    expect(lineDisplay({ mode: 'learn', furigana: false }, on).romaji).toBe(false);
+    expect(lineDisplay({ mode: 'read', level: 'withReading' }, on).romaji).toBe(true);
+    expect(lineDisplay({ mode: 'read', level: 'withOriginal' }, on).romaji).toBe(false);
+    expect(lineDisplay({ mode: 'read', level: 'translationOnly' }, on)).toEqual({ ruby: false, romaji: false, translationOnly: true, hideTranslation: false });
+  });
+});
 
 describe('parseTranscriptDisplay', () => {
   it('沒存過：加上讀音、讀音開', () => {
