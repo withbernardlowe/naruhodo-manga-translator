@@ -22,6 +22,7 @@ import { findSamePage } from '../shared/page-hash.ts';
 import type { PageMode } from '../shared/page-mode.ts';
 import { DEFAULT_DISPLAY_SETTINGS, hidesTranslation, type DisplaySettings } from '../shared/display-settings.ts';
 import { overlaidTexts, REVEAL_HINT, unreadableLabel, type PageText, type RatioRect } from '../shared/page-text.ts';
+import { TRANSLATE_ICON } from '../shared/translate-icon.ts';
 import { rubyDisplay } from '../shared/ruby.ts';
 import TOKENS from '../shared/tokens.css';
 import { createTrace } from '../shared/trace.ts';
@@ -129,12 +130,33 @@ const STYLE = `${TOKENS}
 .tip-zh { font-size: 1.15em; font-family: '${PUNCTUATION_FAMILY}', var(--naru-font-sans); }
 .tip.learn .tip-ja { font-size: 1.4em; color: var(--naru-tooltip-ink); }
 .tip-reveal { display: flex; align-items: center; gap: 0.6em; box-sizing: border-box; min-height: 3em; margin: 0.3em 0;
-  padding: 0.6em 0.75em; border-radius: 0.6em; background: var(--naru-tooltip-chip-bg); border: 1px dashed var(--naru-tooltip-chip-line); }
-.tip-reveal.on { background: var(--naru-tooltip-chip-on-bg); border: 1px solid var(--naru-tooltip-chip-on-line); }
-.tip-reveal-label { flex: none; display: flex; align-items: center; justify-content: center; width: 1.7em; height: 1.7em;
-  border-radius: 0.45em; background: var(--naru-tooltip-ink); color: var(--naru-tooltip-bg); font-weight: 700; }
-.tip-reveal-body { color: var(--naru-tooltip-chip-hint); font-family: '${PUNCTUATION_FAMILY}', var(--naru-font-sans); }
-.tip-reveal.on .tip-reveal-body { color: var(--naru-on-accent); font-size: 1.15em; }
+  padding: 0.6em 0.75em; border-radius: 0.6em; background: var(--naru-tooltip-chip-bg); border: 1px dashed var(--naru-tooltip-chip-line);
+  transition: background-color 0.2s ease, border-color 0.2s ease; }
+.tip-reveal.on { background: var(--naru-tooltip-chip-on-bg); border-color: var(--naru-tooltip-chip-on-line); }
+/* 翻譯圖示（兩個對話框）：揭露時「あ」退後變淡、「文」亮起來往前跳一下 */
+.tip-reveal-icon { flex: none; width: 1.6em; height: 1.6em; overflow: visible; }
+.tip-reveal-icon g { transform-box: fill-box; transform-origin: center;
+  transition: opacity 0.24s ease, transform 0.26s cubic-bezier(0.3, 1.4, 0.5, 1); }
+.tip-reveal-icon .bubble { fill: var(--naru-tooltip-chip-bg); stroke-width: 1.3; transition: fill 0.2s ease, stroke 0.24s ease; }
+.tip-reveal-icon .glyph { transition: fill 0.24s ease; }
+.tip-reveal-icon .src .bubble { stroke: var(--naru-tooltip-chip-line); }
+.tip-reveal-icon .src .glyph { fill: var(--naru-tooltip-ruby); }
+.tip-reveal-icon .dst .bubble { stroke: var(--naru-tooltip-ink-3); }
+.tip-reveal-icon .dst .glyph { fill: var(--naru-tooltip-ink-3); }
+.tip-reveal.on .tip-reveal-icon .bubble { fill: var(--naru-tooltip-chip-on-bg); }
+.tip-reveal.on .tip-reveal-icon .src { opacity: 0.5; transform: scale(0.92); }
+.tip-reveal.on .tip-reveal-icon .dst { transform: scale(1.08); }
+.tip-reveal.on .tip-reveal-icon .dst .bubble { stroke: var(--naru-tooltip-ink); }
+.tip-reveal.on .tip-reveal-icon .dst .glyph { fill: var(--naru-on-accent); }
+/* 譯文與提示疊在同一格：區塊大小取兩者較大的，揭露前後不變，tooltip 不會跳。藏著的那層用 visibility（淡出完才藏），讀屏也讀不到 */
+.tip-reveal-body { display: grid; flex: 1; min-width: 0; font-family: '${PUNCTUATION_FAMILY}', var(--naru-font-sans); }
+.tip-reveal-body > div { grid-area: 1 / 1;
+  transition: opacity 0.2s ease, transform 0.2s cubic-bezier(0.2, 0.7, 0.2, 1), visibility 0s; }
+.tip-reveal-hint { align-self: center; color: var(--naru-tooltip-chip-hint); }
+.tip-reveal-zh { color: var(--naru-on-accent); font-size: 1.15em; visibility: hidden; opacity: 0; transform: translateY(5px);
+  transition-delay: 0s, 0s, 0.2s; }
+.tip-reveal.on .tip-reveal-zh { visibility: visible; opacity: 1; transform: none; transition-delay: 0s; }
+.tip-reveal.on .tip-reveal-hint { visibility: hidden; opacity: 0; transform: translateY(-5px); transition-delay: 0s, 0s, 0.2s; }
 .hl { position: absolute; display: none; box-sizing: border-box; border-style: solid; border-color: var(--naru-highlight);
   background: var(--naru-highlight-fill); }
 .hl.on { display: block; }
@@ -179,6 +201,8 @@ const STYLE = `${TOKENS}
 @media (prefers-reduced-motion: reduce) {
   .wm span { animation: none; opacity: 1; }
   .wash::before { animation: none; background: rgb(var(--erase) var(--erase) var(--erase) / ${WASH_STILL_ALPHA}); }
+  /* 「譯」區塊只淡入淡出，不位移、不縮放 */
+  .tip-reveal .tip-reveal-body > div, .tip-reveal .tip-reveal-icon g { transform: none !important; }
 }
 `;
 
@@ -301,6 +325,28 @@ function textDiv(className: string, text: string): HTMLElement {
   return div;
 }
 
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+/** 「譯」區塊的翻譯圖示（兩個對話框，形狀見 translate-icon.ts）；顏色與動畫在 STYLE 的 .tip-reveal-icon。 */
+function translateIcon(): SVGSVGElement {
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('class', 'tip-reveal-icon');
+  svg.setAttribute('viewBox', TRANSLATE_ICON.viewBox);
+  svg.setAttribute('aria-hidden', 'true');
+  for (const [className, shape] of [['src', TRANSLATE_ICON.source], ['dst', TRANSLATE_ICON.target]] as const) {
+    const g = document.createElementNS(SVG_NS, 'g');
+    g.setAttribute('class', className);
+    for (const part of ['bubble', 'glyph'] as const) {
+      const path = document.createElementNS(SVG_NS, 'path');
+      path.setAttribute('class', part);
+      path.setAttribute('d', shape[part]);
+      g.append(path);
+    }
+    svg.append(g);
+  }
+  return svg;
+}
+
 const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
 /**
@@ -367,8 +413,6 @@ export function createOverlay({ onHover }: { onHover?: OnHover } = {}) {
   let panelOpen = false;
   /** 學習時 tooltip 的「譯」區塊是否揭露中（滑鼠在區塊上）。 */
   let revealed = false;
-  /** 顯示中的 tooltip 放在句子上方（揭露時長大要留在同一側）。 */
-  let tipAbove = false;
   /** 上一次 pointermove 的位置：判斷滑鼠往哪個方向移。 */
   let lastPointer: Point | undefined;
   /** 學習時朝 tooltip 前進中、先不換句；滑鼠停住這麼久就照實際位置換。 */
@@ -898,36 +942,38 @@ export function createOverlay({ onHover }: { onHover?: OnHover } = {}) {
     placeTooltip(layer, line);
   }
 
+  /**
+   * 「譯」區塊（RevealChip 深色版）：翻譯圖示＋提示與譯文疊在同一格。譯文一開始就排進版面（藏著），
+   * 所以揭露前後區塊一樣大，tooltip 不必重新定位；揭露只切換 class，交給 CSS 淡入淡出。
+   */
   function revealChip(譯文: string): HTMLElement {
     const chip = document.createElement('div');
-    renderRevealChip(chip, 譯文);
+    chip.className = 'tip-reveal';
+    const zh = textDiv('tip-reveal-zh', 譯文);
+    zh.lang = 'zh-Hant';
+    const body = document.createElement('div');
+    body.className = 'tip-reveal-body';
+    body.append(zh, textDiv('tip-reveal-hint', REVEAL_HINT));
+    chip.append(translateIcon(), body);
     return chip;
-  }
-
-  /** 「譯」區塊（RevealChip 深色版）：未揭露時是提示，揭露後換成譯文。 */
-  function renderRevealChip(chip: Element, 譯文: string): void {
-    chip.className = revealed ? 'tip-reveal on' : 'tip-reveal';
-    chip.replaceChildren(textDiv('tip-reveal-label', '譯'), textDiv('tip-reveal-body', revealed ? 譯文 : REVEAL_HINT));
   }
 
   function setRevealed(next: boolean): void {
     const chip = hovered?.layer.tip.querySelector('.tip-reveal');
     if (!hovered || !chip || next === revealed) return;
     revealed = next;
-    renderRevealChip(chip, hovered.line.譯文);
-    // 區塊長大時 tooltip 留在同一側：下方的往下長、上方的往上長，水平仍置中，原本的範圍一定還在裡面，滑鼠不會跑出區塊
-    placeTooltip(hovered.layer, hovered.line, tipAbove);
+    chip.classList.toggle('on', revealed);
   }
 
-  /** 置中在那句的框下方，夾在 Page 內；下方放不下就放上方。above 有給就固定在那一側。 */
-  function placeTooltip(layer: PageLayer, line: HoverLine, above?: boolean): void {
+  /** 置中在那句的框下方，夾在 Page 內；下方放不下就放上方。 */
+  function placeTooltip(layer: PageLayer, line: HoverLine): void {
     const { tip } = layer;
     const { box } = line;
     const left = box.x + box.w / 2 - tip.offsetWidth / 2;
     tip.style.left = `${Math.max(0, Math.min(left, layer.size.width - tip.offsetWidth))}px`;
     const below = box.y + box.h;
-    tipAbove = above ?? below + tip.offsetHeight > layer.size.height;
-    tip.style.top = `${tipAbove ? Math.max(0, box.y - tip.offsetHeight) : below}px`;
+    const above = below + tip.offsetHeight > layer.size.height;
+    tip.style.top = `${above ? Math.max(0, box.y - tip.offsetHeight) : below}px`;
   }
 
   /** 每個 Page 層最多一個高亮框：頁面 hover 優先，其次是 side panel 滑過的那句。 */

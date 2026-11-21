@@ -346,7 +346,7 @@ function DisplaySettingsSection({ place }: { place: SettingsPlace }) {
         {place === 'page' && <PageModeRow />}
         <Switch
           label="學習模式直接顯示譯文"
-          description="學習模式下，tooltip 與逐字稿的譯文不用先把游標移到「譯」上就看得到。漫畫頁面一樣只留日文原文。"
+          description="學習模式下，tooltip 與逐字稿的譯文不用先把游標移到譯文區塊上就看得到。漫畫頁面一樣只留日文原文。"
           checked={settings.learnShowsTranslation}
           onChange={(checked) => choose({ ...settings, learnShowsTranslation: checked })}
         />

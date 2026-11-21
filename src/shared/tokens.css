@@ -50,7 +50,7 @@
   --naru-tooltip-ink-2: #E2DED6;
   --naru-tooltip-ink-3: #A8A29A;
   --naru-tooltip-ruby: #F2A488;
-  /* tooltip 裡的「譯」區塊（RevealChip 深色版）：未揭露是虛線框，揭露後是亮一點的暖灰實線框 */
+  /* tooltip 裡的「譯」區塊（RevealChip 深色版）：虛線框，揭露後底色與框線換成亮一點的暖灰 */
   --naru-tooltip-chip-bg: #34312C;
   --naru-tooltip-chip-line: #6F6A61;
   --naru-tooltip-chip-hint: #C9C4BB;
