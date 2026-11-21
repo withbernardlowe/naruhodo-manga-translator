@@ -62,7 +62,7 @@ function punctuation(surface: string): string | undefined {
   return marks.every((m) => m !== undefined) ? marks.join('') : undefined;
 }
 
-/** IPADIC 把拉長音的「ー」（かわいー、すげー）切成自己一個詞、沒有讀音：拉長前一個詞的最後一個母音。 */
+/** IPADIC 把拉長音的「ー」（おいしー、すげー）切成自己一個詞、沒有讀音：拉長前一個詞的最後一個母音。 */
 const LONG_VOWEL = /^ー+$/;
 
 /** 助詞照發音寫。 */
@@ -129,7 +129,7 @@ function tokenRomaji(token: RomajiToken): string {
   if (token.pos === '助詞' && PARTICLE[token.surface]) return PARTICLE[token.surface]!;
   const kana = token.reading ?? toKatakana(token.surface);
   if (isKana(kana)) return kanaToRomaji(kana, token.pronunciation);
-  // 字典沒收、中間有「・」的片假名名字（エイモス・チュツオーラ）整個是一個詞：拆開各自轉
+  // 字典沒收、中間有「・」的片假名名字（ジョン・スミス）整個是一個詞：拆開各自轉
   const parts = kana.split('・').filter((p) => p !== '');
   if (parts.length > 1 && parts.every(isKana)) return parts.map((p) => kanaToRomaji(p, undefined)).join(' ');
   return token.surface;
@@ -138,13 +138,13 @@ function tokenRomaji(token: RomajiToken): string {
 /** 一句的羅馬拼音：詞與詞空一格，標點黏前面，全部小寫。 */
 export function romaji(tokens: readonly RomajiToken[]): string {
   const words: string[] = [];
-  // 上一個詞不能再接東西：標點與拉長音之後另起一個詞（買えない?なんで → kaenai? na）；
-  // 自己一個詞的助詞後面也不接（それはない：IPADIC 把 ない 當助動詞，但不能寫成 wanai）
+  // 上一個詞不能再接東西：標點與拉長音之後另起一個詞（来れない?なんで → korenai? na）；
+  // 自己一個詞的助詞後面也不接（これはない：IPADIC 把 ない 當助動詞，但不能寫成 wanai）
   let closed = false;
   for (const token of tokens) {
     const mark = punctuation(token.surface);
     if (mark !== undefined) {
-      // 句首的標點（......いつまで）自己一個詞
+      // 句首的標點（......どこまで）自己一個詞
       if (words.length > 0) words[words.length - 1] += mark;
       else words.push(mark);
       closed = true;

@@ -225,7 +225,7 @@ describe('analyzePage：偵測結果 → Balloon／Loose Text', () => {
   it('好幾種切法都留得住自己的字：挑切完不留鄰段的字的，不只看面積', async () => {
     // 真實網站上右上方的 Balloon 疊在左下那段上（trace 的實際框與墨水範圍）。右邊那段的文字框下緣 286 穿過左邊那段的文字框，
     // 切上面會找到自己字上方的留白（y 160～175），面積比切右邊大一點，可是右邊那段最左一行（x 172～191）還留在裁切範圍裡：
-    // OCR 在句首多讀出「あのは」，信心 0.14 被擋（ADR 0009）
+    // OCR 在句首多讀出鄰段的三個假名，信心 0.14 被擋（ADR 0009）
     const right: PixelBox = [164, 73, 127, 213];
     const left: PixelBox = [59, 160, 111, 206];
     const image = inkPage(814, 1155, [
@@ -285,7 +285,7 @@ describe('analyzePage：OCR 信心門檻（ADR 0009）', () => {
   }
 
   it('每段記下非標點字的最低信心：標點、長音、―…〜 不算', async () => {
-    const [b1] = await analyzeWith({ text: 'えー…ほら!?―〜', confidences: [0.9, 0.01, 0.02, 0.6, 0.7, 0.03, 0.04, 0.05, 0.06] });
+    const [b1] = await analyzeWith({ text: 'あー…ねえ!?―〜', confidences: [0.9, 0.01, 0.02, 0.6, 0.7, 0.03, 0.04, 0.05, 0.06] });
 
     expect(b1!.ocrConfidence).toBe(0.6);
   });
@@ -308,9 +308,9 @@ describe('analyzePage：OCR 信心門檻（ADR 0009）', () => {
   const sure = (n: number) => Array<number>(n).fill(1);
 
   it('低信心的字全擠在句尾、前面至少 4 個可靠的字：剪掉句尾那段，其餘照常翻譯', async () => {
-    const [b1] = await analyzeWith({ text: '人を傷つけちゃいけないぞ177', confidences: [...sure(12), 0.26, 0.37, 0.2] });
+    const [b1] = await analyzeWith({ text: '人をからかっちゃだめだぞ177', confidences: [...sure(12), 0.26, 0.37, 0.2] });
 
-    expect(b1).toMatchObject({ 原文: '人を傷つけちゃいけないぞ', unreadable: false, ocrConfidence: 1, ocrDropped: '177' });
+    expect(b1).toMatchObject({ 原文: '人をからかっちゃだめだぞ', unreadable: false, ocrConfidence: 1, ocrDropped: '177' });
   });
 
   it('句尾剪掉的那段裡夾的標點一起剪；剪完留下句子原本的標點', async () => {
@@ -320,8 +320,8 @@ describe('analyzePage：OCR 信心門檻（ADR 0009）', () => {
   });
 
   it('低信心的字夾在句子中間：照樣整段 unreadable、原文不動', async () => {
-    // 真實網站的 Loose Text 亂碼「学校楽とりよ一緒に勉強したいな〜中田はあ」
-    const text = '学校楽とりよ一緒に勉強したいな〜中田はあ';
+    // 照真實網站的 Loose Text 亂碼改寫：字數與每個字的信心照原樣
+    const text = '駅前楽みりよ一緒に練習したいな〜先輩はあ';
     const confidences = [0.93, 0.99, 0.26, 0.94, 0.31, 0.78, 1, 0.99, 1, 0.98, 0.97, 1, 0.97, 0.76, 0.96, 0.52, 0.33, 0.24, 0.18, 0.29];
     const [b1] = await analyzeWith({ text, confidences });
 
@@ -332,12 +332,12 @@ describe('analyzePage：OCR 信心門檻（ADR 0009）', () => {
   it('剪完剩不到 4 個可靠的字：整段 unreadable', async () => {
     const balloons = await analyzeWith(
       { text: 'あいうx', confidences: [...sure(3), 0.1] },
-      { text: 'ブク...', confidences: [0.29, 0.22, 0.42, 1, 1] },
+      { text: 'ゴポ...', confidences: [0.29, 0.22, 0.42, 1, 1] },
     );
 
     expect(balloons.map((b) => [b.原文, b.unreadable])).toEqual([
       ['あいうx', true],
-      ['ブク...', true],
+      ['ゴポ...', true],
     ]);
   });
 

@@ -89,7 +89,7 @@ export async function createKuromojiReading(dicPath: string): Promise<(ja: strin
       // 沒有讀音的詞（記號、數字、字典沒收的字）照原文
       const word = { 原文: token.surface, 讀音: token.reading ? toHiragana(token.reading) : token.surface };
       const prev = 讀音分詞.at(-1);
-      // 漢字的接尾詞（不動産＋屋、価値＋観、千＋円）跟前面的漢字合成一段ルビ，讀起來是一個詞
+      // 漢字的接尾詞（洋菓子＋屋、人生＋観、千＋円）跟前面的漢字合成一段ルビ，讀起來是一個詞
       if (prev && token.pos === '名詞' && token.posDetail1 === '接尾' && ALL_KANJI.test(word.原文) && ENDS_WITH_KANJI.test(prev.原文)) {
         prev.原文 += word.原文;
         prev.讀音 += word.讀音;
