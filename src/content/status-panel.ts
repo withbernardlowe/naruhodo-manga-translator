@@ -25,14 +25,14 @@ const STYLE = `${TOKENS}
   background: var(--naru-tooltip-bg); color: var(--naru-tooltip-ink); box-shadow: var(--naru-shadow-2);
   font: 500 12px/1.4 var(--naru-font-sans); transition: opacity ${FADE_MS}ms; }
 .panel.leaving { opacity: 0; }
-.panel.open, .panel:hover { width: 250px; padding: 6px; border-radius: var(--naru-radius-md); }
+.panel.open { width: 250px; padding: 6px; border-radius: var(--naru-radius-md); }
 .head { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
-.panel.open .head, .panel:hover .head { padding: 4px 8px 6px; }
-.panel.open .cur, .panel:hover .cur { display: none; }
+.panel.open .head { padding: 4px 8px 6px; }
+.panel.open .cur { display: none; }
 .bar { height: 4px; margin: 0 8px 6px; border-radius: var(--naru-radius-pill); background: var(--naru-tooltip-chip-on-line); overflow: hidden; }
 .bar > div { height: 100%; background: var(--naru-tooltip-ink); }
 .list { display: none; flex-direction: column; gap: 2px; }
-.panel.open .list, .panel:hover .list { display: flex; }
+.panel.open .list { display: flex; }
 .row { display: flex; align-items: center; gap: 10px; padding: 7px 8px; border-radius: var(--naru-radius-sm); }
 .row.now { background: var(--naru-tooltip-chip-bg); }
 .row.bad { background: var(--naru-tooltip-danger-bg); }
@@ -87,7 +87,12 @@ function icon(page: PageIcon): HTMLElement {
 
 export function createStatusPanel({ onAction }: { onAction: OnStatusAction }) {
   let host: HTMLElement | undefined;
+  /** 面板本身：一個 host 只有一個，更新時只換裡面（換掉元素的話，滑鼠沒動就不算 hover，展開的面板會縮回去）。 */
   let panelElement: HTMLElement | undefined;
+  /** 最後一次畫的內容；undefined＝還沒畫或已經收起。 */
+  let shown: StatusPanel | undefined;
+  /** 滑鼠在面板上：展開。自己記，不用 CSS :hover（理由同上）。 */
+  let hovered = false;
   let fade: ReturnType<typeof setTimeout> | undefined;
   let capturing = false;
 
@@ -122,9 +127,27 @@ export function createStatusPanel({ onAction }: { onAction: OnStatusAction }) {
     return row;
   }
 
-  function render(panel: StatusPanel): HTMLElement {
-    const root = el('div', `panel${panel.expanded ? ' open' : ''}`);
+  /** 有要讀者處理的、或滑鼠在上面：展開。 */
+  function applyOpen(): void {
+    panelElement?.classList.toggle('open', hovered || shown?.expanded === true);
+  }
+
+  function createPanelElement(): HTMLElement {
+    const root = el('div', 'panel');
     for (const type of SWALLOWED) root.addEventListener(type, (event) => event.stopPropagation());
+    root.addEventListener('pointerenter', () => {
+      hovered = true;
+      applyOpen();
+    });
+    root.addEventListener('pointerleave', () => {
+      hovered = false;
+      applyOpen();
+    });
+    return root;
+  }
+
+  function render(root: HTMLElement, panel: StatusPanel): void {
+    const parts: HTMLElement[] = [];
     const head = el('div', 'head');
     if (panel.header.kind === 'working') head.append(spinner());
     else head.append(el('span', 'ex', '!'));
@@ -134,13 +157,13 @@ export function createStatusPanel({ onAction }: { onAction: OnStatusAction }) {
       current.classList.add('cur');
       head.append(current);
     }
-    root.append(head);
+    parts.push(head);
     if (panel.header.kind === 'working' && panel.header.progress !== undefined) {
       const bar = el('div', 'bar');
       const fill = el('div');
       fill.style.width = `${Math.round(panel.header.progress * 100)}%`;
       bar.append(fill);
-      root.append(bar);
+      parts.push(bar);
     }
     const list = el('div', 'list');
     for (const problem of panel.problems) {
@@ -152,17 +175,18 @@ export function createStatusPanel({ onAction }: { onAction: OnStatusAction }) {
     }
     for (const row of panel.rows) list.append(rowElement(row));
     if (panel.more > 0) list.append(el('div', 'more', `還有 ${panel.more} 頁`));
-    root.append(list);
-    return root;
+    parts.push(list);
+    root.replaceChildren(...parts);
+    root.classList.remove('leaving');
+    applyOpen();
   }
 
-  /** 回傳放面板的地方（讀螢幕的人聽得到狀態變化的 live region）。 */
+  /** 回傳面板（放在讀螢幕的人聽得到狀態變化的 live region 裡）。 */
   function ensureHost(): HTMLElement {
-    const existing = host?.isConnected ? host.shadowRoot?.querySelector<HTMLElement>('[role=status]') : undefined;
-    if (existing) return existing;
+    if (host?.isConnected && panelElement) return panelElement;
     // 網站把它拿掉了（整個換掉 body 之類）：重建，舊的內容跟著舊的 shadow root 丟掉
     host?.remove();
-    panelElement = undefined;
+    hovered = false;
     const created = document.createElement('div');
     created.setAttribute(STATUS_HOST_ATTRIBUTE, '');
     created.popover = 'manual';
@@ -184,10 +208,12 @@ export function createStatusPanel({ onAction }: { onAction: OnStatusAction }) {
     live.setAttribute('role', 'status');
     const style = el('style');
     style.textContent = STYLE;
+    panelElement = createPanelElement();
+    live.append(panelElement);
     root.append(style, live);
     document.documentElement.append(created);
     host = created;
-    return live;
+    return panelElement;
   }
 
   /**
@@ -195,7 +221,8 @@ export function createStatusPanel({ onAction }: { onAction: OnStatusAction }) {
    * 所以每次更新、切換全螢幕都重放一次（同一個 task 裡關了再開，不會閃）。
    */
   function raise(): void {
-    if (!host?.isConnected) return;
+    // 滑鼠在上面：讀者正在看，關了再開會讓瀏覽器重算 hover
+    if (!host?.isConnected || (hovered && host.matches(':popover-open'))) return;
     if (host.matches(':popover-open')) host.hidePopover();
     host.showPopover();
   }
@@ -207,6 +234,8 @@ export function createStatusPanel({ onAction }: { onAction: OnStatusAction }) {
     host?.remove();
     host = undefined;
     panelElement = undefined;
+    shown = undefined;
+    hovered = false;
   }
 
   return {
@@ -220,12 +249,8 @@ export function createStatusPanel({ onAction }: { onAction: OnStatusAction }) {
       }
       clearTimeout(fade);
       fade = undefined;
-      const live = ensureHost();
-      const next = render(panel);
-      // 換內容時保留 hover 展開的樣子（:hover 跟著同一個位置的新元素）
-      if (panelElement) panelElement.replaceWith(next);
-      else live.append(next);
-      panelElement = next;
+      shown = panel;
+      render(ensureHost(), panel);
       raise();
     },
     /** 截圖前藏起來（不管覆蓋層藏不藏）。 */
