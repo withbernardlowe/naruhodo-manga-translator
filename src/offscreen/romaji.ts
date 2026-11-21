@@ -49,7 +49,21 @@ const DIGRAPH: Record<string, string> = {
 const MACRON: Record<string, string> = { a: 'ā', i: 'ī', u: 'ū', e: 'ē', o: 'ō' };
 
 /** 標點：黏在前一個詞後面。其他記號（括號、引號）不寫。 */
-const PUNCTUATION: Record<string, string> = { '、': ',', '，': ',', '。': '.', '．': '.', '？': '?', '?': '?', '！': '!', '!': '!', '…': '…', '‥': '…', '〜': '~', '～': '~' };
+const PUNCTUATION: Record<string, string> = {
+  '、': ',', '，': ',', ',': ',', '。': '.', '．': '.', '.': '.', '？': '?', '?': '?', '！': '!', '!': '!',
+  '…': '…', '‥': '…', '〜': '~', '～': '~', '~': '~',
+};
+
+/**
+ * 整個詞都是標點時的寫法。看字元不看詞性：IPADIC 把半形的 ? ! ~ . 當成名詞，連續的（!? ......）也是一個詞。
+ */
+function punctuation(surface: string): string | undefined {
+  const marks = [...surface].map((c) => PUNCTUATION[c]);
+  return marks.every((m) => m !== undefined) ? marks.join('') : undefined;
+}
+
+/** IPADIC 把拉長音的「ー」（かわいー、すげー）切成自己一個詞、沒有讀音：拉長前一個詞的最後一個母音。 */
+const LONG_VOWEL = /^ー+$/;
 
 /** 助詞照發音寫。 */
 const PARTICLE: Record<string, string> = { は: 'wa', へ: 'e', を: 'o' };
@@ -114,27 +128,49 @@ const joinsPrevious = (token: RomajiToken) =>
 function tokenRomaji(token: RomajiToken): string {
   if (token.pos === '助詞' && PARTICLE[token.surface]) return PARTICLE[token.surface]!;
   const kana = token.reading ?? toKatakana(token.surface);
-  if (!isKana(kana)) return token.surface;
-  return kanaToRomaji(kana, token.pronunciation);
+  if (isKana(kana)) return kanaToRomaji(kana, token.pronunciation);
+  // 字典沒收、中間有「・」的片假名名字（エイモス・チュツオーラ）整個是一個詞：拆開各自轉
+  const parts = kana.split('・').filter((p) => p !== '');
+  if (parts.length > 1 && parts.every(isKana)) return parts.map((p) => kanaToRomaji(p, undefined)).join(' ');
+  return token.surface;
 }
 
 /** 一句的羅馬拼音：詞與詞空一格，標點黏前面，全部小寫。 */
 export function romaji(tokens: readonly RomajiToken[]): string {
   const words: string[] = [];
+  // 上一個詞不能再接東西：標點與拉長音之後另起一個詞（買えない?なんで → kaenai? na）；
+  // 自己一個詞的助詞後面也不接（それはない：IPADIC 把 ない 當助動詞，但不能寫成 wanai）
+  let closed = false;
   for (const token of tokens) {
+    const mark = punctuation(token.surface);
+    if (mark !== undefined) {
+      // 句首的標點（......いつまで）自己一個詞
+      if (words.length > 0) words[words.length - 1] += mark;
+      else words.push(mark);
+      closed = true;
+      continue;
+    }
     if (token.pos === '記号') {
-      const mark = PUNCTUATION[token.surface];
-      if (mark && words.length > 0) words[words.length - 1] += mark;
-      else if (token.posDetail1 === '空白') words.push('');
+      if (token.posDetail1 === '空白') words.push('');
+      continue;
+    }
+    const last = words.at(-1);
+    if (LONG_VOWEL.test(token.surface)) {
+      const vowel = closed ? undefined : last?.match(VOWEL_END)?.[0];
+      if (vowel) words[words.length - 1] = last!.slice(0, -1) + MACRON[vowel];
+      // 拉長音是語氣停在這裡，後面另起一個詞（すげーな：IPADIC 把 な 當助動詞，但不能寫成 sugēna）
+      closed = true;
       continue;
     }
     const piece = tokenRomaji(token);
-    const last = words.at(-1);
-    if (last !== undefined && last !== '' && (joinsPrevious(token) || last.endsWith(SOKUON))) {
-      const prev = words[words.length - 1]!;
+    if (last !== undefined && last !== '' && !closed && (joinsPrevious(token) || last.endsWith(SOKUON))) {
       // 行こ＋う：跨詞的 o＋u 也是長音
-      words[words.length - 1] = token.pos === '助動詞' && piece === 'u' && prev.endsWith('o') ? prev.slice(0, -1) + 'ō' : joinSokuon(prev, piece);
-    } else words.push(piece);
+      words[words.length - 1] = token.pos === '助動詞' && piece === 'u' && last.endsWith('o') ? last.slice(0, -1) + 'ō' : joinSokuon(last, piece);
+      closed = false;
+    } else {
+      words.push(piece);
+      closed = token.pos === '助詞';
+    }
   }
   return words
     .map((w) => w.replaceAll(SOKUON, ''))

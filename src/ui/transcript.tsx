@@ -154,7 +154,7 @@ export function Transcript({ text, translated, show, hoveredId, onHover }: Trans
     const hasTranslation = translated && line.譯文 !== '';
     const showOriginal = unreadable || !translationOnly || !hasTranslation;
     // 要畫ルビ的句子才對齊讀音（讀音全是 LLM 推測，不另外標示）
-    const ruby = showRuby && !unreadable ? rubyDisplay(line.原文, line.讀音) : undefined;
+    const ruby = showRuby && !unreadable ? rubyDisplay(line.原文, line.讀音, line.讀音分詞) : undefined;
     // 框外的雜訊：灰、刪除線；Balloon 讀不出來：原文不劃掉，警告色標籤，看起來跟雜訊不一樣（U17）
     const originalClass = unreadable ? (line.loose ? 'original unreadable' : 'original unreadable-balloon') : ruby ? 'original with-ruby' : 'original';
     const shownTranslation = (

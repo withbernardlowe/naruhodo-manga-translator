@@ -1,7 +1,9 @@
 /**
- * 振り仮名（spec #27 第 8 節、prototype/sidepanel-ui 的 alignRuby）：把整句讀音用「漢字段／假名段」對齊回每段漢字。
+ * 振り仮名（spec #27 第 8 節、prototype/sidepanel-ui 的 alignRuby）：把讀音用「漢字段／假名段」對齊回每段漢字；
+ * 有 kuromoji 每個詞的讀音時一個詞一個詞對（alignWords），沒有（舊快取）才整句對。
  * 讀音是 kuromoji 推測的（ADR 0001），不是頁面上印的ルビ。
  */
+import type { ReadingWord } from './page-text.ts';
 
 export interface RubySegment {
   text: string;
@@ -60,9 +62,28 @@ export function alignRuby(ja: string, reading: string): RubySegment[] | null {
 /** side panel 與頁面 tooltip 怎麼顯示一句：分段（漢字段帶ルビ），或對不上時原文＋整句讀音（fallback）。 */
 export type RubyDisplay = { segments: RubySegment[] } | { fallback: string };
 
-/** 沒有讀音＝原文一段、沒有ルビ；對不上＝fallback 整句讀音。 */
-export function rubyDisplay(ja: string, reading: string): RubyDisplay {
+/**
+ * 照 kuromoji 的詞一個一個對齊：相鄰兩個詞的漢字（写真＋撮っ）各自帶讀音，讀音裡碰巧有的假名（全知全能の「の」）
+ * 也不會被當成分界。某個詞自己對不上（數字讀成假名）就整個詞帶讀音；詞接起來不是原文（舊資料）→ null。
+ */
+function alignWords(ja: string, words: readonly ReadingWord[]): RubySegment[] | null {
+  if (words.map((w) => w.原文).join('') !== ja) return null;
+  const segments: RubySegment[] = [];
+  for (const word of words) {
+    const aligned = KANJI.test(word.原文) && word.讀音 !== word.原文 ? (alignRuby(word.原文, word.讀音) ?? [{ text: word.原文, rt: word.讀音 }]) : [{ text: word.原文 }];
+    for (const segment of aligned) {
+      const last = segments.at(-1);
+      // 沒有ルビ的段接起來，跟整句對齊的結果長得一樣
+      if (segment.rt === undefined && last && last.rt === undefined) last.text += segment.text;
+      else segments.push({ ...segment });
+    }
+  }
+  return segments;
+}
+
+/** 沒有讀音＝原文一段、沒有ルビ；有每個詞的讀音就照詞對齊；對不上＝fallback 整句讀音。 */
+export function rubyDisplay(ja: string, reading: string, words?: readonly ReadingWord[]): RubyDisplay {
   if (!reading) return { segments: [{ text: ja }] };
-  const segments = alignRuby(ja, reading);
+  const segments = (words && alignWords(ja, words)) ?? alignRuby(ja, reading);
   return segments ? { segments } : { fallback: reading };
 }

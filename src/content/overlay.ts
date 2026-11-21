@@ -21,7 +21,7 @@ import { ERASE_WHITE, LOOSE_OUTLINE_PAD_PX, onAnchor, staggerRanks, WASH_STAGGER
 import { findSamePage } from '../shared/page-hash.ts';
 import type { PageMode } from '../shared/page-mode.ts';
 import { DEFAULT_DISPLAY_SETTINGS, hidesTranslation, type DisplaySettings } from '../shared/display-settings.ts';
-import { overlaidTexts, REVEAL_HINT, unreadableLabel, type PageText, type RatioRect } from '../shared/page-text.ts';
+import { overlaidTexts, REVEAL_HINT, unreadableLabel, type PageText, type RatioRect, type ReadingWord } from '../shared/page-text.ts';
 import { TRANSLATE_ICON } from '../shared/translate-icon.ts';
 import { rubyDisplay } from '../shared/ruby.ts';
 import TOKENS from '../shared/tokens.css';
@@ -235,6 +235,7 @@ interface HoverLine {
   box: Box;
   原文: string;
   讀音: string;
+  讀音分詞?: ReadingWord[];
   羅馬拼音?: string;
   譯文: string;
   unreadable: boolean;
@@ -675,6 +676,7 @@ export function createOverlay({ onHover }: { onHover?: OnHover } = {}) {
       box: ratioToBox(bbox, size),
       原文: t.原文,
       讀音: t.讀音,
+      ...(t.讀音分詞 === undefined ? {} : { 讀音分詞: t.讀音分詞 }),
       ...(t.羅馬拼音 === undefined ? {} : { 羅馬拼音: t.羅馬拼音 }),
       譯文: t.譯文,
       unreadable: t.unreadable,
@@ -910,7 +912,7 @@ export function createOverlay({ onHover }: { onHover?: OnHover } = {}) {
       ja.textContent = line.原文;
       parts.push(textDiv('tip-zh', unreadableLabel(line.loose)));
     } else {
-      const display = rubyDisplay(line.原文, line.讀音);
+      const display = rubyDisplay(line.原文, line.讀音, line.讀音分詞);
       if ('segments' in display) {
         for (const segment of display.segments) {
           if (segment.rt === undefined) ja.append(segment.text);
