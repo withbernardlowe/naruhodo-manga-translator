@@ -37,6 +37,8 @@ export interface BalloonText {
   讀音: string;
   /** #195 起一律 kuromoji；llm 只出現在之前翻的快取與備份，命中時換成 kuromoji 的（page-translation.ts）。 */
   讀音來源: 'llm' | 'kuromoji';
+  /** 每個詞的讀音，ルビ照詞對齊。之前翻的快取與備份沒有，命中時跟羅馬拼音一起補算（page-translation.ts）。 */
+  讀音分詞?: ReadingWord[];
   /** Romaji（GLOSSARY）：kuromoji 跟讀音一起算。羅馬拼音之前翻的快取與備份沒有，命中時補算（page-translation.ts）。 */
   羅馬拼音?: string;
   /** 空字串＝未翻譯（沒有 API key 或還沒翻）。 */
@@ -68,6 +70,7 @@ export interface LooseText {
   原文: string;
   讀音: string;
   讀音來源: 'llm' | 'kuromoji';
+  讀音分詞?: ReadingWord[];
   羅馬拼音?: string;
   譯文: string;
   unreadable: boolean;
@@ -84,9 +87,16 @@ export interface LooseText {
   erase?: EraseData;
 }
 
-/** kuromoji 對一句原文算出的讀音（整句平假名）與羅馬拼音。 */
+/** kuromoji 斷出的一個詞：原文接起來就是整句原文，讀音接起來就是整句讀音。 */
+export interface ReadingWord {
+  原文: string;
+  讀音: string;
+}
+
+/** kuromoji 對一句原文算出的讀音（整句平假名）、每個詞的讀音（ルビ照詞對齊，ruby.ts）與羅馬拼音。 */
 export interface Reading {
   讀音: string;
+  讀音分詞: ReadingWord[];
   羅馬拼音: string;
 }
 

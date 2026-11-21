@@ -49,7 +49,7 @@ One Balloon or one Loose Text entry on a Page, as the transcript lists it in rea
 _Avoid_: item, sentence (one Balloon can hold several sentences)
 
 **Reading** (讀音)
-The kana pronunciation of a whole Line, shown as furigana over each run of kanji (or as a separate line when it cannot be aligned). Always guessed on the device by a morphological analyzer, never printed on the Page and never asked of the LLM, so every Page gets the same Reading whether or not it is translated and whichever translation path it took. Readings of words with several pronunciations and of counters (3分, 一本) can be wrong, so the transcript marks them as a guess.
+The kana pronunciation of a whole Line, shown as furigana over the kanji of each word the analyzer found, so two words written in kanji side by side each get their own (or as a separate line when it cannot be aligned). Always guessed on the device by a morphological analyzer, never printed on the Page and never asked of the LLM, so every Page gets the same Reading whether or not it is translated and whichever translation path it took. Readings of words with several pronunciations and of counters (3分, 一本) can be wrong, so the transcript marks them as a guess.
 _Avoid_: furigana (that is how a Reading is shown), ruby, pronunciation
 
 **Romaji** (羅馬拼音)
