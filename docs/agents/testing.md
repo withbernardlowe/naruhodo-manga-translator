@@ -56,7 +56,7 @@ Running a smoke file directly (`npx vitest`/`npx playwright test` without `op ru
 
 ## Regression tests for bugs found on a real site
 
-A bug reproduced on a real manga site ([real-site debugging](real-site-debugging.md)) gets its regression test at the **lowest layer that reproduces it**. When a pure function reproduces it, copy the actual values from the trace (rects, subRects, page views) into a unit test as its data. A browser test is for bugs in the wiring itself: timing between components, messages, real layout.
+A bug reproduced on a real manga site ([real-site debugging](real-site-debugging.md)) gets its regression test at the **lowest layer that reproduces it**. When a pure function reproduces it, copy the actual values from the trace (rects, subRects, page views) into a unit test as its data. Numbers are copied as they are; the page's text is not: rewrite it so it keeps the shape that triggered the bug ([public-repo.md](public-repo.md), Test strings). A browser test is for bugs in the wiring itself: timing between components, messages, real layout.
 
 ## Choices made on purpose
 
