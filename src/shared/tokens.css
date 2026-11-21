@@ -33,6 +33,13 @@
   /* 振り仮名（朱）：白底對比 6.9:1；舊的 #a07c00 不到 AA */
   --naru-ruby: #9A3B22;
 
+  /* 羅馬拼音按詞（#330）：滑過的詞在原文與羅馬拼音兩邊一起亮，淡黃疊在高亮那行的 --naru-accent-weak 上 */
+  --naru-word-highlight: #FDE7A0;
+  --naru-word-highlight-ink: #1F1D1A;
+  --naru-word-highlight-ruby: var(--naru-ruby);
+  /* 帶ルビ的詞上方先留讀音的高度（行高 1.25 時），高亮色塊才蓋得住振り仮名；side panel 與 tooltip 共用 */
+  --naru-word-ruby-padding: 0.62em 1px 0.08em;
+
   /* 語意色：框外文字（Loose Text）、警告、錯誤、成功 */
   --naru-loose: #1F5A56;
   --naru-loose-bg: #E3F0EE;
@@ -50,6 +57,10 @@
   --naru-tooltip-ink-2: #E2DED6;
   --naru-tooltip-ink-3: #A8A29A;
   --naru-tooltip-ruby: #F2A488;
+  /* tooltip 裡滑過的詞（#330）：半透明品牌黃（疊在深底上約 #5D4B17）；字 8.4:1，ルビ換成亮一點的 #F6B59C（4.8:1），平常的 --naru-tooltip-ruby 不夠 */
+  --naru-tooltip-word-highlight: rgba(242, 183, 5, 0.28);
+  --naru-tooltip-word-highlight-ink: #FFFFFF;
+  --naru-tooltip-word-highlight-ruby: #F6B59C;
   /* tooltip 裡的「譯」區塊（RevealChip 深色版）：虛線框，揭露後底色與框線換成亮一點的暖灰 */
   --naru-tooltip-chip-bg: #34312C;
   --naru-tooltip-chip-line: #6F6A61;

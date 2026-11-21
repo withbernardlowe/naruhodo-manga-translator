@@ -3,10 +3,12 @@
  * 振り仮名用 rubyDisplay（alignRuby）對齊回每段漢字，頁面 ↔ panel 的 hover 同步。
  * 原文標 lang="ja"、譯文標 lang="zh-Hant"：字型跟著語言走，測試也靠它找元素。
  */
+import { Fragment } from 'preact';
 import { useEffect, useId, useRef, useState } from 'preact/hooks';
 import { unreadableLabel, type PageText } from '../shared/page-text.ts';
-import { rubyDisplay, type RubyDisplay } from '../shared/ruby.ts';
+import { rubyDisplay, type RubyDisplay, type RubySegment } from '../shared/ruby.ts';
 import { displaySummary, LEVEL_LABELS, LEVELS, type Display, type DisplayLevel, type LineDisplay } from '../shared/transcript-display.ts';
+import { wordUnits, type WordUnit } from '../shared/word-units.ts';
 import { Badge, RevealChip, SegmentedControl, Switch } from './components.tsx';
 import { transcriptRows } from './transcript-rows.ts';
 
@@ -96,18 +98,11 @@ export function TranscriptHeading({
   );
 }
 
-/** 原文＋ルビ；對不上時退回「原文＋下面一行整句讀音」。 */
-function Ruby({ ja, display }: { ja: string; display: RubyDisplay }) {
-  if ('fallback' in display)
-    return (
-      <>
-        {ja}
-        <small class="reading">{display.fallback}</small>
-      </>
-    );
+/** 分段的原文：漢字段帶ルビ。 */
+function Segments({ segments }: { segments: readonly RubySegment[] }) {
   return (
     <>
-      {display.segments.map((s, i) =>
+      {segments.map((s, i) =>
         s.rt === undefined ? (
           s.text
         ) : (
@@ -117,6 +112,71 @@ function Ruby({ ja, display }: { ja: string; display: RubyDisplay }) {
           </ruby>
         ),
       )}
+    </>
+  );
+}
+
+/** 原文＋ルビ；對不上時退回「原文＋下面一行整句讀音」。 */
+function Ruby({ ja, display }: { ja: string; display: RubyDisplay }) {
+  if ('fallback' in display)
+    return (
+      <>
+        {ja}
+        <small class="reading">{display.fallback}</small>
+      </>
+    );
+  return <Segments segments={display.segments} />;
+}
+
+/** 目前亮的詞（#330）：哪一句的第幾個單位。 */
+interface HoveredWord {
+  lineId: string;
+  index: number;
+}
+
+/**
+ * 按詞的原文與羅馬拼音（#330）：兩行各自一串詞，滑過任一邊的詞，兩邊同一個詞一起亮。
+ * 沒有羅馬拼音的單位（空白）不亮、羅馬拼音那行也不放。
+ */
+function WordRows({
+  lineId,
+  units,
+  display,
+  originalClass,
+  hovered,
+  onWord,
+}: {
+  lineId: string;
+  units: WordUnit[];
+  display: RubyDisplay | undefined;
+  originalClass: string;
+  hovered: HoveredWord | undefined;
+  onWord: (word: HoveredWord | undefined) => void;
+}) {
+  const on = (i: number) => hovered?.lineId === lineId && hovered.index === i;
+  const handlers = (u: WordUnit, i: number) =>
+    u.羅馬拼音 === '' ? {} : { onMouseEnter: () => onWord({ lineId, index: i }), onMouseLeave: () => onWord(undefined) };
+  const romaji = units.flatMap((u, i) => (u.羅馬拼音 === '' ? [] : [{ u, i }]));
+  return (
+    <>
+      <span lang="ja" class={originalClass}>
+        {units.map((u, i) => (
+          <span key={i} class={on(i) ? 'w on' : 'w'} {...handlers(u, i)}>
+            <Segments segments={u.segments} />
+          </span>
+        ))}
+        {display && 'fallback' in display && <small class="reading">{display.fallback}</small>}
+      </span>
+      <span lang="ja-Latn" class="romaji">
+        {romaji.map(({ u, i }, k) => (
+          <Fragment key={i}>
+            {k > 0 && ' '}
+            <span class={on(i) ? 'w on' : 'w'} {...handlers(u, i)}>
+              {u.羅馬拼音}
+            </span>
+          </Fragment>
+        ))}
+      </span>
     </>
   );
 }
@@ -140,6 +200,7 @@ export interface TranscriptProps {
 export function Transcript({ text, translated, show, hoveredId, onHover }: TranscriptProps) {
   const { ruby: showRuby, translationOnly, hideTranslation } = show;
   const [expanded, setExpanded] = useState(false);
+  const [word, setWord] = useState<HoveredWord>();
   const foldedId = useId();
   const lines = [...text.balloons.map((b) => ({ ...b, loose: false })), ...text.looseText.map((l) => ({ ...l, loose: true }))];
   const rows = transcriptRows(lines, { translated, expanded, hoveredId });
@@ -157,6 +218,9 @@ export function Transcript({ text, translated, show, hoveredId, onHover }: Trans
     const ruby = showRuby && !unreadable ? rubyDisplay(line.原文, line.讀音, line.讀音分詞) : undefined;
     // 框外的雜訊：灰、刪除線；Balloon 讀不出來：原文不劃掉，警告色標籤，看起來跟雜訊不一樣（U17）
     const originalClass = unreadable ? (line.loose ? 'original unreadable' : 'original unreadable-balloon') : ruby ? 'original with-ruby' : 'original';
+    // 羅馬拼音按詞（#330）：有詞資料才切；舊快取補算不了就照舊整句一行
+    const showRomaji = showOriginal && show.romaji && !unreadable && line.羅馬拼音 !== undefined && line.羅馬拼音 !== '';
+    const units = showRomaji ? wordUnits(line.原文, ruby, line.羅馬拼音分詞) : null;
     const shownTranslation = (
       <span lang="zh-Hant" class="translation">
         {line.譯文}
@@ -170,15 +234,21 @@ export function Transcript({ text, translated, show, hoveredId, onHover }: Trans
         onMouseEnter={() => onHover(line.id)}
         onMouseLeave={() => onHover(null)}
       >
-        {showOriginal && (
-          <span lang="ja" class={originalClass}>
-            {ruby ? <Ruby ja={line.原文} display={ruby} /> : line.原文}
-          </span>
-        )}
-        {showOriginal && show.romaji && !unreadable && line.羅馬拼音 && (
-          <span lang="ja-Latn" class="romaji">
-            {line.羅馬拼音}
-          </span>
+        {units ? (
+          <WordRows lineId={line.id} units={units} display={ruby} originalClass={originalClass} hovered={word} onWord={setWord} />
+        ) : (
+          <>
+            {showOriginal && (
+              <span lang="ja" class={originalClass}>
+                {ruby ? <Ruby ja={line.原文} display={ruby} /> : line.原文}
+              </span>
+            )}
+            {showRomaji && (
+              <span lang="ja-Latn" class="romaji">
+                {line.羅馬拼音}
+              </span>
+            )}
+          </>
         )}
         {line.loose && !unreadable && (
           <span class="badges">

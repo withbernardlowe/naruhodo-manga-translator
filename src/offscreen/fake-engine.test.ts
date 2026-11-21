@@ -64,7 +64,7 @@ describe('FakeEngine 認頁', () => {
 describe('FakeEngine 重播', () => {
   for (const r of recorded) {
     it(`${r.id} [${r.rect.join(', ')}]：經過 analyzePage 還原出錄下來的 Balloon 與 Loose Text`, async () => {
-      const text = await analyzePage(engineFrom(match), pageImage(cropGray(readGray(r.id), r.rect)), () => ({ 讀音: '', 讀音分詞: [], 羅馬拼音: '' }));
+      const text = await analyzePage(engineFrom(match), pageImage(cropGray(readGray(r.id), r.rect)), () => ({ 讀音: '', 讀音分詞: [], 羅馬拼音: '', 羅馬拼音分詞: [] }));
       expect(text.balloons.map((b) => b.原文)).toEqual(r.balloons.map((b) => b.原文));
       expect(text.looseText.map((l) => l.原文)).toEqual(r.looseText.map((l) => l.原文));
       expect(text.balloons.map((b) => b.ocrConfidence)).toEqual(r.balloons.map((b) => b.ocrConfidence));
@@ -83,8 +83,8 @@ describe('FakeEngine 重播候選字（#228）', () => {
     const r = recorded.find((x) => x.id === 'p02-ruby')!;
     const image = () => pageImage(cropGray(readGray(r.id), r.rect));
 
-    const withNames = await analyzePage(engineFrom(match), image(), () => ({ 讀音: '', 讀音分詞: [], 羅馬拼音: '' }), { notesNames: ['霧嶋湊'] });
-    const without = await analyzePage(engineFrom(match), image(), () => ({ 讀音: '', 讀音分詞: [], 羅馬拼音: '' }));
+    const withNames = await analyzePage(engineFrom(match), image(), () => ({ 讀音: '', 讀音分詞: [], 羅馬拼音: '', 羅馬拼音分詞: [] }), { notesNames: ['霧嶋湊'] });
+    const without = await analyzePage(engineFrom(match), image(), () => ({ 讀音: '', 讀音分詞: [], 羅馬拼音: '', 羅馬拼音分詞: [] }));
 
     expect(withNames.balloons.map((b) => b.原文)).toContain('転校生の霧嶋湊ですよろしく');
     expect(without.balloons.map((b) => b.原文)).toContain('転校生の霧島湊ですよろしく');

@@ -276,12 +276,12 @@ export function createPageTranslation({ cache, ledger, getSeries, translatorVers
 
   /**
    * #195 之前翻的頁，讀音是 LLM 給的（讀音來源 llm）：換成 kuromoji 的，新舊頁的讀音才一致（ADR 0001）。
-   * 羅馬拼音、讀音分詞（ルビ照詞對齊）之前翻的頁沒有這兩個：一起補算（GLOSSARY 的 Romaji）。
+   * 羅馬拼音、讀音分詞（ルビ照詞對齊）、羅馬拼音分詞（#330 按詞 hover）之前翻的頁沒有這些：一起補算（GLOSSARY 的 Romaji）。
    * 算不出來（offscreen 失敗）就先照用快取的讀音，只記在 trace。
    */
   async function withKuromojiReadings(page: PageText): Promise<PageText> {
     const lines = [...page.balloons, ...page.looseText];
-    if (!kuromojiReadings || !lines.some((t) => t.讀音來源 === 'llm' || t.羅馬拼音 === undefined || t.讀音分詞 === undefined)) return page;
+    if (!kuromojiReadings || !lines.some((t) => t.讀音來源 === 'llm' || t.羅馬拼音 === undefined || t.讀音分詞 === undefined || t.羅馬拼音分詞 === undefined)) return page;
     let readings: Reading[];
     try {
       readings = await kuromojiReadings(lines.map((t) => t.原文));

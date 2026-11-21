@@ -5,6 +5,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { Reading } from '../shared/page-text.ts';
 import { rubyDisplay } from '../shared/ruby.ts';
+import { wordUnits } from '../shared/word-units.ts';
 import { createKuromojiReading } from './kuromoji-reading.ts';
 
 let read: (ja: string) => Reading;
@@ -69,5 +70,34 @@ describe('羅馬拼音', () => {
 
   it('助詞後面的助動詞不黏到助詞上', () => {
     expect(read('それはないのに').羅馬拼音).toBe('sore wa nai noni');
+  });
+});
+
+describe('羅馬拼音按詞（#330）', () => {
+  const pairs = (ja: string) => read(ja).羅馬拼音分詞.map((w) => `${w.原文}=${w.羅馬拼音}`);
+
+  it('促音、長音跨詞、助詞：一個詞對一個詞', () => {
+    expect(pairs('ちょっと待ってください！')).toEqual(['ちょっと=chotto', '待って=matte', 'ください！=kudasai!']);
+    expect(pairs('一緒に行こう')).toEqual(['一緒=issho', 'に=ni', '行こう=ikō']);
+    expect(pairs('今日は疲れた')).toEqual(['今日=kyō', 'は=wa', '疲れた=tsukareta']);
+  });
+
+  it('原文接起來等於整句、羅馬拼音接起來等於整句羅馬拼音', () => {
+    for (const ja of ['え?買えない?なんで?', '只々本が好き', '「本当に」すげーな']) {
+      const r = read(ja);
+      expect(r.羅馬拼音分詞.map((w) => w.原文).join('')).toBe(ja);
+      expect(r.羅馬拼音分詞.map((w) => w.羅馬拼音).filter(Boolean).join(' ')).toBe(r.羅馬拼音);
+    }
+  });
+
+  it('ルビ分到詞上：疲れた 的ルビ在詞裡面；一段ルビ跨兩個詞（不動産＋屋）時合成一個單位', () => {
+    const units = (ja: string) => {
+      const r = read(ja);
+      return wordUnits(ja, rubyDisplay(ja, r.讀音, r.讀音分詞), r.羅馬拼音分詞)!.map(
+        (u) => `${u.segments.map((s) => (s.rt ? `${s.text}(${s.rt})` : s.text)).join('')}=${u.羅馬拼音}`,
+      );
+    };
+    expect(units('今日は疲れた')).toEqual(['今日(きょう)=kyō', 'は=wa', '疲(つか)れた=tsukareta']);
+    expect(units('不動産屋さん')).toEqual(['不動産屋(ふどうさんや)=fudōsan ya', 'さん=san']);
   });
 });
