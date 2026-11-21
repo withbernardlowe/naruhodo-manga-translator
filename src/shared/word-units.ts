@@ -14,7 +14,7 @@ export interface WordUnit {
 
 /**
  * 原文按羅馬拼音的詞切成單位。display＝rubyDisplay 的結果；沒有（不顯示ルビ）或對不上（fallback）就只切原文、沒有ルビ。
- * 一段ルビ跨兩個詞（漢字接尾詞：不動産＋屋 是一段ルビ、兩個羅馬拼音的詞）不能拆開讀音：那幾個詞合成一個單位。
+ * 一段ルビ跨兩個詞（漢字接尾詞：洋菓子＋屋 是一段ルビ、兩個羅馬拼音的詞）不能拆開讀音：那幾個詞合成一個單位。
  * 沒有詞資料（舊快取補算不了）或詞接起來不是原文 → null，呼叫端退回整句一行。
  */
 export function wordUnits(ja: string, display: RubyDisplay | undefined, words: readonly RomajiWord[] | undefined): WordUnit[] | null {

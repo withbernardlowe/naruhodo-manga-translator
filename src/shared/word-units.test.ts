@@ -30,15 +30,15 @@ describe('wordUnits：ルビ按羅馬拼音的詞分配', () => {
     ]);
   });
 
-  it('一段ルビ跨兩個詞（漢字接尾詞 不動産＋屋）：兩個詞合成一個單位，羅馬拼音用空格接起來', () => {
-    const display: RubyDisplay = { segments: [{ text: '不動産屋', rt: 'ふどうさんや' }, { text: 'さん' }] };
-    expect(describeUnits('不動産屋さん', display, w('不動産=fudōsan 屋=ya さん=san'))).toEqual(['不動産屋(ふどうさんや)=fudōsan ya', 'さん=san']);
+  it('一段ルビ跨兩個詞（漢字接尾詞 洋菓子＋屋）：兩個詞合成一個單位，羅馬拼音用空格接起來', () => {
+    const display: RubyDisplay = { segments: [{ text: '洋菓子屋', rt: 'ようがしや' }, { text: 'さん' }] };
+    expect(describeUnits('洋菓子屋さん', display, w('洋菓子=yōgashi 屋=ya さん=san'))).toEqual(['洋菓子屋(ようがしや)=yōgashi ya', 'さん=san']);
   });
 
   it('讀音對不上（fallback）或不顯示ルビ：照樣按詞切，只是沒有ルビ', () => {
-    const words = w('6=6 年=nen');
-    expect(describeUnits('6年', { fallback: 'ろくねん' }, words)).toEqual(['6=6', '年=nen']);
-    expect(describeUnits('6年', undefined, words)).toEqual(['6=6', '年=nen']);
+    const words = w('3=3 年=nen');
+    expect(describeUnits('3年', { fallback: 'さんねん' }, words)).toEqual(['3=3', '年=nen']);
+    expect(describeUnits('3年', undefined, words)).toEqual(['3=3', '年=nen']);
   });
 
   it('沒有詞資料（舊快取補算不了），或詞接起來不是原文：null，退回整句一行', () => {
