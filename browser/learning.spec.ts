@@ -111,16 +111,21 @@ test('學習時逐字稿藏譯文，滑過「譯」區塊才出現；振り仮�
   await panel.keyboard.press('Escape');
   await expect(furigana).toHaveCount(0);
   await expect(original(greeting).locator('rt')).toHaveText(['きょう', 'はや']);
-  // 譯文藏在「譯」區塊後面
-  await expect(transcript).not.toContainText(GREETING_ZH);
+  // 譯文藏在「譯」區塊後面（已經排進版面、只是藏著，揭露前後區塊一樣大）
   const reveal = greeting.getByRole('group', { name: '譯' });
-  await expect(reveal).toContainText('游標移到這裡看譯文');
+  const hint = reveal.getByText('游標移到這裡看譯文');
+  const zh = reveal.getByText(GREETING_ZH);
+  await expect(hint).toBeVisible();
+  await expect(zh).toBeHidden();
+  const hiddenBox = (await reveal.boundingBox())!;
 
   await reveal.hover();
-  await expect(reveal).toContainText(GREETING_ZH);
+  await expect(zh).toBeVisible();
+  await expect(hint).toBeHidden();
+  expect(await reveal.boundingBox()).toEqual(hiddenBox);
   await panel.mouse.move(1, 1);
-  await expect(transcript).not.toContainText(GREETING_ZH);
-  await expect(reveal).toContainText('游標移到這裡看譯文');
+  await expect(zh).toBeHidden();
+  await expect(hint).toBeVisible();
 
   // 關掉振り仮名：ルビ不見，原文還在、譯文仍藏著；開關不會關上選單
   await displayMenu(panel).click();
@@ -128,7 +133,7 @@ test('學習時逐字稿藏譯文，滑過「譯」區塊才出現；振り仮�
   await expect(furigana).not.toBeChecked();
   await expect(transcript.locator('rt')).toHaveCount(0);
   await expect(original(greeting)).toContainText('今日は早いね');
-  await expect(transcript).not.toContainText(GREETING_ZH);
+  await expect(zh).toBeHidden();
   await expect(displayMenu(panel)).toHaveAccessibleName('逐字稿顯示：讀音：關');
   await furigana.click();
   await expect(original(greeting).locator('rt')).toHaveText(['きょう', 'はや']);
@@ -256,21 +261,25 @@ test('Page Mode 學習：頁面保留日文；滑過 Balloon 的 tooltip 有原�
   await expect(tooltip).toHaveCount(1);
   await expect(tooltip.locator('rt')).toHaveText(['きょう', 'はや']);
   await expect(tooltip).toContainText('今日');
-  await expect(tooltip).not.toContainText(GREETING_ZH);
+  const zh = tooltip.getByText(GREETING_ZH);
+  await expect(zh).toBeHidden();
   await expect(line).toHaveClass(/\bhl\b/);
 
   // 逐步揭露（#75）：從 Balloon 一路移進 tooltip 的「譯」區塊，tooltip 不會消失；進了區塊才出現譯文
   const chip = tooltip.getByText('游標移到這裡看譯文');
   await expect(chip).toBeVisible();
+  const tooltipBox = (await tooltip.boundingBox())!;
   const chipBox = (await chip.boundingBox())!;
   const inChip = { x: chipBox.x + chipBox.width / 2, y: chipBox.y + chipBox.height / 2 };
   await page.mouse.move(inChip.x, inChip.y, { steps: 20 });
-  await expect(tooltip).toContainText(GREETING_ZH);
+  await expect(zh).toBeVisible();
+  await expect(chip).toBeHidden();
   await expect(tooltip).toContainText('今日');
   await expect(line).toHaveClass(/\bhl\b/);
-  // 區塊隨譯文長大，滑鼠仍在區塊裡：譯文持續顯示
+  // 譯文早就排進版面：揭露時 tooltip 不換大小、不換位置（不會跳）
+  expect(await tooltip.boundingBox()).toEqual(tooltipBox);
   await page.mouse.move(inChip.x + 1, inChip.y);
-  await expect(tooltip).toContainText(GREETING_ZH);
+  await expect(zh).toBeVisible();
 
   // 離開 tooltip 就收起；滑回同一句，譯文又藏起來
   await page.mouse.move(1, 1);
@@ -278,7 +287,7 @@ test('Page Mode 學習：頁面保留日文；滑過 Balloon 的 tooltip 有原�
   await expect(line).not.toHaveClass(/\bhl\b/);
   await page.mouse.move(center.x, center.y);
   await expect(tooltip).toHaveCount(1);
-  await expect(tooltip).not.toContainText(GREETING_ZH);
+  await expect(zh).toBeHidden();
   await expect(chip).toBeVisible();
   await page.mouse.move(1, 1);
   await expect(tooltip).toHaveCount(0);

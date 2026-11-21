@@ -399,10 +399,11 @@ test.describe('覆蓋渲染（ground truth）', () => {
     const looseCenter = centerOf(loose.bbox);
     await page.mouse.move(looseCenter.x, looseCenter.y);
     await expect(tooltip).toContainText(loose.原文);
-    await expect(tooltip).not.toContainText(loose.譯文);
+    const zh = tooltip.getByText(loose.譯文);
+    await expect(zh).toBeHidden();
     const chipBox = (await tooltip.getByText('游標移到這裡看譯文').boundingBox())!;
     await page.mouse.move(chipBox.x + chipBox.width / 2, chipBox.y + chipBox.height / 2, { steps: 10 });
-    await expect(tooltip).toContainText(loose.譯文);
+    await expect(zh).toBeVisible();
     await page.mouse.move(1, 1);
     await expect(tooltip).toHaveCount(0);
 

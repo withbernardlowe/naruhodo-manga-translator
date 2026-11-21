@@ -5,6 +5,7 @@
 import type { ButtonHTMLAttributes, ComponentChildren, HTMLAttributes } from 'preact';
 import { useId, useState } from 'preact/hooks';
 import { REVEAL_HINT } from '../shared/page-text.ts';
+import { TRANSLATE_ICON } from '../shared/translate-icon.ts';
 import type { SpreadSide } from '../shared/spread-order.ts';
 import type { PageHeading } from './view.ts';
 
@@ -159,6 +160,7 @@ export function Callout({ tone = 'info', class: extra, ...rest }: CalloutProps) 
 /**
  * 「譯」區塊（淺色版；頁面 tooltip 的深色版在 content script 用 DOM 畫）：先藏著內容，游標移上去或聚焦才顯示，
  * 離開又藏起來。group 的名字是「譯」，測試與讀屏都靠它找到區塊。
+ * 內容與提示疊在同一格、內容一開始就排進版面（藏著），揭露前後區塊一樣大；切換交給 CSS 淡入淡出。
  */
 export function RevealChip({ children }: { children: ComponentChildren }) {
   const [revealed, setRevealed] = useState(false);
@@ -173,11 +175,28 @@ export function RevealChip({ children }: { children: ComponentChildren }) {
       onFocus={() => setRevealed(true)}
       onBlur={() => setRevealed(false)}
     >
-      <span class="naru-reveal__tag" aria-hidden="true">
-        譯
+      <TranslateIcon />
+      <span class="naru-reveal__body">
+        <span class="naru-reveal__content">{children}</span>
+        <span class="naru-reveal__hint">{REVEAL_HINT}</span>
       </span>
-      {revealed ? children : <span class="naru-reveal__hint">{REVEAL_HINT}</span>}
     </div>
+  );
+}
+
+/** 翻譯圖示：兩個對話框，「あ」在後、「文」在前（形狀見 translate-icon.ts）。 */
+function TranslateIcon() {
+  const bubble = (className: string, shape: (typeof TRANSLATE_ICON)['source' | 'target']) => (
+    <g class={className}>
+      <path class="naru-reveal__bubble" d={shape.bubble} />
+      <path class="naru-reveal__glyph" d={shape.glyph} />
+    </g>
+  );
+  return (
+    <svg class="naru-reveal__icon" viewBox={TRANSLATE_ICON.viewBox} aria-hidden="true">
+      {bubble('naru-reveal__src', TRANSLATE_ICON.source)}
+      {bubble('naru-reveal__dst', TRANSLATE_ICON.target)}
+    </svg>
   );
 }
 
