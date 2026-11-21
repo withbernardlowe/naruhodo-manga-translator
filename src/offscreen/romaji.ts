@@ -136,6 +136,36 @@ function tokenRomaji(token: RomajiToken): string {
   return token.surface;
 }
 
+const isHa = (token: RomajiToken | undefined) => token?.pos === '助詞' && token.surface === 'は';
+
+/**
+ * 笑聲（あはは、わはは）：IPADIC 把每個「は」都當成係助詞，照助詞會寫成 a wa wa。正常句子不會連著兩個 は 助詞，
+ * 所以連續兩個以上就當成笑聲，連同前面一個假名的感嘆（あ、わ、うわ）併成一個詞，照字面讀 ha。
+ */
+function mergeLaughter(tokens: readonly RomajiToken[]): RomajiToken[] {
+  const out: RomajiToken[] = [];
+  for (let i = 0; i < tokens.length; i++) {
+    let end = i;
+    while (isHa(tokens[end])) end++;
+    if (end - i < 2) {
+      out.push(tokens[i]!);
+      continue;
+    }
+    const before = out.at(-1);
+    const lead = before && before.pos !== '助詞' && /^[ぁ-ゖァ-ヺ]{1,2}$/.test(before.surface) ? out.pop()!.surface : '';
+    const surface = lead + 'は'.repeat(end - i);
+    out.push({ surface, pos: '感動詞', posDetail1: '*', reading: toKatakana(surface), pronunciation: toKatakana(surface) });
+    i = end - 1;
+  }
+  return out;
+}
+
+/**
+ * 被「ー」切斷落單的語尾（でーす、ませーん、すごーい）：接回「ー」前面的詞。只認 す、ん、い：
+ * 「ー」後面落單的 な、や 也可能是另一個詞（すげーな 的 な 被 IPADIC 當成助動詞，要寫成 sugē na）。
+ */
+const isCutTail = (token: RomajiToken) => /^[すんいスンイ]$/.test(token.surface);
+
 /** 開括號、開引號：不寫進羅馬拼音，原文接到下一個詞前面（「本」 整個是一個詞）。 */
 const OPENING = /^[「『（(［[【〈《“‘｛{〔]+$/;
 
@@ -151,6 +181,8 @@ export function romajiWords(tokens: readonly RomajiToken[]): RomajiWord[] {
   // 上一個詞不能再接東西：標點與拉長音之後另起一個詞（来れない?なんで → korenai? na）；
   // 自己一個詞的助詞後面也不接（これはない：IPADIC 把 ない 當助動詞，但不能寫成 wanai）
   let closed = false;
+  // 上一個是獨立的拉長音「ー」：落單的語尾（isCutTail）要接回去
+  let afterLong = false;
   /** 原文接到上一個詞（沒有上一個詞就自己一個、沒有羅馬拼音）。 */
   const attach = (surface: string) => {
     const last = words.at(-1);
@@ -162,8 +194,10 @@ export function romajiWords(tokens: readonly RomajiToken[]): RomajiWord[] {
     words.push({ 原文: pending + surface, 羅馬拼音: latin });
     pending = '';
   };
-  for (const token of tokens) {
+  for (const token of mergeLaughter(tokens)) {
     const last = words.at(-1);
+    const cutTail = afterLong && isCutTail(token);
+    afterLong = false;
     const mark = punctuation(token.surface);
     if (mark !== undefined) {
       // 句首的標點（......どこまで）自己一個詞
@@ -181,16 +215,18 @@ export function romajiWords(tokens: readonly RomajiToken[]): RomajiWord[] {
       continue;
     }
     if (LONG_VOWEL.test(token.surface)) {
-      const vowel = closed ? undefined : last?.羅馬拼音.match(VOWEL_END)?.[0];
+      // 助詞也拉長（でーす 的 で）；標點後面沒有母音可拉，VOWEL_END 自然對不上
+      const vowel = last?.羅馬拼音.match(VOWEL_END)?.[0];
       attach(token.surface);
       if (vowel) last!.羅馬拼音 = last!.羅馬拼音.slice(0, -1) + MACRON[vowel];
-      // 拉長音是語氣停在這裡，後面另起一個詞（すげーな：IPADIC 把 な 當助動詞，但不能寫成 sugēna）
+      // 拉長音是語氣停在這裡，後面另起一個詞（すげーな：IPADIC 把 な 當助動詞，但不能寫成 sugēna）；落單的語尾例外
       closed = true;
+      afterLong = true;
       continue;
     }
     const piece = tokenRomaji(token);
     const prev = last?.羅馬拼音;
-    if (prev !== undefined && prev !== '' && !closed && (joinsPrevious(token) || prev.endsWith(SOKUON))) {
+    if (prev !== undefined && prev !== '' && (cutTail || (!closed && (joinsPrevious(token) || prev.endsWith(SOKUON))))) {
       attach(token.surface);
       // 行こ＋う：跨詞的 o＋u 也是長音
       last!.羅馬拼音 = token.pos === '助動詞' && piece === 'u' && prev.endsWith('o') ? prev.slice(0, -1) + 'ō' : joinSokuon(prev, piece);

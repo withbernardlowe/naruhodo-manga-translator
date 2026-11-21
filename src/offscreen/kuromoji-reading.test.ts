@@ -61,6 +61,21 @@ describe('羅馬拼音', () => {
     expect(read('すげーなこの店').羅馬拼音).toBe('sugē na kono mise');
   });
 
+  it('拉長的 です／ます／ません：助詞後面的「ー」也拉長，被「ー」切斷落單的語尾接回去', () => {
+    expect(read('朝ごはんでーす!').羅馬拼音).toBe('asa gohan dēsu!');
+    expect(read('準備しまーす').羅馬拼音).toBe('junbi shimāsu');
+    expect(read('知りませーん').羅馬拼音).toBe('shirimasēn');
+    expect(read('知りませーんでした').羅馬拼音).toBe('shirimasēndeshita');
+    expect(read('すごーい').羅馬拼音).toBe('sugōi');
+    // 「ー」後面是別的詞就照舊另起一個詞
+    expect(read('そーかな').羅馬拼音).toBe('sō ka na');
+  });
+
+  it('連續的 は 是笑聲，不是助詞', () => {
+    expect(read('わはは、楽しいね').羅馬拼音).toBe('wahaha, tanoshii ne');
+    expect(read('あははは!').羅馬拼音).toBe('ahahaha!');
+  });
+
   it('半形 ? ! ~ . 當標點：黏在前一個詞後面，下一個詞另起', () => {
     expect(read('え?来れない?なんで?').羅馬拼音).toBe('e? korenai? na nde?');
     expect(read('まずは5番!').羅馬拼音).toBe('mazuwa 5 ban!');
@@ -88,7 +103,7 @@ describe('羅馬拼音按詞（#330）', () => {
   });
 
   it('原文接起來等於整句、羅馬拼音接起來等於整句羅馬拼音', () => {
-    for (const ja of ['え?来れない?なんで?', '只々花が好き', '「本当に」おいしー']) {
+    for (const ja of ['え?来れない?なんで?', '只々花が好き', '「本当に」おいしー', '朝ごはんでーす!', 'わはは、楽しいね']) {
       const r = read(ja);
       expect(r.羅馬拼音分詞.map((w) => w.原文).join('')).toBe(ja);
       expect(r.羅馬拼音分詞.map((w) => w.羅馬拼音).filter(Boolean).join(' ')).toBe(r.羅馬拼音);
