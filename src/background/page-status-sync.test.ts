@@ -13,7 +13,7 @@ const analyzing = (anchorId: string, pageHash: string): PageView => ({
 
 const done = (page: PageView): PageView => ({ ...page, transcript: { state: 'done', text: { balloons: [], looseText: [] }, translated: true } });
 
-function setup({ hosted = true } = {}) {
+function setup({ hosted = true, active = [] as number[] } = {}) {
   const sent: [number, StatusPanel | undefined][] = [];
   const badges: [number, ActionBadge | undefined][] = [];
   const strips: [number, boolean][] = [];
@@ -23,6 +23,7 @@ function setup({ hosted = true } = {}) {
     accessProblem: async () => undefined,
     stripBilled: async () => hosted,
     setStrip: (tabId, strip) => void strips.push([tabId, strip]),
+    isActive: async (tabId) => active.includes(tabId),
   });
   return { sync, sent, badges, strips };
 }
@@ -120,6 +121,27 @@ describe('全站狀態送到 content script 與圖示 badge', () => {
 
     expect(sent.map(([tabId, panel]) => [tabId, rowTexts(panel)])).toEqual([[1, ['queued']]]);
     expect(badges.at(-1)).toEqual([1, undefined]);
+  });
+});
+
+describe('SW 重新啟動（閒置被收掉、外掛重新載入）', () => {
+  it('記憶體是空的：已啟動的 tab 一有更新就接著送面板與 badge', async () => {
+    const { sync, sent, badges } = setup({ active: [1] });
+
+    await sync.jobEvent({ tabId: 1, event: 'start', pageHash: 'h1', job: 1 });
+    await sync.pagesUpdated(1, [analyzing('a1', 'h1')]);
+
+    expect(rowTexts(sent.at(-1)?.[1])).toEqual(['辨識文字…']);
+    expect(badges.at(-1)).toEqual([1, 'busy']);
+  });
+
+  it('沒啟動的 tab（停止後 transcriber 再 publish 一次空的）：不送', async () => {
+    const { sync, sent, badges } = setup({ active: [] });
+
+    await sync.pagesUpdated(1, []);
+
+    expect(sent).toEqual([]);
+    expect(badges).toEqual([]);
   });
 });
 

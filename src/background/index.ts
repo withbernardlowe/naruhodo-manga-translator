@@ -426,6 +426,8 @@ const pageStatus = createPageStatusSync({
     else stripTabs.delete(tabId);
     void refreshActionTitle(tabId);
   },
+  // activation 在下面才建；這裡只在 SW 醒來後第一次收到更新時呼叫
+  isActive: (tabId) => activation.isActive(tabId),
 });
 
 const outlineSync = createOutlineSync((tabId, pages) => {

@@ -18,6 +18,8 @@ export interface PageStatusSyncDeps {
   stripBilled(): Promise<boolean>;
   /** 這個 tab 開始／不再是照句數計頁的 Strip：圖示的 hover 提示多／少一行。 */
   setStrip(tabId: number, strip: boolean): void;
+  /** 這個 tab 啟動著沒（存在 storage）：SW 重新啟動後記憶體是空的，靠它接回已啟動的 tab。 */
+  isActive(tabId: number): Promise<boolean>;
 }
 
 interface TabStatus {
@@ -40,6 +42,32 @@ export function createPageStatusSync(deps: PageStatusSyncDeps) {
   let model: ModelStatus = { state: 'idle' };
   /** 內建翻譯的額度快用完（#237）：全域的，每個 tab 的綠點都換成橘點。 */
   let lowQuota = false;
+  /** 記憶體裡沒有、正在問 isActive 的 tab。 */
+  const waking = new Map<number, Promise<TabStatus | undefined>>();
+
+  const newTab = (): TabStatus => ({ pages: [], strip: false, stripShown: false, local: new Map(), translating: new Map() });
+
+  /**
+   * 記憶體裡的 tab；沒有的話（SW 閒置被收掉、外掛重新載入）問它是不是啟動著，是就接回來。
+   * 不接回來的話，SW 醒來之後這個 tab 就再也沒有全站狀態與 badge。
+   */
+  function tabFor(tabId: number): Promise<TabStatus | undefined> {
+    const known = tabs.get(tabId);
+    if (known) return Promise.resolve(known);
+    const pending = waking.get(tabId);
+    if (pending) return pending;
+    const asking = deps.isActive(tabId).then((active) => {
+      // 問的期間停止了（clear）
+      if (waking.get(tabId) !== asking) return tabs.get(tabId);
+      waking.delete(tabId);
+      if (!active || tabs.has(tabId)) return tabs.get(tabId);
+      const tab = newTab();
+      tabs.set(tabId, tab);
+      return tab;
+    });
+    waking.set(tabId, asking);
+    return asking;
+  }
 
   async function refresh(tabId: number): Promise<void> {
     const tab = tabs.get(tabId);
@@ -66,19 +94,18 @@ export function createPageStatusSync(deps: PageStatusSyncDeps) {
 
   return {
     /** 沒啟動的 tab 不算（停止時 transcriber 還會 publish 一次空的）。 */
-    pagesUpdated(tabId: number, pages: PageView[], strip = false): Promise<void> {
-      const tab = tabs.get(tabId);
-      if (!tab) return Promise.resolve();
+    async pagesUpdated(tabId: number, pages: PageView[], strip = false): Promise<void> {
+      const tab = await tabFor(tabId);
+      if (!tab) return;
       tab.pages = pages;
       tab.strip = strip;
       return refresh(tabId);
     },
-    jobEvent({ tabId, event, pageHash, job }: JobEvent): Promise<void> {
-      const tab = tabs.get(tabId);
-      if (!tab) return Promise.resolve();
+    async jobEvent({ tabId, event, pageHash, job }: JobEvent): Promise<void> {
+      if (event === 'enqueue') return;
+      const tab = await tabFor(tabId);
+      if (!tab) return;
       switch (event) {
-        case 'enqueue':
-          return Promise.resolve();
         case 'start':
           tab.local.set(job, pageHash);
           break;
@@ -111,7 +138,7 @@ export function createPageStatusSync(deps: PageStatusSyncDeps) {
     },
     /** 啟動：badge 是小點。 */
     activated(tabId: number): Promise<void> {
-      if (!tabs.has(tabId)) tabs.set(tabId, { pages: [], strip: false, stripShown: false, local: new Map(), translating: new Map() });
+      if (!tabs.has(tabId)) tabs.set(tabId, newTab());
       return refresh(tabId);
     },
     /** 重新整理、換頁：content script 是新的（圖示的 tab 專屬 badge 也被 Chrome 清掉），之後的狀態都重送。 */
@@ -127,6 +154,7 @@ export function createPageStatusSync(deps: PageStatusSyncDeps) {
     },
     /** 停止或關 tab。 */
     clear(tabId: number): void {
+      waking.delete(tabId);
       const tab = tabs.get(tabId);
       if (!tab || !tabs.delete(tabId)) return;
       deps.setBadge(tabId, undefined);
