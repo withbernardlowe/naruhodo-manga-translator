@@ -3,7 +3,7 @@ import type { BillingPeriod } from './hosted-api.ts';
 import type { Stripe } from './long-page.ts';
 import type { PageText, RatioRect, Reading } from './page-text.ts';
 import type { EditableFields, NotesSuggestion, StaleReason, SuggestionRef } from './series-notes.ts';
-import type { AnchorStatus, StatusAction } from './page-status.ts';
+import type { StatusAction, StatusPanel } from './page-status.ts';
 import type { SeriesOption } from './series.ts';
 import type { NotesChanges, NotesEntry, NotesInput, NotesOutput, SeriesGuessOutput, TitleSignals, TranslateInput, TranslateOutput } from './translator.ts';
 
@@ -138,11 +138,11 @@ export type Message =
   | { type: 'content:highlight'; line: LineRef | null }
   /** onboarding → SW：點圖示時卡住、解決後按「回到漫畫」（#185）：切回那個分頁、接著翻還沒翻的頁。 */
   | { type: 'onboarding:return'; tabId: number }
-  /** SW → content script：這個 tab 每個 anchor 上的狀態（#185），整份換掉；沒列到的 anchor 拿掉狀態。 */
-  | { type: 'content:pageStatus'; anchors: AnchorStatus[] }
+  /** SW → content script：這個 tab 視窗右上角的全站狀態（#185），整份換掉；undefined＝收起。 */
+  | { type: 'content:pageStatus'; panel: StatusPanel | undefined }
   /** SW → content script：這個 tab 每個 Page 上的外圈（#285 翻譯中、#283 等待中），整份換掉；沒列到的拿掉。 */
   | { type: 'content:pageOutlines'; pages: PageOutlines[] }
-  /** content script → SW：Page 上的紅色小標籤被點了（#185）。 */
+  /** content script → SW：全站狀態裡紅色那一列的按鈕被點了（#185）。 */
   | { type: 'content:statusAction'; action: StatusAction; pageHash: string }
   /** e2e build 才有：等同點外掛圖示（spec #27 第 12 節）。 */
   | { type: 'test:activate'; tabId: number }

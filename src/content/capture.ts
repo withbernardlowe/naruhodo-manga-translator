@@ -7,6 +7,7 @@ import { createTrace } from '../shared/trace.ts';
 import { describeElement, findOccluders, hideOccluders, type HiddenOccluders } from './occlusion.ts';
 import { untilRepainted, type Overlay } from './overlay.ts';
 import { startRepaint, stopRepaint } from './repaint.ts';
+import type { StatusPanelView } from './status-panel.ts';
 
 const trace = createTrace('content');
 
@@ -17,8 +18,10 @@ export interface CaptureFinished {
   overlayHiddenMs: number | undefined;
 }
 
-export function createCapturePrep({ overlay, anchors, longAnchors, isOwn }: {
+export function createCapturePrep({ overlay, statusPanel, anchors, longAnchors, isOwn }: {
   overlay: Overlay;
+  /** 視窗右上角的全站狀態。 */
+  statusPanel: Pick<StatusPanelView, 'hideForCapture' | 'restoreAfterCapture'>;
   /** 最近一次量到的 Page 候選元素。 */
   anchors: () => Element[];
   /** 其中的長 Page（spec #142）：它們的覆蓋層一律不藏。 */
@@ -41,8 +44,9 @@ export function createCapturePrep({ overlay, anchors, longAnchors, isOwn }: {
     occluders = hideOccluders(found);
     if (__DEBUG__) trace('capture:prepare', { hideOverlay, mark, ms: performance.now() - startedAt, occluders: found.slice(0, 10).map(describeElement) });
     try {
-      // Page 上的狀態（#185）一律藏：小標籤的字不能進 OCR，也不能改變 Page hash
-      overlay.hideStatusForCapture();
+      // 全站狀態（#185）與 Page 上的外圈一律藏：狀態的字不能進 OCR，也不能改變 Page hash
+      statusPanel.hideForCapture();
+      overlay.hideOutlinesForCapture();
       // 沒藏任何東西也等重繪：重繪動畫已經開始，頁面有在畫就只要兩個 frame，等不到就表示截到的會是舊 frame
       const [, painted] = await Promise.all([hideOverlay ? overlay.hideForCapture(longAnchors) : undefined, untilRepainted()]);
       if (__DEBUG__ && !painted) trace('capture:notPainted', { visibilityState: document.visibilityState, ms: performance.now() - startedAt });
@@ -58,6 +62,7 @@ export function createCapturePrep({ overlay, anchors, longAnchors, isOwn }: {
     stopRepaint();
     const stable = occluders?.restore() ?? true;
     occluders = undefined;
+    statusPanel.restoreAfterCapture();
     return { stable, overlayHiddenMs: overlay.restoreAfterCapture() };
   }
 

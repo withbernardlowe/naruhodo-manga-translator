@@ -5,7 +5,8 @@
 import type { ButtonHTMLAttributes, ComponentChildren, HTMLAttributes } from 'preact';
 import { useId, useState } from 'preact/hooks';
 import { REVEAL_HINT } from '../shared/page-text.ts';
-import type { PageHeading, SpreadSide } from './view.ts';
+import type { SpreadSide } from '../shared/spread-order.ts';
+import type { PageHeading } from './view.ts';
 
 const cx = (...names: (string | false | undefined)[]) => names.filter(Boolean).join(' ');
 

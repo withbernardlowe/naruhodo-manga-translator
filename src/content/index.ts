@@ -14,6 +14,7 @@ import { watchDisplaySettings } from '../shared/display-settings.ts';
 import { createTrace } from '../shared/trace.ts';
 import { createCapturePrep } from './capture.ts';
 import { createOverlay, HOST_ATTRIBUTE, intrinsicSize, isShown, untilRepainted } from './overlay.ts';
+import { createStatusPanel, STATUS_HOST_ATTRIBUTE } from './status-panel.ts';
 import { columnMemberVisible, columnRegion, coveredByLater, longPageVisible, MIN_PAGE_SIDE, pageCandidateRejection, verticalColumns } from './page-candidates.ts';
 import { watchPageTurns } from './page-turn.ts';
 import { stopRepaint } from './repaint.ts';
@@ -180,8 +181,10 @@ if (!globalThis.__naruhodo) {
     onHover(line) {
       void send({ type: 'content:hover', line });
     },
-    // Page 上的紅色小標籤（#185）：看方案、登入、重試由 SW 處理
-    onStatusAction(action, pageHash) {
+  });
+  // 視窗右上角的全站狀態（#185）：看方案、登入、重試由 SW 處理
+  const statusPanel = createStatusPanel({
+    onAction(action, pageHash) {
       trace('status:action', { action, pageHash });
       void send({ type: 'content:statusAction', action, pageHash });
     },
@@ -198,9 +201,9 @@ if (!globalThis.__naruhodo) {
     if (mode === 'read') void untilRepainted().then(() => send({ type: 'content:overlayShown' }));
   });
 
-  /** 在自己的覆蓋層（shadow host）裡。 */
-  const inOverlayHost = (el: Element) => el.closest(`[${HOST_ATTRIBUTE}]`) !== null;
-  const capturePrep = createCapturePrep({ overlay, anchors: () => [...anchors.values()], longAnchors, isOwn: inOverlayHost });
+  /** 在自己的覆蓋層或全站狀態（shadow host）裡。 */
+  const inOverlayHost = (el: Element) => el.closest(`[${HOST_ATTRIBUTE}], [${STATUS_HOST_ATTRIBUTE}]`) !== null;
+  const capturePrep = createCapturePrep({ overlay, statusPanel, anchors: () => [...anchors.values()], longAnchors, isOwn: inOverlayHost });
 
   // 翻頁訊號 → SW 截圖比對 hash（#34）。
   // 覆蓋層改過 position 的父元素，之後它的 style 變動一律當成自己的（頁面改它的 style 會漏掉，接受）
@@ -250,15 +253,9 @@ if (!globalThis.__naruhodo) {
         if (anchor instanceof HTMLElement) overlay.confirm(anchor);
         return false;
       }
-      case 'content:pageStatus': {
-        // anchor 不在最近一次量到的 Page 裡（已經捲走或換頁）就不畫
-        const statuses = message.anchors.flatMap(({ anchorId, ...status }) => {
-          const anchor = anchors.get(anchorId);
-          return anchor instanceof HTMLElement ? [{ anchor, status }] : [];
-        });
-        overlay.setStatuses(statuses);
+      case 'content:pageStatus':
+        statusPanel.set(message.panel);
         return false;
-      }
       case 'content:pageOutlines': {
         // anchor 不在最近一次量到的 Page 裡（已經捲走或換頁）就不畫
         const outlines = message.pages.flatMap(({ anchorId, subRect, translating, waiting }) => {
@@ -321,6 +318,7 @@ if (!globalThis.__naruhodo) {
     stopWatchingDisplaySettings();
     stopRepaint();
     overlay.clear();
+    statusPanel.stop();
     anchors.clear();
     longAnchors.clear();
     globalThis.__naruhodo = undefined;

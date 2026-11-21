@@ -7,7 +7,7 @@
  * 安裝時怎麼決定翻譯模式與 onboarding 在 src/background/install.test.ts。
  * 兩條路的譯文都來自同一份 ground truth，所以用 __translateCalls（只有走 offscreen 時才加）分辨走了哪一條。
  * 免費額度用完（#92）：Worker 回 402 → SW 的 Hosted Translator → side panel 重新向 Worker 讀額度，這串訊息與 API 契約只有這裡測得到；
- * Page 上的紅標籤（#185）：402 → transcript 的 quotaExhausted → content script 的小標籤 → 點了 SW 打開帳號與訂閱頁（#213）；
+ * 全站狀態的紅色那列（#185）：402 → transcript 的 quotaExhausted → content script 視窗右上角的面板 → 點了 SW 打開帳號與訂閱頁（#213）；
  * 顯示規則（哪一行文字、警告色、按鈕）在 src/ui/view.test.ts。
  * 訂閱（#94、#176、spec #254）：side panel 的「查看方案」打開帳號頁 → 帳號頁的「訂閱年繳」向 Worker 建立 checkout、請 SW 用新分頁打開 checkout 頁
  * → Paddle 的 webhook 送到 Worker → SW 查到訂閱中就關掉付款分頁、side panel 重讀額度、顯示「已訂閱（年繳）」與本月額度。
@@ -406,7 +406,7 @@ test('管理訂閱：設定頁的「管理帳號 →」打開帳號頁；Paddle 
   expect(context.pages()).toHaveLength(pagesBefore);
 });
 
-test('免費額度用完：Worker 回額度不足後，side panel 顯示用完的狀態，逐字稿仍有原文與讀音；Page 上的紅標籤打開帳號與訂閱頁', async ({
+test('免費額度用完：Worker 回額度不足後，side panel 顯示用完的狀態，逐字稿仍有原文與讀音；全站狀態的「查看方案」打開帳號與訂閱頁', async ({
   context,
   sw,
   extensionId,
@@ -440,9 +440,11 @@ test('免費額度用完：Worker 回額度不足後，side panel 顯示用完�
   await expect(transcript.locator('rt').first()).toBeVisible();
   await expect(transcript.getByText('未翻譯').first()).toBeVisible();
 
-  // 沒開側邊欄的讀者看的是 Page 右上角（#185）：紅標籤點了打開帳號與訂閱頁（#213），說明用完了、可以訂閱
+  // 沒開側邊欄的讀者看的是視窗右上角的全站狀態（#185）：紅色那列的「查看方案」打開帳號與訂閱頁（#213），說明用完了、可以訂閱
+  const status = page.locator('[data-naruhodo-status]');
+  await expect(status.getByText('免費額度用完了')).toBeVisible();
   const opened = context.waitForEvent('page');
-  await page.locator('[data-naruhodo-overlay] .st-chip').getByText('免費額度用完了・查看方案').first().click();
+  await status.getByRole('button', { name: '查看方案' }).click();
   const account = await opened;
   await expect.poll(() => account.url()).toBe(`chrome-extension://${extensionId}/account.html?from=${tabId}`);
   await expect(account.getByRole('status').filter({ hasText: '免費額度已用完' })).toBeVisible();
@@ -473,7 +475,7 @@ test('刪除帳號：帳號頁的「刪除帳號」換到確認畫面 → 確定
 
 // unit 測不到的：還登入著、同意的是舊版說明時，紅標籤帶著漫畫分頁打開 onboarding 的補同意畫面；side panel 說明卡寫進的同意
 // 讓 SW 直接接著翻已啟動的分頁（Data Use Consent）。哪種狀態顯示哪張卡、從哪一步開始在 src/ui/view.test.ts、src/shared/onboarding.test.ts。
-test('資料使用說明改版、還登入著：紅標籤打開補同意畫面；side panel 的說明卡按同意就接著翻，不用重新登入', async ({
+test('資料使用說明改版、還登入著：全站狀態的「查看」打開補同意畫面；side panel 的說明卡按同意就接著翻，不用重新登入', async ({
   context,
   sw,
   extensionId,
@@ -497,7 +499,9 @@ test('資料使用說明改版、還登入著：紅標籤打開補同意畫面�
   await expect(panel.getByText(/尚未登入/)).toHaveCount(0);
 
   const opened = context.waitForEvent('page');
-  await page.locator('[data-naruhodo-overlay] .st-chip').getByText('資料使用說明更新了・查看').first().click();
+  const status = page.locator('[data-naruhodo-status]');
+  await expect(status.getByText('資料使用說明更新了')).toBeVisible();
+  await status.getByRole('button', { name: '查看', exact: true }).click();
   const onboarding = await opened;
   await expect.poll(() => onboarding.url()).toBe(`chrome-extension://${extensionId}/onboarding.html?step=consent&from=${tabId}`);
   await expect(onboarding.getByRole('region', { name: '資料使用說明' }).getByText('資料使用說明更新了，請再確認一次')).toBeVisible();
