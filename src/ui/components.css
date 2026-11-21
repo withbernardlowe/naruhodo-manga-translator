@@ -97,18 +97,43 @@ a.naru-btn { text-decoration: none; }
 /* 標題一行、按鈕一行，由上往下排 */
 .naru-callout--stack { flex-direction: column; align-items: flex-start; }
 
-/* RevealChip（淺色）：虛線框＋「譯」標籤；揭露後換成實線，區塊隨內容長大 */
+/*
+ * RevealChip（淺色）：虛線框＋翻譯圖示（兩個對話框）。內容與提示疊在同一格，區塊大小取兩者較大的，
+ * 揭露前後不變；揭露時提示往上淡出、內容從下淡入，圖示的「文」亮起來往前跳一下
+ */
 .naru-reveal {
-  display: flex; align-items: baseline; gap: var(--naru-space-2);
+  display: flex; align-items: center; gap: var(--naru-space-2);
   margin-top: var(--naru-space-1); padding: var(--naru-space-1) var(--naru-space-2);
   border: 1px dashed var(--naru-line-strong); border-radius: var(--naru-radius-sm);
   background: var(--naru-surface-2); cursor: default;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
 }
 .naru-reveal:focus-visible { outline: 2px solid var(--naru-accent); outline-offset: 2px; }
-.naru-reveal--on { border-style: solid; border-color: var(--naru-accent-weak); background: var(--naru-accent-weak); }
-.naru-reveal__tag {
-  flex: none; padding: 0 6px; border-radius: 4px;
-  font-size: 11px; font-weight: 700; line-height: 1.6; color: var(--naru-on-accent); background: var(--naru-accent);
+.naru-reveal--on { border-color: var(--naru-accent-weak); background: var(--naru-accent-weak); }
+.naru-reveal__icon { flex: none; width: 20px; height: 20px; overflow: visible; }
+.naru-reveal__icon g { transform-box: fill-box; transform-origin: center;
+  transition: opacity 0.24s ease, transform 0.26s cubic-bezier(0.3, 1.4, 0.5, 1); }
+.naru-reveal__bubble { fill: var(--naru-surface-2); stroke-width: 1.3; transition: fill 0.2s ease, stroke 0.24s ease; }
+.naru-reveal__glyph { transition: fill 0.24s ease; }
+.naru-reveal__src .naru-reveal__bubble { stroke: var(--naru-line-strong); }
+.naru-reveal__src .naru-reveal__glyph { fill: var(--naru-ruby); }
+.naru-reveal__dst .naru-reveal__bubble { stroke: var(--naru-ink-3); }
+.naru-reveal__dst .naru-reveal__glyph { fill: var(--naru-ink-3); }
+.naru-reveal--on .naru-reveal__bubble { fill: var(--naru-accent-weak); }
+.naru-reveal--on .naru-reveal__src { opacity: 0.5; transform: scale(0.92); }
+.naru-reveal--on .naru-reveal__dst { transform: scale(1.08); }
+.naru-reveal--on .naru-reveal__dst .naru-reveal__bubble { stroke: var(--naru-ink); }
+.naru-reveal--on .naru-reveal__dst .naru-reveal__glyph { fill: var(--naru-ink); }
+.naru-reveal__body { display: grid; flex: 1; min-width: 0; }
+.naru-reveal__body > span { grid-area: 1 / 1;
+  transition: opacity 0.2s ease, transform 0.2s cubic-bezier(0.2, 0.7, 0.2, 1), visibility 0s; }
+/* 藏著的那層用 visibility（淡出完才藏）：讀屏讀不到，innerText 也不含 */
+.naru-reveal__content { visibility: hidden; opacity: 0; transform: translateY(4px); transition-delay: 0s, 0s, 0.2s; }
+.naru-reveal--on .naru-reveal__content { visibility: visible; opacity: 1; transform: none; transition-delay: 0s; }
+.naru-reveal__hint { align-self: center; }
+.naru-reveal--on .naru-reveal__hint { visibility: hidden; opacity: 0; transform: translateY(-4px); transition-delay: 0s, 0s, 0.2s; }
+@media (prefers-reduced-motion: reduce) {
+  .naru-reveal .naru-reveal__body > span, .naru-reveal .naru-reveal__icon g { transform: none !important; }
 }
 /* 進行中的圓點閃爍（side panel 頁首的「辨識中」「翻譯中」） */
 @keyframes naru-progress-pulse { 50% { opacity: 0.25; } }
