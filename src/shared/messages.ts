@@ -1,7 +1,7 @@
 import type { FrameMark, FrameVerdict } from './frame-mark.ts';
 import type { BillingPeriod } from './hosted-api.ts';
 import type { Stripe } from './long-page.ts';
-import type { PageText, RatioRect } from './page-text.ts';
+import type { PageText, RatioRect, Reading } from './page-text.ts';
 import type { EditableFields, NotesSuggestion, StaleReason, SuggestionRef } from './series-notes.ts';
 import type { AnchorStatus, StatusAction } from './page-status.ts';
 import type { SeriesOption } from './series.ts';
@@ -32,7 +32,7 @@ export type Message =
   | ({ type: 'offscreen:crop' } & CropRequest)
   /** SW → offscreen：對一個 Page 跑本機流水線（偵測＋OCR＋閱讀順序＋kuromoji 讀音）。回應 AnalyzeResponse。 */
   | ({ type: 'offscreen:analyze' } & AnalyzeRequest)
-  /** SW → offscreen：原文 → kuromoji 整句讀音（命中 #195 之前的快取時換掉 LLM 的讀音）。回應 KuromojiReadingsResponse。 */
+  /** SW → offscreen：原文 → kuromoji 整句讀音與羅馬拼音（命中 #195 或羅馬拼音之前的快取時換上）。回應 KuromojiReadingsResponse。 */
   | { type: 'offscreen:kuromojiReadings'; texts: string[] }
   /** offscreen → 全部：模型下載／載入狀態。 */
   | { type: 'models:status'; status: ModelStatus }
@@ -457,7 +457,7 @@ export interface PreviousCapture {
 /** waiting：長 Page 的這一截裡被可見範圍邊緣切到、先不收的框（Page 座標，#283）；沒有時省略。 */
 export type AnalyzeResponse = { text: PageText; waiting?: LineBox[] } | { error: string };
 /** 跟 texts 同順序。 */
-export type KuromojiReadingsResponse = { readings: string[] } | { error: string };
+export type KuromojiReadingsResponse = { readings: Reading[] } | { error: string };
 
 /**
  * idle＝沒載入、也不確定在不在快取（SW 回答時會查快取，齊全就回 downloaded）；downloaded＝已在快取、還沒載入（#169 預先下載）；

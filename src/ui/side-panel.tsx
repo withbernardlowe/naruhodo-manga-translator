@@ -11,7 +11,8 @@ import { megabytes } from '../shared/model-download.ts';
 import type { PageMode } from '../shared/page-mode.ts';
 import { loadPunctuationFont } from '../shared/punctuation-face.ts';
 import type { StaleReason } from '../shared/series-notes.ts';
-import { currentDisplay, type Display, type TranscriptDisplay } from '../shared/transcript-display.ts';
+import { currentDisplay, lineDisplay, type LineDisplay, type TranscriptDisplay } from '../shared/transcript-display.ts';
+import { DEFAULT_DISPLAY_SETTINGS, type DisplaySettings } from '../shared/display-settings.ts';
 import type { TranslationMode } from '../shared/translation-mode.ts';
 import { Button, Callout, PageHeader, SegmentedControl, type SegmentOption } from './components.tsx';
 import type { ConsentState } from '../shared/data-consent.ts';
@@ -75,9 +76,9 @@ function ModelProgress({ model }: { model: NonNullable<FooterView['model']> }) {
   );
 }
 
-/** 逐字稿的共用狀態：依 Page Mode 的顯示方式（#76）與 hover 同步（#39）。 */
+/** 逐字稿的共用狀態：每句顯示哪些部分（依 Page Mode 與設定，#76）與 hover 同步（#39）。 */
 interface TranscriptSync {
-  display: Display;
+  lines: LineDisplay;
   /** 頁面上滑鼠所在的那句。 */
   hovered: LineRef | undefined;
   /** 滑過 panel 的某行 → 頁面上那句高亮；null＝離開。 */
@@ -168,7 +169,7 @@ function PageItem({
   sync: TranscriptSync;
 }) {
   const { transcript } = page;
-  const { display, hovered, onLineHover } = sync;
+  const { lines, hovered, onLineHover } = sync;
   const headingId = useId();
   return (
     <li aria-labelledby={headingId}>
@@ -205,7 +206,7 @@ function PageItem({
           key={transcript.translating ? 'translating' : 'shown'}
           text={transcript.text}
           translated={transcript.translated}
-          display={display}
+          show={lines}
           hoveredId={hovered?.pageHash === page.pageHash ? hovered.lineId : undefined}
           onHover={(lineId) => onLineHover(lineId === null ? null : { pageHash: page.pageHash, lineId })}
         />
@@ -431,7 +432,7 @@ function ScreenEnd({
 
 const PAGE_MODES: readonly SegmentOption<PageMode>[] = [
   { value: 'read', label: '閱讀', description: '漫畫頁面直接顯示中文' },
-  { value: 'learn', label: '學習', description: '漫畫頁面保留日文，滑過看讀音；逐字稿的譯文也先收起來' },
+  { value: 'learn', label: '學習', description: '漫畫頁面保留日文，游標移到對話框上看讀音；逐字稿的譯文也先收起來' },
 ];
 
 /**
@@ -629,6 +630,8 @@ export interface SidePanelProps {
   /** 逐字稿的顯示方式（Display Level 與振り仮名開關）；依 Page Mode 用其中一個。 */
   transcriptDisplay: TranscriptDisplay;
   onTranscriptDisplayChange: (display: TranscriptDisplay) => void;
+  /** ⚙ 設定頁「顯示」的兩個開關（學習模式直接顯示譯文、羅馬拼音）；沒給＝預設（都關，產品網站的展示）。 */
+  displaySettings?: DisplaySettings;
   /** 重新擷取頁面（模型錯誤的「重試」）。 */
   onScan: () => void;
   /** 翻譯這個 tab 的頁；給 pageHash 就只重翻那一頁。 */
@@ -908,7 +911,7 @@ export function SidePanel(props: SidePanelProps) {
   // 沒登入、沒 key、還沒同意時按了也送不出去：不放「翻譯此頁」，由上面的設定提示帶路
   const layout = panelLayout({ pages, access, translatable: canTranslate(access, consent === 'agreed'), quota: props.quota, strip, modelStatus });
   const staleCharge = chargeNote(access, props.quota, strip !== undefined, 1);
-  const sync: TranscriptSync = { display, hovered, onLineHover: props.onLineHover };
+  const sync: TranscriptSync = { lines: lineDisplay(display, props.displaySettings ?? DEFAULT_DISPLAY_SETTINGS), hovered, onLineHover: props.onLineHover };
   return (
     <div class="naru-side-panel">
       <main>

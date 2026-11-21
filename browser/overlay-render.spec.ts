@@ -400,7 +400,7 @@ test.describe('覆蓋渲染（ground truth）', () => {
     await page.mouse.move(looseCenter.x, looseCenter.y);
     await expect(tooltip).toContainText(loose.原文);
     await expect(tooltip).not.toContainText(loose.譯文);
-    const chipBox = (await tooltip.getByText('滑過這裡看譯文').boundingBox())!;
+    const chipBox = (await tooltip.getByText('游標移到這裡看譯文').boundingBox())!;
     await page.mouse.move(chipBox.x + chipBox.width / 2, chipBox.y + chipBox.height / 2, { steps: 10 });
     await expect(tooltip).toContainText(loose.譯文);
     await page.mouse.move(1, 1);
@@ -412,7 +412,7 @@ test.describe('覆蓋渲染（ground truth）', () => {
     // t1 是 Balloon：跟側邊欄同一句說明（unreadableLabel）
     await expect(tooltip).toContainText('這句讀不出來・頁面保留日文');
     await expect(tooltip.getByText('譯', { exact: true })).toHaveCount(0);
-    await expect(tooltip).not.toContainText('滑過這裡看譯文');
+    await expect(tooltip).not.toContainText('游標移到這裡看譯文');
   });
 });
 

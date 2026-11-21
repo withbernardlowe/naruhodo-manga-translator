@@ -39,7 +39,7 @@ import type { AnalyzeRequest, CropRequest, LineBox, PageThumb, PageView, Previou
 import { translatingLines } from '../shared/page-outlines.ts';
 import type { Capture } from './scan.ts';
 import { findSamePage } from '../shared/page-hash.ts';
-import { pageLines, type PageCharge, type PageText, type StripCharge } from '../shared/page-text.ts';
+import { pageLines, type PageCharge, type PageText, type Reading, type StripCharge } from '../shared/page-text.ts';
 import type { SeriesNotes, TranslatorVersion } from '../shared/series-notes.ts';
 import type { Series } from '../shared/series.ts';
 import { createTrace } from '../shared/trace.ts';
@@ -66,8 +66,8 @@ export interface TranscriberDeps {
   getTranslator(): Translator | undefined | Promise<Translator | undefined>;
   /** 目前會用來翻譯的模型與 prompt 版本（過時提示比對用）；沒有 Translator 時 undefined，就不比版本。 */
   translatorVersion?(): TranslatorVersion | undefined | Promise<TranslatorVersion | undefined>;
-  /** 原文 → kuromoji 整句讀音（offscreen 算）；命中舊快取時換掉 LLM 給的讀音（#195）。 */
-  kuromojiReadings?(texts: string[]): Promise<string[]>;
+  /** 原文 → kuromoji 整句讀音與羅馬拼音（offscreen 算）；命中舊快取時換上（#195、Romaji）。 */
+  kuromojiReadings?(texts: string[]): Promise<Reading[]>;
   /** 這個 tab 啟動時選定的 Series（或 Provisional Series）；沒有就不查也不寫快取。正在猜作品原名時等猜完才回答（#186）。 */
   getSeriesId(tabId: number): Promise<string | undefined>;
   /** 這個 tab 的 Series 還在猜（#186）：新 Page 先跑 OCR，翻譯前才等 Series、查快取。 */

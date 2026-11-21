@@ -23,6 +23,7 @@ import { useHostedQuota, useHostedSession, useTranslationMode } from '../shared/
 import type { BillingPeriod, Quota } from '../shared/hosted-api.ts';
 import type { HostedSession } from '../shared/hosted-session.ts';
 import { dismissHostedHint, onboardingUrl, watchHostedHint, watchOnboarding, type OnboardingProgress } from '../shared/onboarding.ts';
+import { DEFAULT_DISPLAY_SETTINGS, saveDisplaySettings, watchDisplaySettings, type DisplaySettings } from '../shared/display-settings.ts';
 import { DEFAULT_PAGE_MODE, savePageMode, watchPageMode, type PageMode } from '../shared/page-mode.ts';
 import { dismissSubscribedNotice, watchSubscribedNotice } from '../shared/payment-return.ts';
 import { DEFAULT_SIDE_PANEL_ON_ACTIVATION, saveSidePanelOnActivation, watchSidePanelOnActivation } from '../shared/side-panel-setting.ts';
@@ -268,9 +269,40 @@ function SidePanelOnActivation() {
   );
 }
 
+/** ⚙ 設定頁「顯示」的兩個開關（shared/display-settings.ts）；逐字稿與 Problem Report 也讀它。 */
+function useDisplaySettings(): [DisplaySettings, (next: DisplaySettings) => void] {
+  const [settings, setSettings] = useState(DEFAULT_DISPLAY_SETTINGS);
+  useEffect(() => watchDisplaySettings(setSettings), []);
+  const choose = (next: DisplaySettings) => {
+    setSettings(next);
+    void saveDisplaySettings(next);
+  };
+  return [settings, choose];
+}
+
+function DisplaySwitches() {
+  const [settings, choose] = useDisplaySettings();
+  return (
+    <>
+      <Switch
+        label="學習模式直接顯示譯文"
+        description="學習模式下，tooltip 與逐字稿的譯文不用先把游標移到「譯」上就看得到。漫畫頁面一樣只留日文原文。"
+        checked={settings.learnShowsTranslation}
+        onChange={(checked) => choose({ ...settings, learnShowsTranslation: checked })}
+      />
+      <Switch
+        label="讀音加上羅馬拼音"
+        description="有顯示讀音的地方，原文下面多一行羅馬拼音，例如 kinō wa rāmen o tabemashita。"
+        checked={settings.romaji}
+        onChange={(checked) => choose({ ...settings, romaji: checked })}
+      />
+    </>
+  );
+}
+
 /**
  * 設定頁（#93 畫面定案）：按頂部的 ⚙ 打開，整個 side panel 換成這一頁。
- * 翻譯方式是明確的二選一（不會自動切換；切到自備金鑰不會登出），然後是側邊欄、匯出／匯入。
+ * 翻譯方式是明確的二選一（不會自動切換；切到自備金鑰不會登出），然後是側邊欄、顯示、匯出／匯入。
  */
 function Settings({
   mode,
@@ -318,6 +350,10 @@ function Settings({
       )}
       <h2>側邊欄</h2>
       <SidePanelOnActivation />
+      <h2>顯示</h2>
+      <div class="display-switches">
+        <DisplaySwitches />
+      </div>
       <h2>資料</h2>
       <p class="hint">在兩台電腦之間搬作品、角色與用語與翻譯快取（不含 API key 與帳號）。</p>
       <Backup />
@@ -636,6 +672,7 @@ function App({ tabId }: { tabId: number | undefined }) {
   const [hasKey, setHasKey] = useState(true);
   const [pageMode, choosePageMode] = usePageMode();
   const [transcriptDisplay, chooseTranscriptDisplay] = useTranscriptDisplay();
+  const [displaySettings] = useDisplaySettings();
   const [hovered, setHovered] = useState<LineRef | undefined>(undefined);
   const consent = useDataConsent();
   const translationMode = useTranslationMode();
@@ -719,6 +756,7 @@ function App({ tabId }: { tabId: number | undefined }) {
       onPageModeChange={choosePageMode}
       transcriptDisplay={transcriptDisplay}
       onTranscriptDisplayChange={chooseTranscriptDisplay}
+      displaySettings={displaySettings}
       onScan={() => void send({ type: 'panel:scan', tabId: tabId! })}
       onTranslate={(pageHash) => void send({ type: 'panel:translate', tabId: tabId!, ...(pageHash === undefined ? {} : { pageHash }) })}
       onRetranslate={() => void send({ type: 'panel:retranslate', tabId: tabId! })}
@@ -752,6 +790,7 @@ function App({ tabId }: { tabId: number | undefined }) {
                   userAgent: navigator.userAgent,
                   translationMode,
                   pageMode,
+                  displaySettings,
                   modelStatus,
                   pages,
                   context,

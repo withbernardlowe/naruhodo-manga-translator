@@ -37,6 +37,8 @@ export interface BalloonText {
   讀音: string;
   /** #195 起一律 kuromoji；llm 只出現在之前翻的快取與備份，命中時換成 kuromoji 的（page-translation.ts）。 */
   讀音來源: 'llm' | 'kuromoji';
+  /** Romaji（GLOSSARY）：kuromoji 跟讀音一起算。羅馬拼音之前翻的快取與備份沒有，命中時補算（page-translation.ts）。 */
+  羅馬拼音?: string;
   /** 空字串＝未翻譯（沒有 API key 或還沒翻）。 */
   譯文: string;
   /** LLM 判斷是 OCR 亂碼，或 OCR 最低信心低於門檻（ADR 0009）：不覆蓋，side panel 列出原文。 */
@@ -66,6 +68,7 @@ export interface LooseText {
   原文: string;
   讀音: string;
   讀音來源: 'llm' | 'kuromoji';
+  羅馬拼音?: string;
   譯文: string;
   unreadable: boolean;
   ocrConfidence?: number;
@@ -79,6 +82,12 @@ export interface LooseText {
    * 沒有時（備份還原的頁）用文字框外擴 3px 的矩形加 eraseLuminance。
    */
   erase?: EraseData;
+}
+
+/** kuromoji 對一句原文算出的讀音（整句平假名）與羅馬拼音。 */
+export interface Reading {
+  讀音: string;
+  羅馬拼音: string;
 }
 
 export interface PageText {
@@ -187,3 +196,9 @@ export interface PageTranslation extends PageText {
   latencyMs: number;
   translatedAt: number;
 }
+
+/**
+ * 「譯」區塊（學習模式藏起來的譯文）未揭露時的提示，側邊欄與頁面 tooltip 用同一句。
+ * 寫「游標」不寫「滑過」：觸控的人會以為是用手指滑動，實際上是滑鼠游標移上去（hover）才顯示。
+ */
+export const REVEAL_HINT = '游標移到這裡看譯文';

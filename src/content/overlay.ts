@@ -22,7 +22,8 @@ import { ERASE_WHITE, LOOSE_OUTLINE_PAD_PX, onAnchor, staggerRanks, WASH_STAGGER
 import type { AnchorStatus, StatusAction } from '../shared/page-status.ts';
 import { findSamePage } from '../shared/page-hash.ts';
 import type { PageMode } from '../shared/page-mode.ts';
-import { overlaidTexts, unreadableLabel, type PageText, type RatioRect } from '../shared/page-text.ts';
+import { DEFAULT_DISPLAY_SETTINGS, hidesTranslation, type DisplaySettings } from '../shared/display-settings.ts';
+import { overlaidTexts, REVEAL_HINT, unreadableLabel, type PageText, type RatioRect } from '../shared/page-text.ts';
 import { rubyDisplay } from '../shared/ruby.ts';
 import TOKENS from '../shared/tokens.css';
 import { createTrace } from '../shared/trace.ts';
@@ -124,6 +125,8 @@ const STYLE = `${TOKENS}
 .tip-ja rt, .tip-guess { color: var(--naru-tooltip-ruby); }
 .tip-ja rt { font-size: 0.6em; font-weight: 400; }
 .tip-guess { font-size: 0.75em; }
+/* 羅馬拼音：原文下一行，比振り仮名淡，不跟譯文搶 */
+.tip-romaji { margin: -0.1em 0 0.35em; font-size: 0.9em; color: var(--naru-tooltip-ink-3); letter-spacing: 0.02em; }
 .tip-unreadable { color: var(--naru-tooltip-ink-3); text-decoration: line-through dotted; }
 .tip-zh { font-size: 1.15em; font-family: '${PUNCTUATION_FAMILY}', var(--naru-font-sans); }
 .tip.learn .tip-ja { font-size: 1.4em; color: var(--naru-tooltip-ink); }
@@ -221,6 +224,7 @@ interface HoverLine {
   box: Box;
   原文: string;
   讀音: string;
+  羅馬拼音?: string;
   譯文: string;
   unreadable: boolean;
 }
@@ -343,6 +347,7 @@ export function createOverlay({ onHover, onStatusAction }: { onHover?: OnHover; 
   /** 被我們從 static 改成 relative 的父元素 → 原本的 inline position，停止時還原。 */
   const changedParents = new Map<HTMLElement, string>();
   let pageMode: PageMode = 'read';
+  let displaySettings: DisplaySettings = DEFAULT_DISPLAY_SETTINGS;
   let capturing = false;
   /** 截圖中也不藏的 anchor（長 Page）。 */
   let keptDuringCapture: ReadonlySet<Element> = new Set();
@@ -695,6 +700,7 @@ export function createOverlay({ onHover, onStatusAction }: { onHover?: OnHover; 
       box: ratioToBox(bbox, size),
       原文: t.原文,
       讀音: t.讀音,
+      ...(t.羅馬拼音 === undefined ? {} : { 羅馬拼音: t.羅馬拼音 }),
       譯文: t.譯文,
       unreadable: t.unreadable,
     });
@@ -945,8 +951,15 @@ export function createOverlay({ onHover, onStatusAction }: { onHover?: OnHover; 
         // 對不上：原文＋整句讀音
         ja.append(line.原文, textDiv('tip-guess', display.fallback));
       }
-      // 譯文：閱讀直接顯示；學習藏在「譯」區塊後面。沒有譯文就兩種都不放
-      if (line.譯文) parts.push(pageMode === 'read' ? textDiv('tip-zh', line.譯文) : revealChip(line.譯文));
+      // 羅馬拼音（⚙ 的「讀音加上羅馬拼音」）：tooltip 一律有讀音，所以只看設定
+      if (displaySettings.romaji && line.羅馬拼音) {
+        const romaji = textDiv('tip-romaji', line.羅馬拼音);
+        romaji.lang = 'ja-Latn';
+        parts.push(romaji);
+      }
+      // 譯文：閱讀直接顯示；學習藏在「譯」區塊後面，除非開了「學習模式直接顯示譯文」。沒有譯文就都不放
+      const hideTranslation = hidesTranslation(pageMode, displaySettings);
+      if (line.譯文) parts.push(hideTranslation ? revealChip(line.譯文) : textDiv('tip-zh', line.譯文));
     }
     tip.classList.toggle('learn', pageMode === 'learn');
     tip.replaceChildren(...parts);
@@ -963,7 +976,7 @@ export function createOverlay({ onHover, onStatusAction }: { onHover?: OnHover; 
   /** 「譯」區塊（RevealChip 深色版）：未揭露時是提示，揭露後換成譯文。 */
   function renderRevealChip(chip: Element, 譯文: string): void {
     chip.className = revealed ? 'tip-reveal on' : 'tip-reveal';
-    chip.replaceChildren(textDiv('tip-reveal-label', '譯'), textDiv('tip-reveal-body', revealed ? 譯文 : '滑過這裡看譯文'));
+    chip.replaceChildren(textDiv('tip-reveal-label', '譯'), textDiv('tip-reveal-body', revealed ? 譯文 : REVEAL_HINT));
   }
 
   function setRevealed(next: boolean): void {
@@ -1032,6 +1045,12 @@ export function createOverlay({ onHover, onStatusAction }: { onHover?: OnHover; 
       // 學習時不等截圖確認（見 applyVisibility）；切回翻譯時沒有等著的確認，不能一直藏著
       delete entry.host.dataset.unverified;
     }
+    if (hovered) showTooltip(hovered.layer, hovered.line);
+  }
+
+  /** ⚙ 的顯示設定（學習模式直接顯示譯文、羅馬拼音）：只影響 tooltip；顯示中的 tooltip 換成新內容。 */
+  function setDisplaySettings(settings: DisplaySettings): void {
+    displaySettings = settings;
     if (hovered) showTooltip(hovered.layer, hovered.line);
   }
 
@@ -1116,7 +1135,7 @@ export function createOverlay({ onHover, onStatusAction }: { onHover?: OnHover; 
     return changedParents.has(element as HTMLElement);
   }
 
-  return { show, remove, confirm, highlight, setPageMode, setPanelOpen, setStatuses, setOutlines, hideForCapture, hideStatusForCapture, restoreAfterCapture, shownPages, coveredRects, clear, ownsStyleOf };
+  return { show, remove, confirm, highlight, setPageMode, setDisplaySettings, setPanelOpen, setStatuses, setOutlines, hideForCapture, hideStatusForCapture, restoreAfterCapture, shownPages, coveredRects, clear, ownsStyleOf };
 }
 
 export type Overlay = ReturnType<typeof createOverlay>;

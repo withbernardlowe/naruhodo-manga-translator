@@ -8,7 +8,7 @@
 import { matchingStripe, type Stripe } from '../shared/long-page.ts';
 import type { HostedErrorReason } from '../shared/hosted-api.ts';
 import type { PageView, QuotaExhausted } from '../shared/messages.ts';
-import { pageLines, type PageCharge, type PageText, type PageTranslation, type StripCharge } from '../shared/page-text.ts';
+import { pageLines, type PageCharge, type PageText, type PageTranslation, type Reading, type StripCharge } from '../shared/page-text.ts';
 import { staleReason, usedNotes, type StaleReason, type TranslatorVersion } from '../shared/series-notes.ts';
 import { seriesNameForLlm, seriesZhTitleForLlm, type Series } from '../shared/series.ts';
 import { createTrace } from '../shared/trace.ts';
@@ -32,8 +32,8 @@ export interface PageTranslationDeps {
   getSeries(seriesId: string): Promise<Series | undefined>;
   /** 目前會用來翻譯的模型與 prompt 版本（過時提示比對用）；沒有 Translator 時 undefined，就不比版本。 */
   translatorVersion?(): TranslatorVersion | undefined | Promise<TranslatorVersion | undefined>;
-  /** 原文 → kuromoji 整句讀音（offscreen 算）。命中 #195 之前的快取時，把 LLM 給的讀音換掉；沒有就照用快取的。 */
-  kuromojiReadings?(texts: string[]): Promise<string[]>;
+  /** 原文 → kuromoji 整句讀音與羅馬拼音（offscreen 算）。命中 #195 之前、或羅馬拼音之前的快取時換上；沒有就照用快取的。 */
+  kuromojiReadings?(texts: string[]): Promise<Reading[]>;
 }
 
 /** 要翻的一頁。 */
@@ -276,12 +276,13 @@ export function createPageTranslation({ cache, ledger, getSeries, translatorVers
 
   /**
    * #195 之前翻的頁，讀音是 LLM 給的（讀音來源 llm）：換成 kuromoji 的，新舊頁的讀音才一致（ADR 0001）。
+   * 羅馬拼音之前翻的頁沒有羅馬拼音：一起補算（GLOSSARY 的 Romaji）。
    * 算不出來（offscreen 失敗）就先照用快取的讀音，只記在 trace。
    */
   async function withKuromojiReadings(page: PageText): Promise<PageText> {
     const lines = [...page.balloons, ...page.looseText];
-    if (!kuromojiReadings || !lines.some((t) => t.讀音來源 === 'llm')) return page;
-    let readings: string[];
+    if (!kuromojiReadings || !lines.some((t) => t.讀音來源 === 'llm' || t.羅馬拼音 === undefined)) return page;
+    let readings: Reading[];
     try {
       readings = await kuromojiReadings(lines.map((t) => t.原文));
       if (readings.length !== lines.length) throw new Error(`kuromoji 回了 ${readings.length} 句讀音，要 ${lines.length} 句`);
@@ -290,7 +291,7 @@ export function createPageTranslation({ cache, ledger, getSeries, translatorVers
       return page;
     }
     const byId = new Map(lines.map((t, i) => [t.id, readings[i]!]));
-    const relabel = <T extends { id: string; 讀音: string; 讀音來源: 'llm' | 'kuromoji' }>(t: T): T => ({ ...t, 讀音: byId.get(t.id)!, 讀音來源: 'kuromoji' });
+    const relabel = <T extends { id: string; 讀音: string; 讀音來源: 'llm' | 'kuromoji'; 羅馬拼音?: string }>(t: T): T => ({ ...t, ...byId.get(t.id)!, 讀音來源: 'kuromoji' });
     return { balloons: page.balloons.map(relabel), looseText: page.looseText.map(relabel) };
   }
 

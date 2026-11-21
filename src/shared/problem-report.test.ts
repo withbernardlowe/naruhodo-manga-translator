@@ -41,6 +41,7 @@ const input = (pages: PageView[], more: Partial<ProblemReportInput> = {}): Probl
   userAgent: 'Mozilla/5.0 Test',
   translationMode: 'hosted',
   pageMode: 'read',
+  displaySettings: { learnShowsTranslation: false, romaji: true },
   modelStatus: { state: 'ready', executionProvider: 'webgpu', threads: 4 },
   pages,
   context: { pages: [] },
@@ -56,12 +57,12 @@ function jsonBlock(report: string): string {
 const reportJson = (report: string) => JSON.parse(jsonBlock(report));
 
 describe('報告只有除錯用的數字，沒有作品內容（會貼到公開的 Discussion）', () => {
-  it('沒有對白、讀音、譯文、被丟掉的辨識文字、Series Notes 的內容', () => {
+  it('沒有對白、讀音、羅馬拼音、譯文、被丟掉的辨識文字、Series Notes 的內容', () => {
     const report = problemReport(
       input(
         [
           page('h1', {
-            balloons: [balloon(1, 'おはよう', '早安', { 讀音: 'オハヨウ', ocrDropped: 'ザワ' })],
+            balloons: [balloon(1, 'おはよう', '早安', { 讀音: 'オハヨウ', 羅馬拼音: 'ohayō', ocrDropped: 'ザワ' })],
             looseText: [loose(2, 'ドン', '咚')],
           }),
         ],
@@ -69,7 +70,7 @@ describe('報告只有除錯用的數字，沒有作品內容（會貼到公開�
       ),
     );
 
-    expect(report).not.toMatch(/おはよう|早安|オハヨウ|ザワ|ドン|咚/);
+    expect(report).not.toMatch(/おはよう|早安|オハヨウ|ohayō|ザワ|ドン|咚/);
   });
 
   it('沒有任何圖片：Page 縮圖、擦除小圖都是截圖切出來的', () => {
@@ -113,6 +114,7 @@ describe('給 agent 的 JSON', () => {
       userAgent: 'Mozilla/5.0 Test',
       translationMode: 'hosted',
       pageMode: 'read',
+      displaySettings: { learnShowsTranslation: false, romaji: true },
       ocr: { state: 'ready', executionProvider: 'webgpu', threads: 4 },
       pageUrl: 'https://manga.example/read/1',
       zoom: 1.25,
