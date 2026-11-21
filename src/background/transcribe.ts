@@ -50,13 +50,18 @@ import { createTranslationQueue, type QueuedJob } from './translation-queue.ts';
 
 export type { NotesStore, PageCache };
 
-/** 給 e2e 量排程用：enqueue＝排進本機段、start＝本機段開始、drop＝沒開始就丟掉、llm＝送出 LLM、done＝做完（含 LLM）。 */
-export type JobEventKind = 'enqueue' | 'start' | 'drop' | 'llm' | 'done';
+/**
+ * 給 e2e 量排程與全站狀態用：enqueue＝排進本機段、start＝本機段開始、analyzed＝本機段辨識完（失敗也算）、
+ * drop＝沒開始就丟掉、llm＝送出 LLM、done＝做完（含 LLM）。
+ */
+export type JobEventKind = 'enqueue' | 'start' | 'analyzed' | 'drop' | 'llm' | 'done';
 
 export interface JobEvent {
   tabId: number;
   event: JobEventKind;
   pageHash: string;
+  /** 哪一個工作：長 Page 的兩截是同一個 pageHash，工作可能重疊。 */
+  job: number;
 }
 
 export interface TranscriberDeps {
@@ -300,7 +305,13 @@ export function createTranscriber(deps: TranscriberDeps) {
 
   const isCurrent = (tab: TabState) => tabs.get(tab.tabId) === tab;
   const isVisible = (tab: TabState, record: PageRecord) => isCurrent(tab) && findSamePage(tab.pages, record.pageHash) !== undefined;
-  const report = (job: Job, event: JobEventKind) => deps.onJobEvent?.({ tabId: job.tab.tabId, event, pageHash: job.record.pageHash });
+  const jobIds = new WeakMap<Job, number>();
+  let lastJobId = 0;
+  const report = (job: Job, event: JobEventKind) => {
+    let id = jobIds.get(job);
+    if (id === undefined) jobIds.set(job, (id = ++lastJobId));
+    deps.onJobEvent?.({ tabId: job.tab.tabId, event, pageHash: job.record.pageHash, job: id });
+  };
 
   const queue = createTranslationQueue<Job>({
     runLocal,
@@ -498,8 +509,10 @@ export function createTranscriber(deps: TranscriberDeps) {
         publish(job.tab);
       }
       trace('analyze:done', { pageHash: record.pageHash, anchorId: record.request.candidate.anchorId, ms: Date.now() - startedAt, balloons: text.balloons.length, looseText: text.looseText.length });
+      report(job, 'analyzed');
     } catch (e) {
       trace('analyze:error', { pageHash: record.pageHash, ms: Date.now() - startedAt, error: e });
+      report(job, 'analyzed');
       complete(job, { state: 'error', message: e instanceof Error ? e.message : String(e) });
       return false;
     }

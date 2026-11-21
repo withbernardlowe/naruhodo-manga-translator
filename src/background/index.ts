@@ -406,8 +406,8 @@ function refreshQuotaIndicator(): void {
 }
 
 const pageStatus = createPageStatusSync({
-  send(tabId, anchors) {
-    chrome.tabs.sendMessage(tabId, { type: 'content:pageStatus', anchors } satisfies Message).catch(() => {});
+  send(tabId, panel) {
+    chrome.tabs.sendMessage(tabId, { type: 'content:pageStatus', panel } satisfies Message).catch(() => {});
   },
   setBadge(tabId, badge) {
     // 分頁已經關了也沒關係
@@ -880,7 +880,7 @@ async function returnToManga(tabId: number): Promise<void> {
   accessChanged();
 }
 
-/** Page 上的紅色小標籤被點了（#185）：看方案打開帳號頁（#213），登入、設定 key 打開 onboarding 的那一步；重試只重翻這一頁。 */
+/** 全站狀態裡紅色那一列的按鈕被點了（#185）：看方案打開帳號頁（#213），登入、設定 key 打開 onboarding 的那一步；重試只重翻這一頁。 */
 async function statusAction(tabId: number, action: StatusAction, pageHash: string): Promise<void> {
   trace('content:statusAction', { tabId, action, pageHash });
   if (action !== 'retry') {

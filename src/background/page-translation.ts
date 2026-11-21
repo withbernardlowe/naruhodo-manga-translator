@@ -202,7 +202,7 @@ export function createPageTranslation({ cache, ledger, getSeries, translatorVers
       });
     } catch (e) {
       trace('translate:error', { pageHash, ms: Date.now() - startedAt, error: e });
-      // 額度用完不是失敗：跟沒有 Translator 一樣只顯示原文與讀音，用完的提示在 side panel 頂端與 Page 右上角（#185）
+      // 額度用完不是失敗：跟沒有 Translator 一樣只顯示原文與讀音，用完的提示在 side panel 頂端與視窗右上角的全站狀態（#185）
       if (e instanceof QuotaExhaustedError) return { state: 'done', text: whole(text), translated: false, quotaExhausted: QUOTA_EXHAUSTED_BY_REASON[e.reason] ?? 'free' };
       // 429／5xx 的重試在 Translator 裡（claude-translator.ts）；這裡是重試後仍失敗
       console.warn('translate failed', e);

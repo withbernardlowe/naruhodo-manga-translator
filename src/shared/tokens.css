@@ -56,6 +56,9 @@
   --naru-tooltip-chip-hint: #C9C4BB;
   --naru-tooltip-chip-on-bg: #3A362E;
   --naru-tooltip-chip-on-line: #5C564B;
+  /* 全站狀態（深色，跟 tooltip 同一組）：翻好的勾（tooltip 底上 9.1:1）、出問題那列的底；上面的字用 --naru-tooltip-ink（12:1）、--naru-tooltip-ruby（6.7:1） */
+  --naru-tooltip-ok: #8FD1A8;
+  --naru-tooltip-danger-bg: #4A2420;
 
   /*
    * 字型：只用系統字型，不打包、不從網路載入。中文與日文各一串，各自只列該語言的字型：

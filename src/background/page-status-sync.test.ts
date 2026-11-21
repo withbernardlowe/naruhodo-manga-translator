@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { AnchorStatus, ActionBadge } from '../shared/page-status.ts';
+import type { ActionBadge, StatusPanel } from '../shared/page-status.ts';
 import type { ModelStatus, PageView } from '../shared/messages.ts';
 import { createPageStatusSync } from './page-status-sync.ts';
 
@@ -14,11 +14,11 @@ const analyzing = (anchorId: string, pageHash: string): PageView => ({
 const done = (page: PageView): PageView => ({ ...page, transcript: { state: 'done', text: { balloons: [], looseText: [] }, translated: true } });
 
 function setup({ hosted = true } = {}) {
-  const sent: [number, AnchorStatus[]][] = [];
+  const sent: [number, StatusPanel | undefined][] = [];
   const badges: [number, ActionBadge | undefined][] = [];
   const strips: [number, boolean][] = [];
   const sync = createPageStatusSync({
-    send: (tabId, anchors) => void sent.push([tabId, anchors]),
+    send: (tabId, panel) => void sent.push([tabId, panel]),
     setBadge: (tabId, badge) => void badges.push([tabId, badge]),
     accessProblem: async () => undefined,
     stripBilled: async () => hosted,
@@ -27,8 +27,11 @@ function setup({ hosted = true } = {}) {
   return { sync, sent, badges, strips };
 }
 
-describe('Page 狀態送到 content script 與圖示 badge', () => {
-  it('翻譯中送出小標籤、badge 是 …；翻完拿掉、badge 回到小點', async () => {
+/** 送出的面板裡每一列的狀態文字。 */
+const rowTexts = (panel: StatusPanel | undefined) => panel?.rows.map(({ state }) => (state.kind === 'working' ? state.text : state.kind));
+
+describe('全站狀態送到 content script 與圖示 badge', () => {
+  it('有頁在忙送出面板、badge 是 …；翻完收起、badge 回到小點', async () => {
     const { sync, sent, badges } = setup();
     const page = analyzing('a1', 'h1');
     await sync.activated(1);
@@ -36,10 +39,10 @@ describe('Page 狀態送到 content script 與圖示 badge', () => {
     await sync.pagesUpdated(1, [page]);
     await sync.pagesUpdated(1, [done(page)]);
 
-    expect(sent).toEqual([
-      [1, []],
-      [1, [{ anchorId: 'a1', working: { text: '辨識文字…' } }]],
-      [1, []],
+    expect(sent.map(([tabId, panel]) => [tabId, rowTexts(panel)])).toEqual([
+      [1, undefined],
+      [1, ['queued']],
+      [1, undefined],
     ]);
     expect(badges).toEqual([
       [1, 'on'],
@@ -48,17 +51,45 @@ describe('Page 狀態送到 content script 與圖示 badge', () => {
     ]);
   });
 
-  it('送去 LLM 之後改成「翻譯中…」；內容沒變就不重送', async () => {
+  it('排隊中 → 本機流水線開始是「辨識文字…」→ 送去 LLM 是「翻譯中…」；內容沒變就不重送', async () => {
     const { sync, sent } = setup();
     const page = analyzing('a1', 'h1');
     await sync.activated(1);
     await sync.pagesUpdated(1, [page]);
     sent.length = 0;
 
-    await sync.jobEvent({ tabId: 1, event: 'llm', pageHash: 'h1' });
+    await sync.jobEvent({ tabId: 1, event: 'start', pageHash: 'h1', job: 1 });
+    await sync.jobEvent({ tabId: 1, event: 'llm', pageHash: 'h1', job: 1 });
     await sync.pagesUpdated(1, [page]);
 
-    expect(sent.map(([, anchors]) => anchors[0]?.working?.text)).toEqual(['翻譯中…']);
+    expect(sent.map(([, panel]) => rowTexts(panel))).toEqual([['辨識文字…'], ['翻譯中…']]);
+  });
+
+  it('本機段辨識完、還在等翻譯（LLM 段排隊）：回到排隊中，不再寫辨識文字', async () => {
+    const { sync, sent } = setup();
+    const page = analyzing('a1', 'h1');
+    await sync.activated(1);
+    await sync.pagesUpdated(1, [page]);
+    await sync.jobEvent({ tabId: 1, event: 'start', pageHash: 'h1', job: 1 });
+
+    await sync.jobEvent({ tabId: 1, event: 'analyzed', pageHash: 'h1', job: 1 });
+
+    expect(rowTexts(sent.at(-1)?.[1])).toEqual(['queued']);
+  });
+
+  it('長 Page 的兩截重疊：前一截翻完時，下一截照樣是辨識文字…', async () => {
+    const { sync, sent } = setup();
+    const page = analyzing('a1', 'h1');
+    await sync.activated(1);
+    await sync.pagesUpdated(1, [page]);
+    await sync.jobEvent({ tabId: 1, event: 'start', pageHash: 'h1', job: 1 });
+    await sync.jobEvent({ tabId: 1, event: 'analyzed', pageHash: 'h1', job: 1 });
+    await sync.jobEvent({ tabId: 1, event: 'llm', pageHash: 'h1', job: 1 });
+    await sync.jobEvent({ tabId: 1, event: 'start', pageHash: 'h1', job: 2 });
+
+    await sync.jobEvent({ tabId: 1, event: 'done', pageHash: 'h1', job: 1 });
+
+    expect(rowTexts(sent.at(-1)?.[1])).toEqual(['辨識文字…']);
   });
 
   it('模型下載進度：每個有 Page 在等的 tab 都更新', async () => {
@@ -70,15 +101,16 @@ describe('Page 狀態送到 content script 與圖示 badge', () => {
 
     await sync.modelStatus(downloading);
 
-    expect(sent.at(-1)).toEqual([1, [{ anchorId: 'a1', working: { text: '下載文字辨識模型 50%', progress: 0.5 } }]]);
+    expect(sent.at(-1)?.[1]?.header).toEqual({ kind: 'working', text: '下載文字辨識模型 50%', progress: 0.5 });
     expect(sent.filter(([tabId]) => tabId === 2)).toHaveLength(1);
   });
 
-  it('停止：拿掉 badge；重新整理後（content script 是新的）同樣的狀態也照樣重送', async () => {
+  it('停止：拿掉 badge；重新整理後（content script 是新的）同樣的狀態也照樣重送，本機流水線的進度也重來', async () => {
     const { sync, sent, badges } = setup();
     const page = analyzing('a1', 'h1');
     await sync.activated(1);
     await sync.pagesUpdated(1, [page]);
+    await sync.jobEvent({ tabId: 1, event: 'start', pageHash: 'h1', job: 1 });
     sent.length = 0;
 
     sync.reset(1);
@@ -86,7 +118,7 @@ describe('Page 狀態送到 content script 與圖示 badge', () => {
     sync.clear(1);
     await sync.pagesUpdated(1, []);
 
-    expect(sent).toEqual([[1, [{ anchorId: 'a1', working: { text: '辨識文字…' } }]]]);
+    expect(sent.map(([tabId, panel]) => [tabId, rowTexts(panel)])).toEqual([[1, ['queued']]]);
     expect(badges.at(-1)).toEqual([1, undefined]);
   });
 });

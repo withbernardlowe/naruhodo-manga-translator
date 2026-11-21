@@ -2,13 +2,12 @@ import { FREE_PAGES, MONTHLY_PAGES, REFUND_WINDOW_DAYS, STRIP_LINES_PER_PAGE, lo
 import type { ConsentState } from '../shared/data-consent.ts';
 import type { ModelStatus, PageView } from '../shared/messages.ts';
 import type { SeriesOption } from '../shared/series.ts';
+import { readingOrder, type SpreadSide } from '../shared/spread-order.ts';
 import type { TranslationMode } from '../shared/translation-mode.ts';
 import type { BadgeTone } from './components.tsx';
 import { CONTACT_EMAIL } from './links.ts';
 import { billingPeriodOffer, SUBSCRIPTION_OFFERS, subscriptionHeadline, usd, type BillingPeriodOffer } from './pricing.ts';
 
-/** Page 在 Spread 裡的哪一邊；undefined＝不是 Spread。 */
-export type SpreadSide = 'right' | 'left';
 
 /** 頁首：單頁是「第 N 頁」；Spread 是「右頁」＋「先讀」。 */
 export interface PageHeading {
@@ -37,32 +36,6 @@ export interface SidePanelView {
 }
 
 const seconds = (ms: number) => `${(ms / 1000).toFixed(1)} 秒`;
-
-const centerX = (page: PageView) => page.subRect && page.subRect.x + page.subRect.w / 2;
-
-type OrderedPage = { page: PageView; side: SpreadSide | undefined };
-
-/**
- * side panel 列 Page 的順序與每頁在 Spread 裡的哪一邊（spec #70）。同一個 anchor 切出兩個 Page 才是 Spread：
- * subRect 中心偏右的是右頁、排在前面（日漫由右往左讀），不依賴 SW 給的順序。只看 subRect 不夠：單頁去黑邊後也有
- * subRect。同一個 anchor 的兩個 Page 分不出左右（沒有 subRect）就不標左右，照 SW 的順序。
- */
-function readingOrder(pages: PageView[]): OrderedPage[] {
-  const byAnchor = new Map<string, PageView[]>();
-  for (const page of pages) byAnchor.set(page.anchorId, [...(byAnchor.get(page.anchorId) ?? []), page]);
-  return [...byAnchor.values()].flatMap((group): OrderedPage[] => {
-    const [a, b] = group;
-    const ax = a && centerX(a);
-    const bx = b && centerX(b);
-    if (group.length !== 2 || ax === undefined || bx === undefined || ax === bx)
-      return group.map((page) => ({ page, side: undefined }));
-    const [right, left] = ax > bx ? [a!, b!] : [b!, a!];
-    return [
-      { page: right, side: 'right' },
-      { page: left, side: 'left' },
-    ];
-  });
-}
 
 function heading(side: SpreadSide | undefined, number: number): PageHeading {
   if (side === undefined) return { title: `第 ${number} 頁` };

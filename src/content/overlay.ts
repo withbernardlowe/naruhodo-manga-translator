@@ -11,15 +11,13 @@
  * Page Mode（#73）只決定擦字＋譯文那一層要不要顯示：學習時藏起來、保留日文原稿；hover hit-test、tooltip、
  * 高亮框兩種模式都照常運作。
  *
- * Page 上的狀態（#185）也在同一個 host 裡：蓋在 anchor 上、不縮放的一層，右上角小標籤（轉圈圈＋階段），翻完就拿掉。
- * 只有出問題時的紅色小標籤可以點；截圖時一律藏起來（不能被 OCR 讀到、也不能改變 Page hash）。
- *
- * Page 上的外圈（#285、#283，shared/page-outlines.ts）也在同一個 host 裡、同樣不縮放、截圖時藏起來：翻譯中的句子是日文上
+ * Page 上的外圈（#285、#283，shared/page-outlines.ts）也在同一個 host 裡：不縮放、截圖時藏起來。翻譯中的句子是日文上
  * 一道擦除底色的光帶掃過；被可見範圍邊緣切到、還在等的框，看得到的那一端有一個「…」小標記。譯文到了就整頁一次蓋上、同時收起外圈。
+ *
+ * 翻譯中、出問題的全站狀態不在這裡：視窗右上角只有一個（status-panel.ts）。
  */
 import type { LineBox, LineRef, Rect } from '../shared/messages.ts';
 import { ERASE_WHITE, LOOSE_OUTLINE_PAD_PX, onAnchor, staggerRanks, WASH_STAGGER_MS } from '../shared/page-outlines.ts';
-import type { AnchorStatus, StatusAction } from '../shared/page-status.ts';
 import { findSamePage } from '../shared/page-hash.ts';
 import type { PageMode } from '../shared/page-mode.ts';
 import { DEFAULT_DISPLAY_SETTINGS, hidesTranslation, type DisplaySettings } from '../shared/display-settings.ts';
@@ -150,17 +148,6 @@ const STYLE = `${TOKENS}
 :host([data-capturing]) .tip, :host([data-capturing]) .hl, :host([data-capturing]) .num { visibility: hidden; }
 /* anchor 重新出現、截圖還沒確認上面是同一頁（#276）：譯文先藏著，Page 上的狀態照常顯示 */
 :host([data-unverified]) .pl { visibility: hidden; }
-/* Page 上的狀態（#185）：跟 anchor 一樣大、不縮放，不擋點擊；只有紅色小標籤可以點 */
-.st { position: absolute; overflow: hidden; pointer-events: none; z-index: 3; font-family: var(--naru-font-sans); }
-.st-chip { position: absolute; top: 8px; right: 8px; display: flex; align-items: center; gap: 6px; margin: 0; padding: 3px 9px;
-  border: 0; border-radius: 999px; font: 500 12px/1.4 var(--naru-font-sans); white-space: nowrap;
-  background: var(--naru-tooltip-bg); color: var(--naru-tooltip-ink); box-shadow: var(--naru-shadow-1); }
-.st-chip.warn { background: var(--naru-danger); color: var(--naru-on-accent); pointer-events: auto; cursor: pointer; }
-.st-chip.warn:hover { filter: brightness(0.85); }
-.st-spin { width: 10px; height: 10px; box-sizing: border-box; border: 2px solid currentColor; border-right-color: transparent;
-  border-radius: 50%; animation: naru-rot 0.8s linear infinite; }
-@keyframes naru-rot { to { transform: rotate(360deg); } }
-:host([data-capturing]) .st, :host([data-status-hidden]) .st { display: none; }
 /* Page 上的外圈（#285、#283）：跟 anchor 一樣大、不縮放，大小是畫面 px。t＝翻譯中（底色掃光），w＝等待中（看得到的那一端的小標記） */
 .rings { position: absolute; pointer-events: none; }
 .rg { position: absolute; overflow: visible; }
@@ -188,7 +175,7 @@ const STYLE = `${TOKENS}
 @keyframes naru-out { to { opacity: 0; } }
 @keyframes naru-in { from { opacity: 0; } }
 /* 截圖時用 visibility 藏（不能被 OCR 讀到）：display:none 會讓動畫從頭開始，每截一次明暗就跳一下 */
-:host([data-capturing]) .rings, :host([data-status-hidden]) .rings { visibility: hidden; }
+:host([data-capturing]) .rings, :host([data-outlines-hidden]) .rings { visibility: hidden; }
 @media (prefers-reduced-motion: reduce) {
   .wm span { animation: none; opacity: 1; }
   .wash::before { animation: none; background: rgb(var(--erase) var(--erase) var(--erase) / ${WASH_STILL_ALPHA}); }
@@ -248,8 +235,6 @@ interface Entry {
   host: HTMLElement;
   root: ShadowRoot;
   layers: Map<string, PageLayer>;
-  /** Page 上的狀態（#185）；沒有＝這個 anchor 沒在翻、也沒出問題。 */
-  status?: HTMLElement;
   /** Page 上的外圈（#285、#283）；沒有＝這個 anchor 上沒有外圈。key＝outlineKey。 */
   outlines?: { layer: HTMLElement; items: Map<string, Outline> };
 }
@@ -276,15 +261,6 @@ export interface OutlinesOnAnchor {
   translating: LineBox[];
   waiting: LineBox[];
 }
-
-/** Page 上的狀態要畫在哪個 anchor 上。 */
-export interface StatusOnAnchor {
-  anchor: HTMLElement;
-  status: Omit<AnchorStatus, 'anchorId'>;
-}
-
-/** 紅色小標籤被點了。 */
-export type OnStatusAction = (action: StatusAction, pageHash: string) => void;
 
 const subKey = (sub: RatioRect) => `${sub.x},${sub.y},${sub.w},${sub.h}`;
 const outlineKey = (sub: RatioRect, state: Outline['state'], id: string) => `${subKey(sub)}|${state}|${id}`;
@@ -342,7 +318,7 @@ export type OnHover = (line: LineRef | null) => void;
 
 const trace = createTrace('content');
 
-export function createOverlay({ onHover, onStatusAction }: { onHover?: OnHover; onStatusAction?: OnStatusAction } = {}) {
+export function createOverlay({ onHover }: { onHover?: OnHover } = {}) {
   const entries = new Map<HTMLElement, Entry>();
   /** 被我們從 static 改成 relative 的父元素 → 原本的 inline position，停止時還原。 */
   const changedParents = new Map<HTMLElement, string>();
@@ -352,8 +328,8 @@ export function createOverlay({ onHover, onStatusAction }: { onHover?: OnHover; 
   /** 截圖中也不藏的 anchor（長 Page）。 */
   let keptDuringCapture: ReadonlySet<Element> = new Set();
   let hiddenAt: number | undefined;
-  /** 截圖中：Page 上的狀態藏著（截圖途中才建的 host 也要藏）。 */
-  let statusHidden = false;
+  /** 截圖中：Page 上的外圈藏著（截圖途中才建的 host 也要藏）。 */
+  let outlinesHidden = false;
   /** 所有 Page 的譯文都淡入完的時間（performance.now()）：淡入（#285）還沒結束時不算「覆蓋層畫好了」。 */
   let revealUntil = 0;
   let stopped = false;
@@ -479,10 +455,10 @@ export function createOverlay({ onHover, onStatusAction }: { onHover?: OnHover; 
       const t = layerTransform(entry.anchor, layer.sub, layer.size);
       layer.element.style.transform = `translate(${t.x}px, ${t.y}px) scale(${t.scaleX}, ${t.scaleY})`;
     }
-    // 不縮放：跟 anchor 一樣大的框，小標籤的字級、外圈的線寬是畫面 px
+    // 不縮放：跟 anchor 一樣大的框，外圈的線寬是畫面 px
     const t = layerTransform(entry.anchor, WHOLE_PAGE, { width: 1, height: 1 });
-    for (const element of [entry.status, entry.outlines?.layer])
-      if (element) Object.assign(element.style, { left: `${t.x}px`, top: `${t.y}px`, width: `${t.scaleX}px`, height: `${t.scaleY}px` });
+    const element = entry.outlines?.layer;
+    if (element) Object.assign(element.style, { left: `${t.x}px`, top: `${t.y}px`, width: `${t.scaleX}px`, height: `${t.scaleY}px` });
   }
 
   function dropOutline(entry: Entry, key: string): void {
@@ -586,58 +562,13 @@ export function createOverlay({ onHover, onStatusAction }: { onHover?: OnHover; 
     return new Set(mine.map(([, outline]) => outline.id));
   }
 
-  /** 一個 anchor 上的狀態：翻譯中是轉圈圈的小標籤（模型下載的百分比在文字裡），出問題是可以點的紅色小標籤。 */
-  function renderStatus(entry: Entry, { working, problem }: StatusOnAnchor['status']): void {
-    const element = entry.status ?? document.createElement('div');
-    element.className = 'st';
-    element.replaceChildren();
-    if (working) {
-      const chip = document.createElement('span');
-      chip.className = 'st-chip';
-      const spin = document.createElement('span');
-      spin.className = 'st-spin';
-      chip.append(spin, working.text);
-      element.append(chip);
-    } else if (problem) {
-      const chip = document.createElement('button');
-      chip.type = 'button';
-      chip.className = 'st-chip warn';
-      chip.textContent = problem.text;
-      chip.addEventListener('click', (event) => {
-        // 不讓網站收到這次點擊（點畫面翻頁的閱讀器）
-        event.stopPropagation();
-        event.preventDefault();
-        onStatusAction?.(problem.action, problem.pageHash);
-      });
-      element.append(chip);
-    }
-    if (!entry.status) {
-      entry.status = element;
-      entry.root.append(element);
-    }
-    place(entry);
-  }
-
-  /** 換掉所有 anchor 上的狀態（#185）；沒列到的 anchor 拿掉狀態。 */
-  function setStatuses(statuses: StatusOnAnchor[]): void {
-    if (stopped) return;
-    const next = new Map(statuses.map((s) => [s.anchor, s.status]));
-    for (const entry of entries.values()) {
-      if (entry.status && !next.has(entry.anchor)) {
-        entry.status.remove();
-        entry.status = undefined;
-      }
-    }
-    for (const [anchor, status] of next) renderStatus(entryFor(anchor), status);
-  }
-
   function entryFor(anchor: HTMLElement): Entry {
     let entry = entries.get(anchor);
     if (entry) return entry;
     const host = document.createElement('div');
     host.setAttribute(HOST_ATTRIBUTE, '');
     host.dataset.pageMode = pageMode;
-    if (statusHidden) host.dataset.statusHidden = '';
+    if (outlinesHidden) host.dataset.outlinesHidden = '';
     host.style.cssText = 'position:absolute;left:0;top:0;width:0;height:0;overflow:visible;pointer-events:none;margin:0;padding:0;border:0;';
     // 譯文是繁中：字型（缺字時 Chrome 補的字型也是）跟著 lang 挑，不跟著日文網頁的 lang="ja"；tooltip 的原文另外標 ja
     host.lang = 'zh-Hant';
@@ -1073,20 +1004,20 @@ export function createOverlay({ onHover, onStatusAction }: { onHover?: OnHover; 
     await untilRepainted();
   }
 
-  /** 截圖前藏起 Page 上的狀態（不管覆蓋層藏不藏）。 */
-  function hideStatusForCapture(): void {
-    statusHidden = true;
-    for (const entry of entries.values()) entry.host.dataset.statusHidden = '';
+  /** 截圖前藏起 Page 上的外圈（不管覆蓋層藏不藏）。 */
+  function hideOutlinesForCapture(): void {
+    outlinesHidden = true;
+    for (const entry of entries.values()) entry.host.dataset.outlinesHidden = '';
   }
 
   /** 截完立刻還原；回傳覆蓋層被藏了多久（ms），沒藏就是 undefined。 */
   function restoreAfterCapture(): number | undefined {
     capturing = false;
-    statusHidden = false;
+    outlinesHidden = false;
     keptDuringCapture = new Set();
     for (const entry of entries.values()) {
       delete entry.host.dataset.capturing;
-      delete entry.host.dataset.statusHidden;
+      delete entry.host.dataset.outlinesHidden;
     }
     entries.forEach(applyVisibility);
     const ms = hiddenAt === undefined ? undefined : performance.now() - hiddenAt;
@@ -1135,7 +1066,7 @@ export function createOverlay({ onHover, onStatusAction }: { onHover?: OnHover; 
     return changedParents.has(element as HTMLElement);
   }
 
-  return { show, remove, confirm, highlight, setPageMode, setDisplaySettings, setPanelOpen, setStatuses, setOutlines, hideForCapture, hideStatusForCapture, restoreAfterCapture, shownPages, coveredRects, clear, ownsStyleOf };
+  return { show, remove, confirm, highlight, setPageMode, setDisplaySettings, setPanelOpen, setOutlines, hideForCapture, hideOutlinesForCapture, restoreAfterCapture, shownPages, coveredRects, clear, ownsStyleOf };
 }
 
 export type Overlay = ReturnType<typeof createOverlay>;

@@ -1,5 +1,5 @@
 /**
- * 帳號與訂閱頁（#213）的網址：右鍵選單「帳號與訂閱」直接打開；額度用完時 Page 上的紅色小標籤、點圖示，以及 side panel 的「查看方案」
+ * 帳號與訂閱頁（#213）的網址：右鍵選單「帳號與訂閱」直接打開；額度用完時全站狀態裡的「查看方案」、點圖示，以及 side panel 的「查看方案」
  * 帶著漫畫分頁打開（from，「回到漫畫」切回去）。沒登入、自備金鑰沒有 key 還是打開 onboarding 的那一步。
  */
 import { onboardingQuery, type RequestedStep } from './onboarding.ts';
