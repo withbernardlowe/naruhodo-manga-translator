@@ -41,6 +41,11 @@ describe('ルビ照 kuromoji 的詞對齊', () => {
     expect(ruby('全知全能の神')).toBe('全知全能(ぜんちぜんのう)の神(かみ)');
   });
 
+  it('字典沒收的漢字（省略送假名的複合詞）也有讀音，不把漢字寫進羅馬拼音', () => {
+    expect(ruby('巣は地脈の吹出口に多いんだ')).toContain('の吹(ふき)出口(でぐち)に');
+    expect(read('巣は地脈の吹出口に多いんだ').羅馬拼音).toContain('no fuki deguchi ni');
+  });
+
   it('々 讀成前一個字的讀音', () => {
     const r = read('只々本が好き');
     expect(r.讀音).toBe('ただただほんがすき');
