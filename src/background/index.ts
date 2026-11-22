@@ -428,6 +428,7 @@ const pageStatus = createPageStatusSync({
   },
   // 自備金鑰沒有頁數可計；沒登入時還翻不了
   stripBilled: async () => (await loadTranslationMode()) === 'hosted' && (await hostedSessionToken()) !== undefined,
+  usesOwnKey: async () => (await loadTranslationMode()) === 'ownKey',
   setStrip(tabId, strip) {
     if (strip) stripTabs.add(tabId);
     else stripTabs.delete(tabId);

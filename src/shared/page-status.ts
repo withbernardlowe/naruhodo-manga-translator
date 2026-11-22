@@ -17,7 +17,8 @@ export type RowState =
   /** 在等前面的頁跑完本機流水線（或等模型）。 */
   | { kind: 'queued' }
   | { kind: 'working'; text: string }
-  | { kind: 'done' }
+  /** cached：套用快取（沒有送 LLM、沒扣額度）。 */
+  | { kind: 'done'; cached?: true }
   /** 本機流水線或翻譯失敗：這一列有「重試」。 */
   | { kind: 'failed' };
 
@@ -41,8 +42,11 @@ export interface SharedProblem {
 
 /** 視窗右上角的面板；有頁在忙或出問題才有。 */
 export interface StatusPanel {
-  /** working：有頁在忙，text 是收合時那一行（模型下載有 progress 0–1）；problem：沒在忙、有要讀者處理的。 */
-  header: { kind: 'working'; text: string; progress?: number } | { kind: 'problem'; text: string };
+  /**
+   * working：有頁在忙，text 是收合時那一行（模型下載有 progress 0–1）；problem：沒在忙、有要讀者處理的；
+   * settled：這一批剛處理完，說翻好了、哪些套用快取（content script 停一下就收起來）。
+   */
+  header: { kind: 'working'; text: string; progress?: number } | { kind: 'problem'; text: string } | { kind: 'settled'; text: string };
   /** 收合時那一行後面的位置圖示：正在處理（或排在最前面）的那頁；沒有就不放。 */
   current?: PageIcon;
   rows: StatusRow[];
@@ -73,6 +77,10 @@ export interface PageStatusInput {
   lowQuota: boolean;
   /** 這個 tab 正在讀 Strip、而且用內建翻譯（照句數計頁，#282）。 */
   strip?: boolean;
+  /** 這一批處理過的 Page（pageHash，page-status-sync.ts 記的）：都處理完、也沒問題時，面板換成這幾頁的完成摘要。 */
+  batch?: ReadonlySet<string>;
+  /** 用自備金鑰：沒有額度，套用快取時不說「沒扣額度」。 */
+  usesOwnKey?: boolean;
 }
 
 /** 面板最多列幾頁；再多的合成「還有 N 頁」。 */
@@ -85,13 +93,17 @@ export const MAX_ROWS = 5;
 export const untranslatedWithoutReason = ({ transcript }: PageView): boolean =>
   transcript.state === 'done' && !transcript.translated && !transcript.translating && !transcript.translateError && !transcript.quotaExhausted;
 
+/** 這一頁套用快取：沒有送 LLM、沒扣額度（#186 先跑 OCR 才命中也算）。 */
+export const fromCache = ({ transcript }: PageView): boolean => transcript.state === 'done' && transcript.translation?.source === 'cache';
+
 function rowState(page: PageView, { model, inLocalPipeline, translating }: PageStatusInput): RowState {
   const { transcript } = page;
   if (transcript.state === 'error') return { kind: 'failed' };
   if (transcript.state === 'done') {
     // 在側邊欄按了「重新翻譯」（或「翻譯此頁」）：舊的原文還在
     if (transcript.translating) return { kind: 'working', text: transcript.translated ? '重新翻譯中…' : '翻譯中…' };
-    return transcript.translateError ? { kind: 'failed' } : { kind: 'done' };
+    if (transcript.translateError) return { kind: 'failed' };
+    return fromCache(page) ? { kind: 'done', cached: true } : { kind: 'done' };
   }
   if (translating.has(page.pageHash)) return { kind: 'working', text: '翻譯中…' };
   // 模型還沒好：辨識不了，進度寫在標題
@@ -131,6 +143,16 @@ function header(rows: StatusRow[], { model }: PageStatusInput): StatusPanel['hea
   return { kind: 'working', text: `${busy.length} 頁處理中` };
 }
 
+/** 這一批的完成摘要；條漫的一截不是一頁，不寫頁數。 */
+function settled(rows: StatusRow[], { usesOwnKey }: PageStatusInput): StatusPanel['header'] {
+  const cached = rows.filter(({ state }) => state.kind === 'done' && state.cached).length;
+  const strip = rows.every(({ icon }) => icon.kind === 'strip');
+  const count = strip ? '' : `${rows.length} 頁`;
+  if (cached === 0) return { kind: 'settled', text: `${count}翻譯完成` };
+  if (cached === rows.length) return { kind: 'settled', text: `${count}套用快取${usesOwnKey ? '' : '（沒扣額度）'}` };
+  return { kind: 'settled', text: strip ? '翻譯完成' : `翻譯完成，${cached} 頁套用快取` };
+}
+
 type Blocked = QuotaExhausted | Exclude<RequestedStep, 'plan'>;
 
 /** 卡住、不是這一頁自己的問題（額度、帳號）：同一個原因的頁合成一列。 */
@@ -151,7 +173,12 @@ const BLOCKED: Record<Blocked, Omit<SharedProblem, 'pageHash' | 'detail'> & { de
   ownKey: { title: '還沒設定 API key', action: 'ownKey', label: '設定' },
 };
 
-export function pageStatus(input: PageStatusInput): { panel: StatusPanel | undefined; badge: ActionBadge } {
+export function pageStatus(input: PageStatusInput): {
+  panel: StatusPanel | undefined;
+  badge: ActionBadge;
+  /** 還在排隊或處理中的 Page（pageHash）：page-status-sync 記成這一批。 */
+  processing: string[];
+} {
   const ordered = readingOrder(input.pages);
   const rows: StatusRow[] = [];
   const stuck = new Map<Blocked, string[]>();
@@ -167,6 +194,7 @@ export function pageStatus(input: PageStatusInput): { panel: StatusPanel | undef
   const busy = rows.some(isBusy);
   const problem = problems.length > 0 || rows.some(({ state }) => state.kind === 'failed');
   const current = (rows.find(({ state }) => state.kind === 'working') ?? rows.find(({ state }) => state.kind === 'queued'))?.icon;
+  const batch = busy || problem ? [] : rows.filter(({ pageHash }) => input.batch?.has(pageHash));
   const panel: StatusPanel | undefined =
     busy || problem
       ? {
@@ -176,9 +204,12 @@ export function pageStatus(input: PageStatusInput): { panel: StatusPanel | undef
           problems,
           expanded: problem,
         }
-      : undefined;
+      : batch.length > 0
+        ? { header: settled(batch, input), ...fit(batch), problems: [], expanded: false }
+        : undefined;
   return {
     panel,
+    processing: rows.filter(isBusy).map(({ pageHash }) => pageHash),
     // 出問題 > 翻譯中 > 快用完 > 平常：翻譯中先顯示藍色，翻完再變回橘色
     badge: problem ? 'problem' : busy ? 'busy' : input.strip ? (input.lowQuota ? 'stripLowQuota' : 'strip') : input.lowQuota ? 'lowQuota' : 'on',
   };

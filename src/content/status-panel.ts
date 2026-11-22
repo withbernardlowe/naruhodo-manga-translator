@@ -4,11 +4,13 @@
  * 放在 top layer（popover="manual"）：網站 hover 時浮出來的標題列、控制列 z-index 再高也蓋不到它。
  * 平常收合成一行（轉圈圈＋「2 頁處理中」＋正在處理那頁的位置圖示），滑過展開成每頁一列；有要讀者處理的就一直展開。
  * 截圖時藏起來（字不能進 OCR、也不能改變 Page hash）；沒在忙也沒出問題就淡出。
+ * 什麼時候出現、收起的規則在 status-timing.ts（處理中過一下才出現、摘要停一下才收），這裡管計時器與 hover。
  *
  * host 帶 STATUS_HOST_ATTRIBUTE（不是覆蓋層的 HOST_ATTRIBUTE，數覆蓋層時不算它）；翻頁偵測、遮擋物也把它當成自己的。
  */
 import type { PageIcon, StatusAction, StatusPanel, StatusRow } from '../shared/page-status.ts';
 import TOKENS from '../shared/tokens.css';
+import { nextStep, SETTLED_MS, SHOW_DELAY_MS } from './status-timing.ts';
 
 /** 給 e2e 與翻頁偵測用：全站狀態的 shadow host 的屬性。 */
 export const STATUS_HOST_ATTRIBUTE = 'data-naruhodo-status';
@@ -18,6 +20,7 @@ const SWALLOWED = ['click', 'dblclick', 'pointerdown', 'pointerup', 'mousedown',
 
 /** 收起時淡出花這麼久（ms）。 */
 const FADE_MS = 200;
+
 
 const STYLE = `${TOKENS}
 :host { all: initial; }
@@ -94,6 +97,12 @@ export function createStatusPanel({ onAction }: { onAction: OnStatusAction }) {
   /** 滑鼠在面板上：展開。自己記，不用 CSS :hover（理由同上）。 */
   let hovered = false;
   let fade: ReturnType<typeof setTimeout> | undefined;
+  /** 處理中、還沒出現的面板：SHOW_DELAY_MS 後畫最新的那一份。 */
+  let delayed: { timer: ReturnType<typeof setTimeout>; panel: StatusPanel } | undefined;
+  /** 摘要停留中，時間到就淡出。 */
+  let linger: ReturnType<typeof setTimeout> | undefined;
+  /** 這一批的摘要已經出現過（停留中或已經收起）：SW 重送同一批的摘要時不重新計時、收起了也不再出現。 */
+  let settledShown = false;
   let capturing = false;
 
   function button(label: string, action: StatusAction, pageHash: string): HTMLButtonElement {
@@ -116,7 +125,7 @@ export function createStatusPanel({ onAction }: { onAction: OnStatusAction }) {
     else if (state.kind === 'queued') {
       line.classList.add('dim');
       line.textContent = '排隊中';
-    } else if (state.kind === 'done') line.append(el('span', 'ok', '✓'), '翻好了');
+    } else if (state.kind === 'done') line.append(el('span', 'ok', '✓'), state.cached ? '套用快取' : '翻好了');
     else {
       line.classList.add('err');
       line.textContent = '翻譯失敗';
@@ -137,10 +146,12 @@ export function createStatusPanel({ onAction }: { onAction: OnStatusAction }) {
     for (const type of SWALLOWED) root.addEventListener(type, (event) => event.stopPropagation());
     root.addEventListener('pointerenter', () => {
       hovered = true;
+      stopLinger();
       applyOpen();
     });
     root.addEventListener('pointerleave', () => {
       hovered = false;
+      if (shown?.header.kind === 'settled') startLinger();
       applyOpen();
     });
     return root;
@@ -150,6 +161,7 @@ export function createStatusPanel({ onAction }: { onAction: OnStatusAction }) {
     const parts: HTMLElement[] = [];
     const head = el('div', 'head');
     if (panel.header.kind === 'working') head.append(spinner());
+    else if (panel.header.kind === 'settled') head.append(el('span', 'ok', '✓'));
     else head.append(el('span', 'ex', '!'));
     head.append(panel.header.text);
     if (panel.current) {
@@ -228,9 +240,54 @@ export function createStatusPanel({ onAction }: { onAction: OnStatusAction }) {
   }
   document.addEventListener('fullscreenchange', raise);
 
-  function remove(): void {
+  function stopDelay(): void {
+    clearTimeout(delayed?.timer);
+    delayed = undefined;
+  }
+
+  function stopLinger(): void {
+    clearTimeout(linger);
+    linger = undefined;
+  }
+
+  function startLinger(): void {
+    stopLinger();
+    linger = setTimeout(() => {
+      linger = undefined;
+      fadeOut();
+    }, SETTLED_MS);
+  }
+
+  function show(panel: StatusPanel): void {
     clearTimeout(fade);
     fade = undefined;
+    shown = panel;
+    render(ensureHost(), panel);
+    raise();
+  }
+
+  /** 淡出畫面上的面板；等著出現的處理中照樣等（摘要停留時間到時，下一批可能已經在等）。 */
+  function fadeOut(): void {
+    stopLinger();
+    if (!panelElement || fade) return;
+    panelElement.classList.add('leaving');
+    fade = setTimeout(removeHost, FADE_MS);
+  }
+
+  function hide(): void {
+    stopDelay();
+    fadeOut();
+  }
+
+  function remove(): void {
+    stopDelay();
+    removeHost();
+  }
+
+  function removeHost(): void {
+    clearTimeout(fade);
+    fade = undefined;
+    stopLinger();
     host?.remove();
     host = undefined;
     panelElement = undefined;
@@ -241,17 +298,36 @@ export function createStatusPanel({ onAction }: { onAction: OnStatusAction }) {
   return {
     /** 換成 SW 送來的內容；undefined＝淡出收起。 */
     set(panel: StatusPanel | undefined): void {
-      if (!panel) {
-        if (!panelElement || fade) return;
-        panelElement.classList.add('leaving');
-        fade = setTimeout(remove, FADE_MS);
-        return;
+      const step = nextStep({ showing: panelElement ? shown?.header.kind : undefined, fading: fade !== undefined, settledShown }, panel);
+      settledShown = panel?.header.kind === 'settled';
+      switch (step.do) {
+        case 'hide':
+          hide();
+          return;
+        case 'keep':
+          return;
+        case 'show':
+          stopDelay();
+          if (step.linger) {
+            if (!hovered) startLinger();
+          } else if (panel!.header.kind !== 'settled') stopLinger();
+          show(panel!);
+          return;
+        case 'delay':
+          if (delayed) {
+            delayed.panel = panel!;
+            return;
+          }
+          delayed = {
+            panel: panel!,
+            timer: setTimeout(() => {
+              const latest = delayed!.panel;
+              delayed = undefined;
+              stopLinger();
+              show(latest);
+            }, SHOW_DELAY_MS),
+          };
       }
-      clearTimeout(fade);
-      fade = undefined;
-      shown = panel;
-      render(ensureHost(), panel);
-      raise();
     },
     /** 截圖前藏起來（不管覆蓋層藏不藏）。 */
     hideForCapture(): void {
