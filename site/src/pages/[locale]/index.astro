@@ -48,6 +48,20 @@ const t = copy[locale];
     </div>
   </section>
 
+  <section class="section">
+    <div class="wrap">
+      <h2>{t.learn.title}</h2>
+      <ul class="features">
+        {t.learn.items.map((item) => (
+          <li class="card">
+            <h3>{item.title}</h3>
+            <p>{item.body}</p>
+          </li>
+        ))}
+      </ul>
+    </div>
+  </section>
+
   <section class="section" id="pricing">
     <div class="wrap">
       <h2>{t.pricing.title}</h2>

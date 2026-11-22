@@ -47,7 +47,60 @@
               "h": 0.15764139590854392
             }
           },
-          "sfx": false
+          "sfx": false,
+          "讀音分詞": [
+            {
+              "原文": "突如",
+              "讀音": "とつじょ"
+            },
+            {
+              "原文": "現れ",
+              "讀音": "あらわれ"
+            },
+            {
+              "原文": "た",
+              "讀音": "た"
+            },
+            {
+              "原文": "巨大",
+              "讀音": "きょだい"
+            },
+            {
+              "原文": "な",
+              "讀音": "な"
+            },
+            {
+              "原文": "影",
+              "讀音": "かげ"
+            },
+            {
+              "原文": "―",
+              "讀音": "―"
+            },
+            {
+              "原文": "――",
+              "讀音": "――"
+            }
+          ],
+          "羅馬拼音": "totsujo arawareta kyodaina kage",
+          "羅馬拼音分詞": [
+            {
+              "原文": "突如",
+              "羅馬拼音": "totsujo"
+            },
+            {
+              "原文": "現れた",
+              "羅馬拼音": "arawareta"
+            },
+            {
+              "原文": "巨大な",
+              "羅馬拼音": "kyodaina"
+            },
+            {
+              "原文": "影―――",
+              "羅馬拼音": "kage"
+            }
+          ]
         },
         {
           "id": "b2",
@@ -87,7 +140,64 @@
               "h": 0.1648616125150421
             }
           },
-          "sfx": false
+          "sfx": false,
+          "讀音分詞": [
+            {
+              "原文": "街",
+              "讀音": "まち"
+            },
+            {
+              "原文": "が",
+              "讀音": "が"
+            },
+            {
+              "原文": "...",
+              "讀音": "..."
+            },
+            {
+              "原文": "崩壊",
+              "讀音": "ほうかい"
+            },
+            {
+              "原文": "し",
+              "讀音": "し"
+            },
+            {
+              "原文": "て",
+              "讀音": "て"
+            },
+            {
+              "原文": "いく",
+              "讀音": "いく"
+            },
+            {
+              "原文": "...!",
+              "讀音": "...!"
+            }
+          ],
+          "羅馬拼音": "machi ga... hōkai shite iku...!",
+          "羅馬拼音分詞": [
+            {
+              "原文": "街",
+              "羅馬拼音": "machi"
+            },
+            {
+              "原文": "が...",
+              "羅馬拼音": "ga..."
+            },
+            {
+              "原文": "崩壊",
+              "羅馬拼音": "hōkai"
+            },
+            {
+              "原文": "して",
+              "羅馬拼音": "shite"
+            },
+            {
+              "原文": "いく...!",
+              "羅馬拼音": "iku...!"
+            }
+          ]
         },
         {
           "id": "b3",
@@ -127,7 +237,100 @@
               "h": 0.16606498194945848
             }
           },
-          "sfx": false
+          "sfx": false,
+          "讀音分詞": [
+            {
+              "原文": "そんな",
+              "讀音": "そんな"
+            },
+            {
+              "原文": "...!",
+              "讀音": "...!"
+            },
+            {
+              "原文": "私",
+              "讀音": "わたし"
+            },
+            {
+              "原文": "たち",
+              "讀音": "たち"
+            },
+            {
+              "原文": "の",
+              "讀音": "の"
+            },
+            {
+              "原文": "攻撃",
+              "讀音": "こうげき"
+            },
+            {
+              "原文": "が",
+              "讀音": "が"
+            },
+            {
+              "原文": "、",
+              "讀音": "、"
+            },
+            {
+              "原文": "全く",
+              "讀音": "まったく"
+            },
+            {
+              "原文": "通じ",
+              "讀音": "つうじ"
+            },
+            {
+              "原文": "ない",
+              "讀音": "ない"
+            },
+            {
+              "原文": "なんて",
+              "讀音": "なんて"
+            },
+            {
+              "原文": "!",
+              "讀音": "!"
+            }
+          ],
+          "羅馬拼音": "sonna...! watashi tachi no kōgeki ga, mattaku tsūjinai nante!",
+          "羅馬拼音分詞": [
+            {
+              "原文": "そんな...!",
+              "羅馬拼音": "sonna...!"
+            },
+            {
+              "原文": "私",
+              "羅馬拼音": "watashi"
+            },
+            {
+              "原文": "たち",
+              "羅馬拼音": "tachi"
+            },
+            {
+              "原文": "の",
+              "羅馬拼音": "no"
+            },
+            {
+              "原文": "攻撃",
+              "羅馬拼音": "kōgeki"
+            },
+            {
+              "原文": "が、",
+              "羅馬拼音": "ga,"
+            },
+            {
+              "原文": "全く",
+              "羅馬拼音": "mattaku"
+            },
+            {
+              "原文": "通じない",
+              "羅馬拼音": "tsūjinai"
+            },
+            {
+              "原文": "なんて!",
+              "羅馬拼音": "nante!"
+            }
+          ]
         },
         {
           "id": "b4",
@@ -167,7 +370,72 @@
               "h": 0.17689530685920576
             }
           },
-          "sfx": false
+          "sfx": false,
+          "讀音分詞": [
+            {
+              "原文": "逃げる",
+              "讀音": "にげる"
+            },
+            {
+              "原文": "ん",
+              "讀音": "ん"
+            },
+            {
+              "原文": "だ",
+              "讀音": "だ"
+            },
+            {
+              "原文": "、",
+              "讀音": "、"
+            },
+            {
+              "原文": "勝てる",
+              "讀音": "かてる"
+            },
+            {
+              "原文": "わけ",
+              "讀音": "わけ"
+            },
+            {
+              "原文": "が",
+              "讀音": "が"
+            },
+            {
+              "原文": "ない",
+              "讀音": "ない"
+            },
+            {
+              "原文": "!",
+              "讀音": "!"
+            }
+          ],
+          "羅馬拼音": "nigeru nda, kateru wake ga nai!",
+          "羅馬拼音分詞": [
+            {
+              "原文": "逃げる",
+              "羅馬拼音": "nigeru"
+            },
+            {
+              "原文": "んだ、",
+              "羅馬拼音": "nda,"
+            },
+            {
+              "原文": "勝てる",
+              "羅馬拼音": "kateru"
+            },
+            {
+              "原文": "わけ",
+              "羅馬拼音": "wake"
+            },
+            {
+              "原文": "が",
+              "羅馬拼音": "ga"
+            },
+            {
+              "原文": "ない!",
+              "羅馬拼音": "nai!"
+            }
+          ]
         },
         {
           "id": "b5",
@@ -207,7 +475,36 @@
               "h": 0.09747292418772563
             }
           },
-          "sfx": false
+          "sfx": false,
+          "讀音分詞": [
+            {
+              "原文": "あっ",
+              "讀音": "あっ"
+            },
+            {
+              "原文": "...",
+              "讀音": "..."
+            },
+            {
+              "原文": "お前",
+              "讀音": "おまえ"
+            },
+            {
+              "原文": "......!",
+              "讀音": "......!"
+            }
+          ],
+          "羅馬拼音": "a... omae......!",
+          "羅馬拼音分詞": [
+            {
+              "原文": "あっ...",
+              "羅馬拼音": "a..."
+            },
+            {
+              "原文": "お前......!",
+              "羅馬拼音": "omae......!"
+            }
+          ]
         },
         {
           "id": "b6",
@@ -247,7 +544,72 @@
               "h": 0.16365824308062576
             }
           },
-          "sfx": false
+          "sfx": false,
+          "讀音分詞": [
+            {
+              "原文": "逃げる",
+              "讀音": "にげる"
+            },
+            {
+              "原文": "ん",
+              "讀音": "ん"
+            },
+            {
+              "原文": "だ",
+              "讀音": "だ"
+            },
+            {
+              "原文": "、",
+              "讀音": "、"
+            },
+            {
+              "原文": "勝る",
+              "讀音": "まさる"
+            },
+            {
+              "原文": "わけ",
+              "讀音": "わけ"
+            },
+            {
+              "原文": "が",
+              "讀音": "が"
+            },
+            {
+              "原文": "ない",
+              "讀音": "ない"
+            },
+            {
+              "原文": "!",
+              "讀音": "!"
+            }
+          ],
+          "羅馬拼音": "nigeru nda, masaru wake ga nai!",
+          "羅馬拼音分詞": [
+            {
+              "原文": "逃げる",
+              "羅馬拼音": "nigeru"
+            },
+            {
+              "原文": "んだ、",
+              "羅馬拼音": "nda,"
+            },
+            {
+              "原文": "勝る",
+              "羅馬拼音": "masaru"
+            },
+            {
+              "原文": "わけ",
+              "羅馬拼音": "wake"
+            },
+            {
+              "原文": "が",
+              "羅馬拼音": "ga"
+            },
+            {
+              "原文": "ない!",
+              "羅馬拼音": "nai!"
+            }
+          ]
         },
         {
           "id": "b7",
@@ -287,7 +649,48 @@
               "h": 0.1684717208182912
             }
           },
-          "sfx": false
+          "sfx": false,
+          "讀音分詞": [
+            {
+              "原文": "......",
+              "讀音": "......"
+            },
+            {
+              "原文": "いや",
+              "讀音": "いや"
+            },
+            {
+              "原文": "、",
+              "讀音": "、"
+            },
+            {
+              "原文": "まだ",
+              "讀音": "まだ"
+            },
+            {
+              "原文": "だ",
+              "讀音": "だ"
+            },
+            {
+              "原文": "。",
+              "讀音": "。"
+            }
+          ],
+          "羅馬拼音": "...... iya, madada.",
+          "羅馬拼音分詞": [
+            {
+              "原文": "......",
+              "羅馬拼音": "......"
+            },
+            {
+              "原文": "いや、",
+              "羅馬拼音": "iya,"
+            },
+            {
+              "原文": "まだだ。",
+              "羅馬拼音": "madada."
+            }
+          ]
         }
       ],
       "looseText": [
@@ -317,7 +720,24 @@
             },
             "image": "data:image/png;base64,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"
           },
-          "sfx": true
+          "sfx": true,
+          "讀音分詞": [
+            {
+              "原文": "ガガガガ",
+              "讀音": "ガガガガ"
+            },
+            {
+              "原文": "...",
+              "讀音": "..."
+            }
+          ],
+          "羅馬拼音": "gagagaga...",
+          "羅馬拼音分詞": [
+            {
+              "原文": "ガガガガ...",
+              "羅馬拼音": "gagagaga..."
+            }
+          ]
         }
       ]
     }
