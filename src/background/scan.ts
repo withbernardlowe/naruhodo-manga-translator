@@ -247,22 +247,16 @@ export function createScanner(deps: ScannerDeps) {
    */
   async function recordOnce(tabId: number, generation: number): Promise<void> {
     const isCurrentGeneration = () => (generations.get(tabId) ?? 0) === generation;
-    const toRecord = (candidates: PageCandidate[]) => {
-      const seen = pages.get(tabId) ?? [];
-      return withOverlay(candidates).filter((c) => {
-        // 已經記過同一組頁（例如翻回來命中快取、覆蓋層重畫）就不必再截
-        if (lookOf(tabId, c)) return false;
-        const onAnchor = seen.filter((p) => p.anchorId === c.anchorId);
-        return onAnchor.length > 0 && c.overlaid!.every((hash) => findSamePage(onAnchor, hash) !== undefined);
-      });
-    };
-    // 沒有要記的就不等限速：content script 等這次做完才讓摘要出現（status-timing.ts）
-    if (toRecord((await deps.findPageCandidates(tabId)).candidates).length === 0) return;
     await waitForCaptureAllowed();
     if (!isCurrentGeneration()) return;
     const before = await deps.findPageCandidates(tabId);
     const seen = pages.get(tabId) ?? [];
-    const shown = toRecord(before.candidates);
+    const shown = withOverlay(before.candidates).filter((c) => {
+      // 已經記過同一組頁（例如翻回來命中快取、覆蓋層重畫）就不必再截
+      if (lookOf(tabId, c)) return false;
+      const onAnchor = seen.filter((p) => p.anchorId === c.anchorId);
+      return onAnchor.length > 0 && c.overlaid!.every((hash) => findSamePage(onAnchor, hash) !== undefined);
+    });
     if (shown.length === 0) return;
     const windowId = await deps.getVisibleWindowId(tabId);
     if (windowId === undefined) return;

@@ -10,7 +10,7 @@
  */
 import type { PageIcon, StatusAction, StatusPanel, StatusRow } from '../shared/page-status.ts';
 import TOKENS from '../shared/tokens.css';
-import { nextStep, RECORD_HOLD_MAX_MS, SETTLED_MS, SHOW_DELAY_MS } from './status-timing.ts';
+import { nextStep, SETTLED_MS, SHOW_DELAY_MS } from './status-timing.ts';
 
 /** 給 e2e 與翻頁偵測用：全站狀態的 shadow host 的屬性。 */
 export const STATUS_HOST_ATTRIBUTE = 'data-naruhodo-status';
@@ -104,10 +104,8 @@ export function createStatusPanel({ onAction }: { onAction: OnStatusAction }) {
   /** 這一批的摘要已經出現過（停留中或已經收起）：SW 重送同一批的摘要時不重新計時、收起了也不再出現。 */
   let settledShown = false;
   let capturing = false;
-  /** 還沒記完帶覆蓋層樣子的覆蓋層有幾個（holdWhile）。 */
-  let recordings = 0;
-  /** 等著記完才畫的摘要（status-timing.ts 的 hold）。 */
-  let held: StatusPanel | undefined;
+  /** 等面板收起的（whenHidden）。 */
+  let hiddenWaiters: (() => void)[] = [];
 
   function button(label: string, action: StatusAction, pageHash: string): HTMLButtonElement {
     const element = el('button', 'act', label);
@@ -297,67 +295,44 @@ export function createStatusPanel({ onAction }: { onAction: OnStatusAction }) {
     panelElement = undefined;
     shown = undefined;
     hovered = false;
-  }
-
-  /** 換成 SW 送來的內容；undefined＝淡出收起。 */
-  function set(panel: StatusPanel | undefined): void {
-    const step = nextStep({ showing: panelElement ? shown?.header.kind : undefined, fading: fade !== undefined, settledShown, recording: recordings > 0 }, panel);
-    if (step.do === 'hold') {
-      // 這一批已經做完：等著出現的處理中不畫了（跟摘要直接出現時一樣）
-      stopDelay();
-      held = panel;
-      return;
-    }
-    held = undefined;
-    settledShown = panel?.header.kind === 'settled';
-    switch (step.do) {
-      case 'hide':
-        hide();
-        return;
-      case 'keep':
-        return;
-      case 'show':
-        stopDelay();
-        if (step.linger) {
-          if (!hovered) startLinger();
-        } else if (panel!.header.kind !== 'settled') stopLinger();
-        show(panel!);
-        return;
-      case 'delay':
-        if (delayed) {
-          delayed.panel = panel!;
-          return;
-        }
-        delayed = {
-          panel: panel!,
-          timer: setTimeout(() => {
-            const latest = delayed!.panel;
-            delayed = undefined;
-            stopLinger();
-            show(latest);
-          }, SHOW_DELAY_MS),
-        };
-    }
+    const waiters = hiddenWaiters;
+    hiddenWaiters = [];
+    for (const resolve of waiters) resolve();
   }
 
   return {
-    set,
-    /**
-     * 剛畫好的覆蓋層等 SW 記帶覆蓋層的樣子（task 做完＝記完或不必記）：這段期間這一批的摘要先不出現，記完才出現，
-     * 免得記樣子那次截圖藏起面板時摘要閃一下。最多等 RECORD_HOLD_MAX_MS。
-     */
-    holdWhile(task: Promise<unknown>): void {
-      recordings++;
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      const timeout = new Promise<void>((resolve) => (timer = setTimeout(resolve, RECORD_HOLD_MAX_MS)));
-      void Promise.race([task.catch(() => {}), timeout]).then(() => {
-        clearTimeout(timer);
-        recordings--;
-        if (recordings > 0 || !held) return;
-        const latest = held;
-        held = undefined;
-        set(latest);
-      });
+    /** 換成 SW 送來的內容；undefined＝淡出收起。 */
+    set(panel: StatusPanel | undefined): void {
+      const step = nextStep({ showing: panelElement ? shown?.header.kind : undefined, fading: fade !== undefined, settledShown }, panel);
+      settledShown = panel?.header.kind === 'settled';
+      switch (step.do) {
+        case 'hide':
+          hide();
+          return;
+        case 'keep':
+          return;
+        case 'show':
+          stopDelay();
+          if (step.linger) {
+            if (!hovered) startLinger();
+          } else if (panel!.header.kind !== 'settled') stopLinger();
+          show(panel!);
+          return;
+        case 'delay':
+          if (delayed) {
+            delayed.panel = panel!;
+            return;
+          }
+          delayed = {
+            panel: panel!,
+            timer: setTimeout(() => {
+              const latest = delayed!.panel;
+              delayed = undefined;
+              stopLinger();
+              show(latest);
+            }, SHOW_DELAY_MS),
+          };
+      }
     },
     /** 截圖前藏起來（不管覆蓋層藏不藏）。 */
     hideForCapture(): void {
@@ -369,10 +344,16 @@ export function createStatusPanel({ onAction }: { onAction: OnStatusAction }) {
       if (host) host.style.visibility = 'visible';
     },
     stop(): void {
-      // 停止後暫緩結束也不再畫
-      held = undefined;
       document.removeEventListener('fullscreenchange', raise);
       remove();
+    },
+    /**
+     * 畫面上沒有面板時 resolve（現在就沒有的話馬上）。截圖一定會藏起面板，要截又不急的（記帶覆蓋層的樣子）等到這時，
+     * 面板才不會在顯示中消失一下又出現。還在 SHOW_DELAY_MS 裡、還沒出現的處理中不算：那時截的話它晚一點才出現，不會閃。
+     */
+    whenHidden(): Promise<void> {
+      if (!host) return Promise.resolve();
+      return new Promise((resolve) => hiddenWaiters.push(resolve));
     },
   };
 }

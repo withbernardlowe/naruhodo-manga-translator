@@ -195,10 +195,28 @@ if (!globalThis.__naruhodo) {
   const pageModeLoaded = loadPageMode().then((mode) => overlay.setPageMode(mode));
   // ⚙ 的顯示設定只改 tooltip 的內容，不必等它才畫覆蓋層
   const stopWatchingDisplaySettings = watchDisplaySettings((settings) => overlay.setDisplaySettings(settings));
+  /** 已經在等面板收起、之後會請 SW 記樣子。 */
+  let recordPending = false;
+  /**
+   * 覆蓋層畫好了：請 SW 記下帶覆蓋層的樣子（下次截圖就不必藏覆蓋層）。記樣子要截一次圖，截圖一定會藏起全站狀態，
+   * 所以等面板收起才請：不然「處理中」或摘要會消失一下又出現。等的期間又畫好的覆蓋層併進同一次（SW 記的是那時畫面上的全部）。
+   * 面板還沒收起就翻走的話這一頁記不到，下次翻回來照舊藏覆蓋層截圖。
+   */
+  function askToRecordOverlaid(): void {
+    if (recordPending) return;
+    recordPending = true;
+    const waitedFrom = performance.now();
+    void statusPanel.whenHidden().then(() => {
+      recordPending = false;
+      if (__DEBUG__) trace('overlay:askRecord', { waitedMs: Math.round(performance.now() - waitedFrom) });
+      return send({ type: 'content:overlayShown' });
+    });
+  }
+
   const stopWatchingPageMode = onPageModeChange(pageModeLoaded, (mode) => {
     overlay.setPageMode(mode);
     // 切回閱讀：譯文重新出現，跟剛畫好時一樣讓 SW 記下帶覆蓋層的樣子，下次截圖就不必藏
-    if (mode === 'read') void untilRepainted().then(() => send({ type: 'content:overlayShown' }));
+    if (mode === 'read') void untilRepainted().then(askToRecordOverlaid);
   });
 
   /** 在自己的覆蓋層或全站狀態（shadow host）裡。 */
@@ -235,15 +253,11 @@ if (!globalThis.__naruhodo) {
       case 'content:showOverlay': {
         // anchor 不在最近一次量到的 Page 裡（已經捲走或換頁）就不覆蓋
         const anchor = anchors.get(message.anchorId);
-        if (anchor instanceof HTMLElement) {
-          // SW 記完帶覆蓋層的樣子才回覆：這一批的摘要等到那時才出現，記樣子那次截圖藏起面板時才不會閃一下。
-          // SW 先送覆蓋層、才送摘要，所以在這裡就開始等
-          const shown = pageModeLoaded
+        if (anchor instanceof HTMLElement)
+          pageModeLoaded
             .then(() => overlay.show(anchor, message.subRect, message.text, message.pageHash))
-            .then(() => send({ type: 'content:overlayShown' }));
-          statusPanel.holdWhile(shown);
-          shown.catch((e: unknown) => console.warn('overlay failed', e));
-        }
+            .then(askToRecordOverlaid)
+            .catch((e: unknown) => console.warn('overlay failed', e));
         else trace('overlay:skip', { anchorId: message.anchorId, pageHash: message.pageHash, reason: 'anchor 不在最近一次量到的 Page 裡' });
         return false;
       }
