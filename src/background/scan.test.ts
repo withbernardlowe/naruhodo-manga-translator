@@ -562,6 +562,19 @@ describe('scan', () => {
       expect(chrome.events).toEqual([]);
     });
 
+    it('沒有要記的就不等截圖限速，馬上做完（content script 等它做完才讓摘要出現）', async () => {
+      const chrome = page(true);
+      const scanner = createScanner(chrome.deps);
+      await settle(scanner.scan(1));
+      let done = false;
+
+      // 剛截完圖，限速還要等 550 ms；假時鐘不動也要做完
+      void scanner.recordOverlaid(1).then(() => (done = true));
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(done).toBe(true);
+    });
+
     it('上次截到的不是覆蓋層顯示的那頁就不記（免得把錯的頁配上去）', async () => {
       const chrome = page(false);
       const scanner = createScanner(chrome.deps);

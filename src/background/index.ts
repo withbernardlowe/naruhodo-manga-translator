@@ -1015,12 +1015,15 @@ chrome.runtime.onMessage.addListener((message: Message, sender, sendResponse) =>
       return false;
     }
     case 'content:overlayShown': {
+      // 記完（或不必記）才回覆：content script 等到那時才讓這一批的摘要出現（status-timing.ts）
       const tabId = sender.tab?.id;
-      if (tabId !== undefined)
-        void activation.isActive(tabId).then((active) => {
-          if (active) scanner.recordOverlaid(tabId).catch((e: unknown) => console.warn('record overlaid failed', e));
-        });
-      return false;
+      if (tabId === undefined) return false;
+      void activation
+        .isActive(tabId)
+        .then((active) => (active ? scanner.recordOverlaid(tabId) : undefined))
+        .catch((e: unknown) => console.warn('record overlaid failed', e))
+        .finally(() => sendResponse(undefined));
+      return true;
     }
     case 'panel:getPages':
       sendResponse({ pages: transcriber.get(message.tabId), strip: transcriber.getStrip(message.tabId) } satisfies PagesResponse);

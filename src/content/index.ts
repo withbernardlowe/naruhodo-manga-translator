@@ -235,11 +235,15 @@ if (!globalThis.__naruhodo) {
       case 'content:showOverlay': {
         // anchor 不在最近一次量到的 Page 裡（已經捲走或換頁）就不覆蓋
         const anchor = anchors.get(message.anchorId);
-        if (anchor instanceof HTMLElement)
-          pageModeLoaded
+        if (anchor instanceof HTMLElement) {
+          // SW 記完帶覆蓋層的樣子才回覆：這一批的摘要等到那時才出現，記樣子那次截圖藏起面板時才不會閃一下。
+          // SW 先送覆蓋層、才送摘要，所以在這裡就開始等
+          const shown = pageModeLoaded
             .then(() => overlay.show(anchor, message.subRect, message.text, message.pageHash))
-            .then(() => send({ type: 'content:overlayShown' }))
-            .catch((e: unknown) => console.warn('overlay failed', e));
+            .then(() => send({ type: 'content:overlayShown' }));
+          statusPanel.holdWhile(shown);
+          shown.catch((e: unknown) => console.warn('overlay failed', e));
+        }
         else trace('overlay:skip', { anchorId: message.anchorId, pageHash: message.pageHash, reason: 'anchor 不在最近一次量到的 Page 裡' });
         return false;
       }
