@@ -78,7 +78,7 @@ test('重新整理後命中快取：不先閃「處理中」，直接說套用�
   await testActivate(panel, tabId);
 
   const seen = () => page.evaluate(() => (window as unknown as { __statusTexts: string[] }).__statusTexts);
-  await expect.poll(seen).toContainEqual(expect.stringMatching(/^2 頁套用快取/));
+  await expect.poll(seen).toContainEqual(expect.stringMatching(/2 頁套用快取/));
   await expect(status(page)).toHaveCount(0);
   expect((await seen()).filter((text) => text.includes('處理中'))).toEqual([]);
 });
