@@ -104,6 +104,8 @@ export function createStatusPanel({ onAction }: { onAction: OnStatusAction }) {
   /** 這一批的摘要已經出現過（停留中或已經收起）：SW 重送同一批的摘要時不重新計時、收起了也不再出現。 */
   let settledShown = false;
   let capturing = false;
+  /** 等面板收起的（whenHidden）。 */
+  let hiddenWaiters: (() => void)[] = [];
 
   function button(label: string, action: StatusAction, pageHash: string): HTMLButtonElement {
     const element = el('button', 'act', label);
@@ -293,6 +295,9 @@ export function createStatusPanel({ onAction }: { onAction: OnStatusAction }) {
     panelElement = undefined;
     shown = undefined;
     hovered = false;
+    const waiters = hiddenWaiters;
+    hiddenWaiters = [];
+    for (const resolve of waiters) resolve();
   }
 
   return {
@@ -341,6 +346,14 @@ export function createStatusPanel({ onAction }: { onAction: OnStatusAction }) {
     stop(): void {
       document.removeEventListener('fullscreenchange', raise);
       remove();
+    },
+    /**
+     * 畫面上沒有面板時 resolve（現在就沒有的話馬上）。截圖一定會藏起面板，要截又不急的（記帶覆蓋層的樣子）等到這時，
+     * 面板才不會在顯示中消失一下又出現。還在 SHOW_DELAY_MS 裡、還沒出現的處理中不算：那時截的話它晚一點才出現，不會閃。
+     */
+    whenHidden(): Promise<void> {
+      if (!host) return Promise.resolve();
+      return new Promise((resolve) => hiddenWaiters.push(resolve));
     },
   };
 }

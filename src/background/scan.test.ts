@@ -405,31 +405,90 @@ describe('scan', () => {
     }
     const publishedHashes = (chrome: ReturnType<typeof fakeDeps>) => chrome.published.at(-1)?.[1].map((p) => p.pageHash);
 
-    it('Spread（一個 anchor 兩頁）不記帶覆蓋層的樣子（記錄以 anchor 為單位，分不出是哪一頁），也就不多截一次', async () => {
+    describe('Spread（電子書閱讀器：一個 anchor 是整個跨頁，切成兩頁）', () => {
       const RIGHT = CLEAN;
       const LEFT = '0f'.repeat(32);
-      const chrome = fakeDeps([P1]);
-      chrome.deps.crop = async ({ candidates }) => ({
-        frame: 'fresh',
-        pages: candidates.flatMap((c) => {
-          const overlaid = !chrome.env.capturedHidden && (c.overlaid?.length ?? 0) > 0;
-          return [
-            { anchorId: c.anchorId, rect: c.rect, subRect: { x: 0.5, y: 0, w: 0.5, h: 1 }, thumbnail: 'r', pageHash: overlaid ? WITH_OVERLAY : RIGHT },
-            { anchorId: c.anchorId, rect: c.rect, subRect: { x: 0, y: 0, w: 0.5, h: 1 }, thumbnail: 'l', pageHash: LEFT },
-          ];
-        }),
+      const RIGHT_WITH_OVERLAY = WITH_OVERLAY;
+      const LEFT_WITH_OVERLAY = 'f0'.repeat(32);
+      /** crop 把 a1 切成右、左兩頁（閱讀順序）；覆蓋層沒藏時截到的是帶譯文的 hash。overlayPages：沒藏時切出幾頁。 */
+      function spread({ overlayPages = 2 } = {}) {
+        const chrome = fakeDeps([P1]);
+        chrome.deps.crop = async ({ candidates }) => ({
+          frame: 'fresh',
+          pages: candidates.flatMap((c): PageThumb[] => {
+            const overlaid = !chrome.env.capturedHidden && (c.overlaid?.length ?? 0) > 0;
+            const right: PageThumb = { anchorId: c.anchorId, rect: c.rect, subRect: { x: 0.5, y: 0, w: 0.5, h: 1 }, thumbnail: 'r', pageHash: overlaid ? RIGHT_WITH_OVERLAY : RIGHT };
+            const left = { anchorId: c.anchorId, rect: c.rect, subRect: { x: 0, y: 0, w: 0.5, h: 1 }, thumbnail: 'l', pageHash: overlaid ? LEFT_WITH_OVERLAY : LEFT };
+            const { subRect: _, ...whole } = right;
+            return overlaid && overlayPages === 1 ? [whole] : [right, left];
+          }),
+        });
+        return chrome;
+      }
+
+      it('兩頁的覆蓋層畫好後記下兩頁各自帶覆蓋層的樣子；翻回來就不藏覆蓋層，hash 換回原圖的（#27 除錯：翻回剛翻過的跨頁，中文閃回日文）', async () => {
+        const chrome = spread();
+        const scanner = createScanner(chrome.deps);
+        await settle(scanner.scan(1));
+        // 覆蓋層記的順序跟 crop 的閱讀順序不一定一樣
+        chrome.env.candidates = [{ ...P1, overlaid: [LEFT, RIGHT] }];
+        await settle(scanner.recordOverlaid(1));
+        chrome.events.length = 0;
+
+        await settle(scanner.scan(1));
+
+        expect(chrome.events).toEqual(['prepare 1', 'capture', 'restore 1']);
+        expect(publishedHashes(chrome)).toEqual([RIGHT, LEFT]);
+        expect(chrome.publishedCaptures.at(-1)?.overlayShown).toBe(true);
       });
-      const scanner = createScanner(chrome.deps);
-      await settle(scanner.scan(1));
-      chrome.env.candidates = [{ ...P1, overlaid: [RIGHT] }];
-      chrome.events.length = 0;
-      await settle(scanner.recordOverlaid(1));
-      expect(chrome.events).toEqual([]);
 
-      await settle(scanner.scan(1));
+      it('只有一頁顯示著覆蓋層（另一頁沒有要蓋的字）也記，另一頁照原樣對', async () => {
+        const chrome = spread();
+        const crop = chrome.deps.crop;
+        chrome.deps.crop = async (request) => {
+          const result = await crop(request);
+          // 左頁沒有覆蓋層：帶不帶覆蓋層截到的都是原圖
+          return { ...result, pages: result.pages.map((p) => (p.pageHash === LEFT_WITH_OVERLAY ? { ...p, pageHash: LEFT } : p)) };
+        };
+        const scanner = createScanner(chrome.deps);
+        await settle(scanner.scan(1));
+        chrome.env.candidates = [{ ...P1, overlaid: [RIGHT] }];
+        await settle(scanner.recordOverlaid(1));
+        chrome.events.length = 0;
 
-      expect(chrome.events).toEqual(['hide 1', 'capture', 'restore 1']);
-      expect(publishedHashes(chrome)).toEqual([RIGHT, LEFT]);
+        await settle(scanner.scan(1));
+
+        expect(chrome.events).toEqual(['prepare 1', 'capture', 'restore 1']);
+        expect(publishedHashes(chrome)).toEqual([RIGHT, LEFT]);
+      });
+
+      it('帶覆蓋層時切出來的頁數不一樣（覆蓋層干擾了切頁）就不記，截圖時照舊藏覆蓋層', async () => {
+        const chrome = spread({ overlayPages: 1 });
+        const scanner = createScanner(chrome.deps);
+        await settle(scanner.scan(1));
+        chrome.env.candidates = [{ ...P1, overlaid: [RIGHT, LEFT] }];
+        await settle(scanner.recordOverlaid(1));
+        chrome.events.length = 0;
+
+        await settle(scanner.scan(1));
+
+        expect(chrome.events.slice(0, 3)).toEqual(['hide 1', 'capture', 'restore 1']);
+        expect(publishedHashes(chrome)).toEqual([RIGHT, LEFT]);
+      });
+
+      it('覆蓋層顯示的頁跟記下時不同（同一個 anchor 換了跨頁）就藏覆蓋層', async () => {
+        const chrome = spread();
+        const scanner = createScanner(chrome.deps);
+        await settle(scanner.scan(1));
+        chrome.env.candidates = [{ ...P1, overlaid: [RIGHT, LEFT] }];
+        await settle(scanner.recordOverlaid(1));
+        chrome.env.candidates = [{ ...P1, overlaid: [RIGHT, '5'.repeat(64)] }];
+        chrome.events.length = 0;
+
+        await settle(scanner.scan(1));
+
+        expect(chrome.events.slice(0, 3)).toEqual(['hide 1', 'capture', 'restore 1']);
+      });
     });
 
     it('Spread 兩頁都顯示著覆蓋層：截圖前一定藏起來（#55：沒藏時截到自己的譯文，hash 對不上）', async () => {
