@@ -52,10 +52,22 @@ export interface ScanOptions {
   hideOverlay?: boolean;
 }
 
+/**
+ * 一個 anchor「帶覆蓋層的樣子」。shown：記下時覆蓋層顯示著的 Page（排序過，PageCandidate.overlaid）；
+ * pages：anchor 上依閱讀順序的每一頁（Spread 先右後左）的原圖 hash 與帶覆蓋層截到的 hash。
+ * Spread 兩頁照順序對：crop 每次都依閱讀順序交回，頁數不一樣就是覆蓋層干擾了切頁，當成對不上。
+ */
+interface OverlaidLook {
+  shown: string;
+  pages: { pageHash: string; overlaidHash: string }[];
+}
+
+const shownKey = (c: PageCandidate) => [...(c.overlaid ?? [])].sort().join(',');
+
 export function createScanner(deps: ScannerDeps) {
   const pages = new Map<number, PageThumb[]>();
-  /** 每個 tab：anchor → 覆蓋層顯示著哪一頁、那時帶覆蓋層截到的 hash。 */
-  const overlaidLooks = new Map<number, Map<string, { pageHash: string; overlaidHash: string }>>();
+  /** 每個 tab：anchor → 帶覆蓋層的樣子。 */
+  const overlaidLooks = new Map<number, Map<string, OverlaidLook>>();
   /** 每個 tab 排著、還沒開始的那次掃描。 */
   const pendingScans = new Map<number, Promise<void>>();
   /** 下一次掃描一定藏覆蓋層的 tab（ScanOptions.hideOverlay；併進還沒開始的那次也算）。 */
@@ -98,34 +110,37 @@ export function createScanner(deps: ScannerDeps) {
     return JSON.stringify(a) === JSON.stringify(b);
   }
 
-  /** 覆蓋層顯示中的 anchor 上面是哪個 Page。 */
-  const shownPage = (c: PageCandidate) => (c.overlaid?.length === 1 ? c.overlaid[0] : undefined);
   /** 長 Page（c.visible）不算：它的覆蓋層截圖時本來就不藏，身分也不靠 hash（spec #142）。 */
   const withOverlay = (candidates: PageCandidate[]) => candidates.filter((c) => !c.visible && (c.overlaid?.length ?? 0) > 0);
 
-  /** 覆蓋層顯示中的 anchor 都記過帶覆蓋層的樣子，這次就不必藏覆蓋層。 */
-  function canKeepOverlay(tabId: number, candidates: PageCandidate[]): boolean {
-    const looks = overlaidLooks.get(tabId);
-    const shown = withOverlay(candidates);
-    // 一個 anchor 顯示兩頁（Spread）沒有記錄可比：shownPage 是 undefined，不能拿去跟沒記錄的 undefined 比成相同（#55）
-    return shown.length > 0 && shown.every((c) => {
-      const page = shownPage(c);
-      return page !== undefined && looks?.get(c.anchorId)?.pageHash === page;
-    });
+  /** 覆蓋層顯示中的 anchor 記過的樣子；記下時顯示的不是同一組 Page 就不算。 */
+  function lookOf(tabId: number, c: PageCandidate): OverlaidLook | undefined {
+    const look = overlaidLooks.get(tabId)?.get(c.anchorId);
+    return look && !c.visible && (c.overlaid?.length ?? 0) > 0 && look.shown === shownKey(c) ? look : undefined;
   }
 
-  /** 帶覆蓋層截到的 hash 換回原圖的；對不上（覆蓋層底下換頁了）回傳 undefined。 */
+  /** 覆蓋層顯示中的 anchor 都記過帶覆蓋層的樣子，這次就不必藏覆蓋層。 */
+  function canKeepOverlay(tabId: number, candidates: PageCandidate[]): boolean {
+    const shown = withOverlay(candidates);
+    return shown.length > 0 && shown.every((c) => lookOf(tabId, c) !== undefined);
+  }
+
+  /** 帶覆蓋層截到的 hash 換回原圖的；對不上（覆蓋層底下換頁了、切出來的頁數不同）回傳 undefined。 */
   function toCleanPages(tabId: number, candidates: PageCandidate[], pages: PageThumb[]): PageThumb[] | undefined {
-    const looks = overlaidLooks.get(tabId);
     const result: PageThumb[] = [];
     for (const page of pages) {
       const candidate = candidates.find((c) => c.anchorId === page.anchorId);
-      const look = candidate && shownPage(candidate) !== undefined ? looks?.get(page.anchorId) : undefined;
-      if (!look) result.push(page);
-      else if (findSamePage([{ pageHash: look.overlaidHash }], page.pageHash)) result.push({ ...page, pageHash: look.pageHash });
+      const look = candidate && lookOf(tabId, candidate);
+      if (!look) {
+        result.push(page);
+        continue;
+      }
+      const onAnchor = pages.filter((p) => p.anchorId === page.anchorId);
+      const recorded = onAnchor.length === look.pages.length ? look.pages[onAnchor.indexOf(page)] : undefined;
+      if (recorded && findSamePage([{ pageHash: recorded.overlaidHash }], page.pageHash)) result.push({ ...page, pageHash: recorded.pageHash });
       else {
-        looks!.delete(page.anchorId);
-        trace('overlaid:mismatch', { tabId, anchorId: page.anchorId, pageHash: page.pageHash, overlaidHash: look.overlaidHash });
+        overlaidLooks.get(tabId)!.delete(page.anchorId);
+        trace('overlaid:mismatch', { tabId, anchorId: page.anchorId, pageHash: page.pageHash, overlaidHash: recorded?.overlaidHash, pages: onAnchor.length, recordedPages: look.pages.length });
         return undefined;
       }
     }
@@ -227,8 +242,8 @@ export function createScanner(deps: ScannerDeps) {
   }
 
   /**
-   * 覆蓋層畫好之後：不藏覆蓋層截一次（網站的遮擋物照樣藏），記下每個顯示中的 Page「帶覆蓋層的樣子」（hash）。不公布。
-   * 只記上次截圖確實看到同一頁的 anchor，免得覆蓋層底下剛好換頁時把錯的頁配上去。
+   * 覆蓋層畫好之後：不藏覆蓋層截一次（網站的遮擋物照樣藏），記下每個顯示中的 anchor「帶覆蓋層的樣子」（每頁的 hash）。不公布。
+   * 只記上次截圖確實看到覆蓋層那幾頁的 anchor，免得覆蓋層底下剛好換頁時把錯的頁配上去。
    */
   async function recordOnce(tabId: number, generation: number): Promise<void> {
     const isCurrentGeneration = () => (generations.get(tabId) ?? 0) === generation;
@@ -236,14 +251,11 @@ export function createScanner(deps: ScannerDeps) {
     if (!isCurrentGeneration()) return;
     const before = await deps.findPageCandidates(tabId);
     const seen = pages.get(tabId) ?? [];
-    const recorded = overlaidLooks.get(tabId);
     const shown = withOverlay(before.candidates).filter((c) => {
-      const page = shownPage(c);
-      // 已經記過同一頁（例如翻回來命中快取、覆蓋層重畫）就不必再截
-      if (page === undefined || recorded?.get(c.anchorId)?.pageHash === page) return false;
-      // 樣子以 anchor 為單位記；切成兩頁的 Spread 分不出截到的是哪一頁，不記（截圖時照舊藏覆蓋層）
+      // 已經記過同一組頁（例如翻回來命中快取、覆蓋層重畫）就不必再截
+      if (lookOf(tabId, c)) return false;
       const onAnchor = seen.filter((p) => p.anchorId === c.anchorId);
-      return onAnchor.length === 1 && findSamePage(onAnchor, page) !== undefined;
+      return onAnchor.length > 0 && c.overlaid!.every((hash) => findSamePage(onAnchor, hash) !== undefined);
     });
     if (shown.length === 0) return;
     const windowId = await deps.getVisibleWindowId(tabId);
@@ -255,12 +267,22 @@ export function createScanner(deps: ScannerDeps) {
     if (!isCurrentGeneration() || !frameUsable(tabId, frame, false)) return;
     let looks = overlaidLooks.get(tabId);
     if (!looks) overlaidLooks.set(tabId, (looks = new Map()));
-    for (const page of cropped) {
-      const pageHash = shownPage(shown.find((c) => c.anchorId === page.anchorId)!)!;
-      looks.set(page.anchorId, { pageHash, overlaidHash: page.pageHash });
+    const recorded: { anchorId: string; pages: OverlaidLook['pages'] }[] = [];
+    for (const c of shown) {
+      const onAnchor = seen.filter((p) => p.anchorId === c.anchorId);
+      const withOverlayPages = cropped.filter((p) => p.anchorId === c.anchorId);
+      // 帶覆蓋層切出來的頁數不一樣（覆蓋層干擾了切頁）就配不起來，不記：截圖時照舊藏覆蓋層
+      if (withOverlayPages.length !== onAnchor.length) continue;
+      const lookPages = onAnchor.map((p, i) => ({
+        // 用覆蓋層顯示的那個 hash：翻譯快取就是用它查到的
+        pageHash: c.overlaid!.find((hash) => findSamePage([p], hash) !== undefined) ?? p.pageHash,
+        overlaidHash: withOverlayPages[i]!.pageHash,
+      }));
+      looks.set(c.anchorId, { shown: shownKey(c), pages: lookPages });
+      recorded.push({ anchorId: c.anchorId, pages: lookPages });
     }
-    if (__E2E__) globalThis.__overlaidRecords = (globalThis.__overlaidRecords ?? 0) + cropped.length;
-    trace('overlaid:record', { tabId, looks: cropped.map((p) => ({ anchorId: p.anchorId, overlaidHash: p.pageHash })) });
+    if (__E2E__) globalThis.__overlaidRecords = (globalThis.__overlaidRecords ?? 0) + recorded.reduce((n, r) => n + r.pages.length, 0);
+    trace('overlaid:record', { tabId, looks: recorded });
   }
 
   function publish(tabId: number, result: PageThumb[], capture?: Capture): void {
