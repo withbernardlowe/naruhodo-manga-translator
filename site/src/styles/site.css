@@ -108,6 +108,10 @@ html[data-locale="en"] .lang-toggle [data-set-locale="en"] { background: var(--n
 }
 .steps h3 { margin: 0 0 var(--naru-space-1); font-size: var(--naru-text-ja); }
 .steps p { margin: 0; font-size: var(--naru-text-label); color: var(--naru-ink-2); }
+/* 邊看邊學：兩張卡片並排，跟步驟卡片同樣的字級 */
+.features { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--naru-space-5); padding: 0; margin: 0; list-style: none; }
+.features h3 { margin: 0 0 var(--naru-space-1); font-size: var(--naru-text-ja); }
+.features p { margin: 0; font-size: var(--naru-text-label); color: var(--naru-ink-2); }
 
 .pricing-lead { margin: 0 0 var(--naru-space-5); text-align: center; color: var(--naru-ink-2); }
 /* 免費、年繳、季繳三張並排；年繳（featured）加粗框 */
@@ -192,7 +196,7 @@ html[data-locale="en"] .lang-toggle [data-set-locale="en"] { background: var(--n
 }
 
 @media (max-width: 760px) {
-  .steps, .plans, .start-steps { grid-template-columns: 1fr; }
+  .steps, .features, .plans, .start-steps { grid-template-columns: 1fr; }
   .hide-sm { display: none; }
   /* 品牌只留 logo，名字仍留給螢幕閱讀器 */
   .brand-name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }

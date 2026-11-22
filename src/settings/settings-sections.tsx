@@ -17,6 +17,7 @@ import { DEFAULT_PAGE_MODE, savePageMode, watchPageMode, type PageMode } from '.
 import { DEFAULT_SIDE_PANEL_ON_ACTIVATION, saveSidePanelOnActivation, watchSidePanelOnActivation } from '../shared/side-panel-setting.ts';
 import { saveTranslationMode, type TranslationMode } from '../shared/translation-mode.ts';
 import { Badge, Button, RadioCard, SegmentedControl, Switch } from '../ui/components.tsx';
+import { DisplaySwitches } from '../ui/display-switches.tsx';
 import { CONTACT_EMAIL, DISCUSSIONS_URL } from '../ui/links.ts';
 import { PAGE_MODES } from '../ui/side-panel.tsx';
 import { SETTINGS_CATEGORIES, type SettingsCategory } from '../ui/settings-route.ts';
@@ -344,18 +345,7 @@ function DisplaySettingsSection({ place }: { place: SettingsPlace }) {
       <Sub place={place}>漫畫頁面</Sub>
       <div class="naru-settings__switches">
         {place === 'page' && <PageModeRow />}
-        <Switch
-          label="學習模式直接顯示譯文"
-          description="學習模式下，tooltip 與逐字稿的譯文不用先把游標移到譯文區塊上就看得到。漫畫頁面一樣只留日文原文。"
-          checked={settings.learnShowsTranslation}
-          onChange={(checked) => choose({ ...settings, learnShowsTranslation: checked })}
-        />
-        <Switch
-          label="讀音加上羅馬拼音"
-          description="有顯示讀音的地方，原文下面多一行羅馬拼音，例如 kinō wa rāmen o tabemashita。"
-          checked={settings.romaji}
-          onChange={(checked) => choose({ ...settings, romaji: checked })}
-        />
+        <DisplaySwitches settings={settings} onChange={choose} />
       </div>
       <Sub place={place}>側邊欄</Sub>
       <div class="naru-settings__switches">

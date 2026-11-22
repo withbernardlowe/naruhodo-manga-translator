@@ -17,6 +17,8 @@ export interface SiteCopy {
   demo: { caption: string; hint: string };
   /** 步驟內文的 `{shortcut}` 換成外掛快捷鍵的按鍵（Mac 是 ⌥⇧M，其他平台 Alt+Shift+M） */
   how: { title: string; steps: readonly { title: string; body: string }[] };
+  /** 學習模式與羅馬拼音（#330）：首頁展示裡切得到的功能；外掛介面只有中文，英文版的介面名稱附上原文。 */
+  learn: { title: string; items: readonly { title: string; body: string }[] };
   /**
    * 試翻頁（#169）。步驟內文的 `{puzzle}` 換成 Chrome 工具列的拼圖圖示、`{shortcut}` 換成外掛快捷鍵的按鍵；
    * 漫畫本身（Practice Spread）是日文，不跟著語言換。
@@ -140,7 +142,7 @@ export const copy: Record<Locale, SiteCopy> = {
       pricing: '看價格',
     },
     demo: {
-      caption: '實際操作看看：點右上角的 Naruhodo 圖示，對話框馬上變中文，側邊欄還有原文和讀音。',
+      caption: '實際操作看看：點右上角的 Naruhodo 圖示，對話框馬上變中文；再切到「學習」，把滑鼠移到對話框上看讀音和羅馬拼音。',
       hint: '點這裡開始翻譯',
     },
     how: {
@@ -151,6 +153,13 @@ export const copy: Record<Locale, SiteCopy> = {
         { title: '對照著看', body: '譯文疊在對話框上，原文與讀音都留著；已經翻過的頁面再看不會再算一次。' },
       ],
     },
+    learn: {
+      title: '邊看邊學日文',
+      items: [
+        { title: '學習模式', body: '在側邊欄切到「學習」，漫畫頁保留日文；把滑鼠移到對話框上，看讀音和譯文。' },
+        { title: '羅馬拼音', body: '假名還不熟也沒關係：在 ⚙ 打開羅馬拼音，滑過一個詞，日文和羅馬拼音會一起亮。' },
+      ],
+    },
     try: {
       title: '試翻一頁看看',
       lead: '下面是一張原創的日文漫畫跨頁。照著三個步驟，用 Naruhodo 把它翻成中文。',
@@ -158,7 +167,7 @@ export const copy: Record<Locale, SiteCopy> = {
       steps: [
         { title: '釘選圖示', body: '點網址列右邊的拼圖 {puzzle}，把 Naruhodo 釘選到工具列。' },
         { title: '啟動翻譯', body: '點工具列上的 Naruhodo 圖示，或按 {shortcut}。右邊會打開 side panel。' },
-        { title: '看讀音', body: '翻好之後，把滑鼠移到對話框上，看原文、讀音和譯文。' },
+        { title: '看讀音', body: '翻好之後，在側邊欄的「漫畫頁面」切到「學習」，再把滑鼠移到對話框上，看原文、讀音和譯文。' },
       ],
       notInstalled: '還沒安裝？',
       install: '加到 Chrome',
@@ -252,7 +261,7 @@ export const copy: Record<Locale, SiteCopy> = {
       pricing: 'See pricing',
     },
     demo: {
-      caption: 'Try it: click the Naruhodo icon at the top right. The balloons turn into Chinese right away, and the side panel shows the original text and readings.',
+      caption: 'Try it: click the Naruhodo icon at the top right. The balloons turn into Chinese right away. Then switch to 學習 (Learn) and hover a balloon to see the readings and romaji.',
       hint: 'Click to translate',
     },
     how: {
@@ -263,6 +272,13 @@ export const copy: Record<Locale, SiteCopy> = {
         { title: 'Read side by side', body: 'Translations sit on the balloons, with the original text and readings kept. Revisiting a translated page never counts again.' },
       ],
     },
+    learn: {
+      title: 'Learn Japanese as you read',
+      items: [
+        { title: 'Learn mode', body: 'Switch the side panel to 學習 (Learn) and the page keeps its Japanese. Hover a balloon to see the reading and the translation.' },
+        { title: 'Romaji', body: 'Still learning kana? Turn on romaji under ⚙. Hover a word and it lights up in both the Japanese and the romaji.' },
+      ],
+    },
     try: {
       title: 'Try translating a page',
       lead: 'Below is an original Japanese manga spread. Follow the three steps to translate it with Naruhodo.',
@@ -270,7 +286,7 @@ export const copy: Record<Locale, SiteCopy> = {
       steps: [
         { title: 'Pin the icon', body: 'Click the puzzle piece {puzzle} to the right of the address bar and pin Naruhodo to the toolbar.' },
         { title: 'Start translating', body: 'Click the Naruhodo icon on the toolbar, or press {shortcut}. The side panel opens on the right.' },
-        { title: 'See the readings', body: 'Once translated, hover a speech balloon to see the Japanese, its reading and the translation.' },
+        { title: 'See the readings', body: 'Once translated, switch 漫畫頁面 (Manga page) in the side panel to 學習 (Learn), then hover a speech balloon to see the Japanese, its reading and the translation.' },
       ],
       notInstalled: 'Not installed yet?',
       install: 'Add to Chrome',
