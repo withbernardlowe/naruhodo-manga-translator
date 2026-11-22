@@ -63,10 +63,8 @@ test('重新整理後命中快取：不先閃「處理中」，直接說套用�
   await expect(status(page).getByText('2 頁翻譯完成')).toBeVisible();
   await expect(status(page)).toHaveCount(0);
 
-  await page.reload();
-  await page.locator('body[data-ready="true"]').waitFor();
-  // 記下面板出現過的每一種標題
-  await page.evaluate(() => {
+  // 同 origin 重新整理後會自己接著啟動、馬上命中快取：摘要可能在下面的步驟做完前就收起了，所以從新頁面一開始就記下面板出現過的每一種標題
+  await page.addInitScript(() => {
     const seen: string[] = ((window as unknown as { __statusTexts: string[] }).__statusTexts = []);
     // 面板畫在 shadow DOM 裡，MutationObserver 看不到：一直讀
     setInterval(() => {
@@ -74,11 +72,13 @@ test('重新整理後命中快取：不先閃「處理中」，直接說套用�
       if (text && seen.at(-1) !== text) seen.push(text);
     }, 10);
   });
+  await page.reload();
+  await page.locator('body[data-ready="true"]').waitFor();
   await page.bringToFront();
   await testActivate(panel, tabId);
 
-  await expect(status(page).getByText(/^2 頁套用快取/)).toBeVisible();
+  const seen = () => page.evaluate(() => (window as unknown as { __statusTexts: string[] }).__statusTexts);
+  await expect.poll(seen).toContainEqual(expect.stringMatching(/^2 頁套用快取/));
   await expect(status(page)).toHaveCount(0);
-  const seen = await page.evaluate(() => (window as unknown as { __statusTexts: string[] }).__statusTexts);
-  expect(seen.filter((text) => text.includes('處理中'))).toEqual([]);
+  expect((await seen()).filter((text) => text.includes('處理中'))).toEqual([]);
 });
