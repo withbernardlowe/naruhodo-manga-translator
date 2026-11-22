@@ -13,6 +13,16 @@ const analyzing = (anchorId: string, pageHash: string): PageView => ({
 
 const done = (page: PageView): PageView => ({ ...page, transcript: { state: 'done', text: { balloons: [], looseText: [] }, translated: true } });
 
+const fromCache = (page: PageView): PageView => ({
+  ...page,
+  transcript: {
+    state: 'done',
+    text: { balloons: [], looseText: [] },
+    translated: true,
+    translation: { source: 'cache', model: 'm', latencyMs: 1, usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, costUsd: 0 } },
+  },
+});
+
 function setup({ hosted = true, active = [] as number[] } = {}) {
   const sent: [number, StatusPanel | undefined][] = [];
   const badges: [number, ActionBadge | undefined][] = [];
@@ -22,6 +32,7 @@ function setup({ hosted = true, active = [] as number[] } = {}) {
     setBadge: (tabId, badge) => void badges.push([tabId, badge]),
     accessProblem: async () => undefined,
     stripBilled: async () => hosted,
+    usesOwnKey: async () => !hosted,
     setStrip: (tabId, strip) => void strips.push([tabId, strip]),
     isActive: async (tabId) => active.includes(tabId),
   });
@@ -32,7 +43,7 @@ function setup({ hosted = true, active = [] as number[] } = {}) {
 const rowTexts = (panel: StatusPanel | undefined) => panel?.rows.map(({ state }) => (state.kind === 'working' ? state.text : state.kind));
 
 describe('全站狀態送到 content script 與圖示 badge', () => {
-  it('有頁在忙送出面板、badge 是 …；翻完收起、badge 回到小點', async () => {
+  it('有頁在忙送出面板、badge 是 …；翻完換成完成摘要、badge 回到小點', async () => {
     const { sync, sent, badges } = setup();
     const page = analyzing('a1', 'h1');
     await sync.activated(1);
@@ -40,10 +51,10 @@ describe('全站狀態送到 content script 與圖示 badge', () => {
     await sync.pagesUpdated(1, [page]);
     await sync.pagesUpdated(1, [done(page)]);
 
-    expect(sent.map(([tabId, panel]) => [tabId, rowTexts(panel)])).toEqual([
+    expect(sent.map(([tabId, panel]) => [tabId, panel?.header.text])).toEqual([
       [1, undefined],
-      [1, ['queued']],
-      [1, undefined],
+      [1, '1 頁處理中'],
+      [1, '1 頁翻譯完成'],
     ]);
     expect(badges).toEqual([
       [1, 'on'],
@@ -121,6 +132,69 @@ describe('全站狀態送到 content script 與圖示 badge', () => {
 
     expect(sent.map(([tabId, panel]) => [tabId, rowTexts(panel)])).toEqual([[1, ['queued']]]);
     expect(badges.at(-1)).toEqual([1, undefined]);
+  });
+});
+
+describe('這一批處理完的摘要', () => {
+  const left = analyzing('a1', 'left');
+  const right = analyzing('a2', 'right');
+
+  it('跨頁兩頁都命中快取：排隊中之後是「2 頁套用快取（沒扣額度）」；之後內容沒變就不重送', async () => {
+    const { sync, sent } = setup();
+    await sync.activated(1);
+    await sync.pagesUpdated(1, [left, right]);
+    await sync.pagesUpdated(1, [fromCache(left), fromCache(right)]);
+    await sync.modelStatus({ state: 'idle' });
+
+    expect(sent.map(([, panel]) => panel?.header.text)).toEqual([undefined, '2 頁處理中', '2 頁套用快取（沒扣額度）']);
+  });
+
+  it('自備金鑰：「2 頁套用快取」', async () => {
+    const { sync, sent } = setup({ hosted: false });
+    await sync.activated(1);
+    await sync.pagesUpdated(1, [left, right]);
+    await sync.pagesUpdated(1, [fromCache(left), fromCache(right)]);
+
+    expect(sent.at(-1)?.[1]?.header.text).toBe('2 頁套用快取');
+  });
+
+  it('下一批只算新的頁：上一批翻好的不再算進去', async () => {
+    const { sync, sent } = setup();
+    await sync.activated(1);
+    await sync.pagesUpdated(1, [left]);
+    await sync.pagesUpdated(1, [done(left)]);
+
+    await sync.pagesUpdated(1, [done(left), right]);
+    await sync.pagesUpdated(1, [done(left), fromCache(right)]);
+
+    expect(sent.at(-1)?.[1]?.header.text).toBe('1 頁套用快取（沒扣額度）');
+    expect(sent.at(-1)?.[1]?.rows.map(({ pageHash }) => pageHash)).toEqual(['right']);
+  });
+
+  it('摘要出過、翻到別頁又翻回來：不再出同一批的摘要', async () => {
+    const { sync, sent } = setup();
+    const other = done(analyzing('a3', 'other'));
+    await sync.activated(1);
+    await sync.pagesUpdated(1, [left]);
+    await sync.pagesUpdated(1, [done(left)]);
+    sent.length = 0;
+
+    await sync.pagesUpdated(1, [other]);
+    await sync.pagesUpdated(1, [done(left)]);
+
+    expect(sent).toEqual([[1, undefined]]);
+  });
+
+  it('重新整理：上一批不算，翻好的頁不再出摘要', async () => {
+    const { sync, sent } = setup();
+    await sync.activated(1);
+    await sync.pagesUpdated(1, [left]);
+    sync.reset(1);
+    sent.length = 0;
+
+    await sync.pagesUpdated(1, [done(left)]);
+
+    expect(sent).toEqual([[1, undefined]]);
   });
 });
 

@@ -2,9 +2,10 @@
  * 把每個 tab 的全站狀態（shared/page-status.ts）送到 content script、設成圖示 badge（#185）。
  * 依據：transcriber 每次 publish 的 PageView、工作開始本機流水線與送出 LLM 的事件、offscreen 廣播的模型狀態、額度快用完了沒（#237）。
  * 內容沒變就不重送（模型下載進度、每次擷取都會觸發）。
+ * 記住這一批處理過哪些頁：都處理完時面板換成這幾頁的完成摘要（翻好了、套用快取），content script 停一下才收起。
  */
 import type { ModelStatus, PageView } from '../shared/messages.ts';
-import { pageStatus, untranslatedWithoutReason, type ActionBadge, type PageStatusInput, type StatusPanel } from '../shared/page-status.ts';
+import { fromCache, pageStatus, untranslatedWithoutReason, type ActionBadge, type PageStatusInput, type StatusPanel } from '../shared/page-status.ts';
 import type { JobEvent } from './transcribe.ts';
 
 export interface PageStatusSyncDeps {
@@ -16,6 +17,8 @@ export interface PageStatusSyncDeps {
   accessProblem(): Promise<PageStatusInput['access']>;
   /** 現在是不是用內建翻譯、已登入（Strip 才會照句數計頁，#282）；只在 tab 正在讀 Strip 時才問。 */
   stripBilled(): Promise<boolean>;
+  /** 用自備金鑰（沒有額度）；只在要說「套用快取」時才問。 */
+  usesOwnKey(): Promise<boolean>;
   /** 這個 tab 開始／不再是照句數計頁的 Strip：圖示的 hover 提示多／少一行。 */
   setStrip(tabId: number, strip: boolean): void;
   /** 這個 tab 啟動著沒（存在 storage）：SW 重新啟動後記憶體是空的，靠它接回已啟動的 tab。 */
@@ -32,6 +35,10 @@ interface TabStatus {
   local: Map<number, string>;
   /** 已經送出 LLM、還沒做完的工作 → 它的 Page。 */
   translating: Map<number, string>;
+  /** 這一批處理過的 Page（pageHash）：上次算的時候沒有頁在忙，下一次有頁在忙就是新的一批。 */
+  batch: Set<string>;
+  /** 上次算的時候有頁在排隊或處理中。 */
+  busy: boolean;
   /** 上次送出的內容與 badge；undefined＝還沒送過（或 content script 換新的了）。 */
   sent?: string;
   badge?: ActionBadge;
@@ -45,7 +52,7 @@ export function createPageStatusSync(deps: PageStatusSyncDeps) {
   /** 記憶體裡沒有、正在問 isActive 的 tab。 */
   const waking = new Map<number, Promise<TabStatus | undefined>>();
 
-  const newTab = (): TabStatus => ({ pages: [], strip: false, stripShown: false, local: new Map(), translating: new Map() });
+  const newTab = (): TabStatus => ({ pages: [], strip: false, stripShown: false, local: new Map(), translating: new Map(), batch: new Set(), busy: false });
 
   /**
    * 記憶體裡的 tab；沒有的話（SW 閒置被收掉、外掛重新載入）問它是不是啟動著，是就接回來。
@@ -74,9 +81,25 @@ export function createPageStatusSync(deps: PageStatusSyncDeps) {
     if (!tab) return;
     const access = tab.pages.some(untranslatedWithoutReason) ? await deps.accessProblem() : undefined;
     const strip = tab.strip && (await deps.stripBilled());
+    const usesOwnKey = tab.pages.some((page) => tab.batch.has(page.pageHash) && fromCache(page)) && (await deps.usesOwnKey());
     // 期間停止了
     if (tabs.get(tabId) !== tab) return;
-    const { panel, badge } = pageStatus({ pages: tab.pages, model, inLocalPipeline: new Set(tab.local.values()), translating: new Set(tab.translating.values()), access, lowQuota, strip });
+    const { panel, badge, processing } = pageStatus({
+      pages: tab.pages,
+      model,
+      inLocalPipeline: new Set(tab.local.values()),
+      translating: new Set(tab.translating.values()),
+      access,
+      lowQuota,
+      strip,
+      batch: tab.batch,
+      usesOwnKey,
+    });
+    if (processing.length > 0 && !tab.busy) tab.batch = new Set();
+    for (const pageHash of processing) tab.batch.add(pageHash);
+    tab.busy = processing.length > 0;
+    // 摘要收起了（這一批的頁不在畫面上、或出了問題）：忘掉這一批，翻回來時不再說一次
+    if (!tab.busy && panel?.header.kind !== 'settled') tab.batch = new Set();
     if (strip !== tab.stripShown) {
       tab.stripShown = strip;
       deps.setStrip(tabId, strip);
@@ -151,6 +174,8 @@ export function createPageStatusSync(deps: PageStatusSyncDeps) {
       tab.stripShown = false;
       tab.local.clear();
       tab.translating.clear();
+      tab.batch = new Set();
+      tab.busy = false;
     },
     /** 停止或關 tab。 */
     clear(tabId: number): void {

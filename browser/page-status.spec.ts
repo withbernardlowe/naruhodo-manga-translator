@@ -1,11 +1,11 @@
 /**
  * 視窗右上角的全站狀態（#185）：沒開側邊欄的讀者也看得到翻譯中。
  * unit 測不到的：SW 把狀態送到 content script、真的畫在 top layer（網站 z-index 再高的元素也蓋不到，真實的 DOM 排版），
- * 不推動網站的版面，翻完收起。顯示什麼文字、什麼時候算出問題在 src/shared/page-status.test.ts；
+ * 不推動網站的版面，翻完停一下說翻譯完成再收起；命中快取時不先閃處理中。顯示什麼文字、什麼時候算出問題在 src/shared/page-status.test.ts；
  * 額度用完、補同意的紅色那列在 hosted-translation.spec.ts。
  */
 import type { Page } from '@playwright/test';
-import { activateOnMockSite, expect, test } from './fixtures.ts';
+import { activateOnMockSite, expect, test, testActivate } from './fixtures.ts';
 import { shownTranslations } from './overlay-helpers.ts';
 
 // OCR 慢一點，處理中的狀態才看得到
@@ -53,6 +53,32 @@ test('處理中時視窗右上角出現全站狀態，蓋在網站的控制列�
     .toBe('panel');
 
   await expect(shownTranslations(page).first()).toBeVisible();
+  await expect(status(page).getByText('2 頁翻譯完成')).toBeVisible();
   await expect(status(page)).toHaveCount(0);
   expect(await firstCanvasRect(page)).toEqual(before);
+});
+
+test('重新整理後命中快取：不先閃「處理中」，直接說套用快取，停一下再收起', async ({ context, sw, extensionId, mockSite }) => {
+  const { page, panel, tabId } = await activateOnMockSite({ context, sw, extensionId, mockSite });
+  await expect(status(page).getByText('2 頁翻譯完成')).toBeVisible();
+  await expect(status(page)).toHaveCount(0);
+
+  await page.reload();
+  await page.locator('body[data-ready="true"]').waitFor();
+  // 記下面板出現過的每一種標題
+  await page.evaluate(() => {
+    const seen: string[] = ((window as unknown as { __statusTexts: string[] }).__statusTexts = []);
+    // 面板畫在 shadow DOM 裡，MutationObserver 看不到：一直讀
+    setInterval(() => {
+      const text = document.querySelector('[data-naruhodo-status]')?.shadowRoot?.querySelector('.head')?.textContent;
+      if (text && seen.at(-1) !== text) seen.push(text);
+    }, 10);
+  });
+  await page.bringToFront();
+  await testActivate(panel, tabId);
+
+  await expect(status(page).getByText(/^2 頁套用快取/)).toBeVisible();
+  await expect(status(page)).toHaveCount(0);
+  const seen = await page.evaluate(() => (window as unknown as { __statusTexts: string[] }).__statusTexts);
+  expect(seen.filter((text) => text.includes('處理中'))).toEqual([]);
 });

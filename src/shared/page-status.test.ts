@@ -36,6 +36,7 @@ describe('進行中', () => {
         expanded: false,
       },
       badge: 'busy',
+      processing: ['h1'],
     });
   });
 
@@ -149,6 +150,7 @@ describe('出問題：面板一直展開，圖示是 !', () => {
         expanded: true,
       },
       badge: 'problem',
+      processing: [],
     });
   });
 
@@ -178,15 +180,83 @@ describe('出問題：面板一直展開，圖示是 !', () => {
 
 describe('都翻好了', () => {
   it('沒有面板，圖示是已啟動的小點', () => {
-    expect(pageStatus(input([page('a1', 'h1', { state: 'done', text, translated: true })]))).toEqual({ panel: undefined, badge: 'on' });
+    expect(pageStatus(input([page('a1', 'h1', { state: 'done', text, translated: true })]))).toEqual({ panel: undefined, badge: 'on', processing: [] });
   });
 
   it('沒有任何 Page（還在找、畫面上沒有完整的頁）：沒有面板', () => {
-    expect(pageStatus(input([]))).toEqual({ panel: undefined, badge: 'on' });
+    expect(pageStatus(input([]))).toEqual({ panel: undefined, badge: 'on', processing: [] });
   });
 
   it('能翻譯卻沒譯文（長 Page 還沒收到字）：不算問題，算翻好', () => {
-    expect(pageStatus(input([page('a1', 'h1', { state: 'done', text, translated: false })]))).toEqual({ panel: undefined, badge: 'on' });
+    expect(pageStatus(input([page('a1', 'h1', { state: 'done', text, translated: false })]))).toEqual({ panel: undefined, badge: 'on', processing: [] });
+  });
+});
+
+describe('這一批處理完：停一下說翻好了、用了快取沒有', () => {
+  const usage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, costUsd: 0 };
+  const fresh = (pageHash: string, subRect?: RatioRect) =>
+    page('a1', pageHash, { state: 'done', text, translated: true, translation: { source: 'translated', model: 'm', latencyMs: 1, usage } }, subRect);
+  const cached = (pageHash: string, subRect?: RatioRect) =>
+    page('a1', pageHash, { state: 'done', text, translated: true, translation: { source: 'cache', model: 'm', latencyMs: 1, usage } }, subRect);
+
+  it('Spread 兩頁都命中快取：「2 頁套用快取（沒扣額度）」，每列寫套用快取', () => {
+    expect(pageStatus(input([cached('left', LEFT), cached('right', RIGHT)], { batch: new Set(['left', 'right']) }))).toEqual({
+      panel: {
+        header: { kind: 'settled', text: '2 頁套用快取（沒扣額度）' },
+        rows: [
+          { pageHash: 'right', icon: { kind: 'spread', side: 'right' }, title: '右頁 · 先讀', state: { kind: 'done', cached: true } },
+          { pageHash: 'left', icon: { kind: 'spread', side: 'left' }, title: '左頁 · 後讀', state: { kind: 'done', cached: true } },
+        ],
+        more: 0,
+        problems: [],
+        expanded: false,
+      },
+      badge: 'on',
+      processing: [],
+    });
+  });
+
+  it('都是新翻的：「2 頁翻譯完成」', () => {
+    const { panel } = pageStatus(input([fresh('left', LEFT), fresh('right', RIGHT)], { batch: new Set(['left', 'right']) }));
+
+    expect(panel?.header).toEqual({ kind: 'settled', text: '2 頁翻譯完成' });
+    expect(panel?.rows.map(({ state }) => state)).toEqual([{ kind: 'done' }, { kind: 'done' }]);
+  });
+
+  it('一頁新翻、一頁快取：「翻譯完成，1 頁套用快取」', () => {
+    const { panel } = pageStatus(input([fresh('left', LEFT), cached('right', RIGHT)], { batch: new Set(['left', 'right']) }));
+
+    expect(panel?.header).toEqual({ kind: 'settled', text: '翻譯完成，1 頁套用快取' });
+  });
+
+  it('自備金鑰沒有額度：套用快取時不說沒扣額度', () => {
+    const { panel } = pageStatus(input([cached('h1')], { batch: new Set(['h1']), usesOwnKey: true }));
+
+    expect(panel?.header).toEqual({ kind: 'settled', text: '1 頁套用快取' });
+  });
+
+  it('只列這一批處理過的頁；之前就翻好的不算進摘要', () => {
+    const { panel } = pageStatus(input([cached('left', LEFT), fresh('right', RIGHT)], { batch: new Set(['left']) }));
+
+    expect(panel?.header).toEqual({ kind: 'settled', text: '1 頁套用快取（沒扣額度）' });
+    expect(panel?.rows.map(({ pageHash }) => pageHash)).toEqual(['left']);
+  });
+
+  it('這一批的頁已經不在畫面上：沒有面板', () => {
+    expect(pageStatus(input([fresh('h2')], { batch: new Set(['h1']) })).panel).toBeUndefined();
+  });
+
+  it('條漫的一截不是一頁：不寫頁數', () => {
+    const strip = { ...cached('h1'), stripes: [] };
+
+    expect(pageStatus(input([strip], { batch: new Set(['h1']) })).panel?.header).toEqual({ kind: 'settled', text: '套用快取（沒扣額度）' });
+  });
+
+  it('還有頁在忙、或出問題：照舊，不出摘要', () => {
+    const batch = new Set(['right', 'left']);
+
+    expect(pageStatus(input([cached('right', RIGHT), page('a1', 'left', { state: 'analyzing' }, LEFT)], { batch })).panel?.header.kind).toBe('working');
+    expect(pageStatus(input([cached('right', RIGHT), page('a1', 'left', { state: 'error', message: 'x' }, LEFT)], { batch })).panel?.header.kind).toBe('problem');
   });
 });
 
